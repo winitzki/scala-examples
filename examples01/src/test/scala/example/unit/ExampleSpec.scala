@@ -5,7 +5,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 class ExampleSpec extends FlatSpec with Matchers {
 
-  behavior of "example project"
+  behavior of "text"
 
   it should "compute text message" in {
     HelloWorld.computeMessage() shouldEqual "hello: "
