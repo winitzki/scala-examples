@@ -3,7 +3,7 @@ package example.unit
 import example.HelloWorld
 import org.scalatest.{FlatSpec, Matchers}
 
-class ExampleSpec extends FlatSpec with Matchers {
+class HelloWorldSpec extends FlatSpec with Matchers {
 
   behavior of "text"
 

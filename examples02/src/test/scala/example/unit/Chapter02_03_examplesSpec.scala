@@ -1,9 +1,9 @@
 package example.unit
 
-import example.Example01_03_exercises._
+import example.Chapter02_03_examples._
 import org.scalatest.{FlatSpec, Matchers}
 
-class Example01_03_exercisesSpec extends FlatSpec with Matchers {
+class Chapter02_03_examplesSpec extends FlatSpec with Matchers {
 
   behavior of "sum of digits"
 

@@ -2,7 +2,7 @@ package example
 
 import scala.annotation.tailrec
 
-object Example01_03_exercises {
+object Chapter02_03_examples {
 
   def digits(n: Int): Iterator[Int] = unfold((n, 0, true)) { case (m, _, x) ⇒ (m / 10, m % 10, x && (m > 0)) }.takeWhile(_._3).map(_._2)
 

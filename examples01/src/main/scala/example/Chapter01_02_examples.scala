@@ -1,6 +1,6 @@
 package example
 
-object Example01_02_exercises {
+object Chapter01_02_examples {
   def ex01(x: Int): Int = x + 20
 
   val ex01a: Int ⇒ Int = x ⇒ x + 20
@@ -9,9 +9,9 @@ object Example01_02_exercises {
 
   val ex02a: Int ⇒ (Int ⇒ Int) = x ⇒ (y ⇒ y + x)
 
-  def ex03(x: Int): Boolean = !Example01_01_functions.is_prime(x)
+  def ex03(x: Int): Boolean = !Chapter01_01_functions.is_prime(x)
 
-  val ex03a: Int ⇒ Boolean = x ⇒ !Example01_01_functions.is_prime(x)
+  val ex03a: Int ⇒ Boolean = x ⇒ !Chapter01_01_functions.is_prime(x)
 
   def ex04(s: Seq[Double]): Double = s.sum / s.size
 

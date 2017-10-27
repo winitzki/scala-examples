@@ -2,11 +2,11 @@ package example.unit
 
 import org.scalatest.{FlatSpec, Matchers}
 
-import example.Example01_02_exercises._
+import example.Chapter01_02_examples._
 
-class Example01_02_exercisesSpec extends FlatSpec with Matchers {
+class Chapter01_02_examplesSpec extends FlatSpec with Matchers {
 
-  behavior of "exercises 1-3"
+  behavior of "examples 1-3"
 
   it should "compute functions correctly" in {
     ex01(1) shouldEqual 21
@@ -25,7 +25,7 @@ class Example01_02_exercisesSpec extends FlatSpec with Matchers {
 
   }
 
-  behavior of "other exercises"
+  behavior of "other examples"
 
   it should "compute results" in {
     ex04(Seq(0.0, 1.0, 3.0, 4.0)) shouldEqual 2.0

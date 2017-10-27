@@ -1,6 +1,6 @@
 package example
 
-object Example01_01_functions {
+object Chapter01_01_functions {
   def factorial(n: Int): Int = {
     (1 to n).product
   }
