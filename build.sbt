@@ -6,13 +6,20 @@ lazy val scala_examples = (project in file("."))
 .settings(
 scalaVersion := scalaV
 )
-.aggregate(examples01)
+.aggregate(examples01, examples02)
 
 lazy val examples01 = (project in file("examples01"))
-.settings(
-scalaVersion := scalaV,
-libraryDependencies ++= Seq(
-  "org.scalatest" %% "scalatest" % "3.0.4"
-)
-)
+  .settings(
+    scalaVersion := scalaV,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.0.4"
+    )
+  )
 
+lazy val examples02 = (project in file("examples02"))
+  .settings(
+    scalaVersion := scalaV,
+    libraryDependencies ++= Seq(
+      "org.scalatest" %% "scalatest" % "3.0.4"
+    )
+  )
