@@ -1,9 +1,8 @@
 package example
 
 object Chapter01_01_functions {
-  def factorial(n: Int): Int = {
-    (1 to n).product
-  }
+
+  def factorial(n: Int): Int = (1 to n).product
 
   def is_prime(n: Int): Boolean = {
     (2 until n).forall(i ⇒ n % i != 0)
@@ -14,6 +13,7 @@ object Chapter01_01_functions {
 
     s.toSeq.map(k ⇒ is_even(k)).sum
   }
+
   def count_even_using_val(s: Set[Int]): Int = {
     val is_even = (k: Int) ⇒ if (k % 2 == 0) 1 else 0
 
