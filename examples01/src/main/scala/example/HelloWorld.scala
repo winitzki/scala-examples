@@ -2,13 +2,9 @@ package example
 
 object HelloWorld {
 
-  def computeMessage(): String = {
-    "hello: "
-  }
+  def computeMessage(): String = "hello: "
 
-  def computeNumber(): Int = {
-    123
-  }
+  def computeNumber(): Int = 123
 
   def main(args: Array[String]): Unit = {
     val message = computeMessage()
