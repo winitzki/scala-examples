@@ -41,7 +41,7 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
       val i = arr.length / 2
       val (left, right) = arr.splitAt(i)
       // (0, i - 1) and (i, length - 1)
-      if (x > arr(i)) { // (i, length - 1)
+      if (x >= arr(i)) { // (i, length - 1)
         ex04(right, x)
       } else { // (0, i - 1)
         ex04(left, x)
@@ -50,6 +50,7 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
 
   it should "run ex04" in {
     ex04(Array(1, 2, 5, 10, 20, 25), 15) shouldEqual 10
+    ex04(Array(1, 2, 5, 10, 20, 25), 10) shouldEqual 10
   }
 
   def sumOfDigits(n: Int): Int = {
@@ -74,15 +75,19 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
   }
 
   def ex07[T](s: Seq[T]): Seq[T] = {
-    Seq(s.head) ++ s.toIterator.drop(1)
-      .zip(ex06(s.toIterator).drop(1))
-      .takeWhile { case (x, y) ⇒ x != y }
-      .map { case (x, y) ⇒ x }
+    // s0, s1, s2, s3, s4, s5, s6, s7, s8, ...
+    // s0, s0, s1, s1, s2, s2, s3, s3, s4, ...
+
+    Seq(s.head) ++ s.toIterator
+      .zip(ex06(s.toIterator)) // Iterator[(T, T)]
+      .drop(1) // remove first pair, which is always (s0, s0)
+      .takeWhile { case (x, y) ⇒ x != y } // cut the sequence when repetition occurs
+      .map { case (x, y) => x } // drop the second element
       .toSeq
   }
 
   it should "run ex07" in {
-    ex07(Seq(1, 3, 5, 7, 3, 5, 7, 3, 5, 7, 3, 5, 7)).toList shouldEqual
+    ex07(Seq(1, 3, 5, 7, 3, 5, 7, 3, 5, 7, 3, 5, 7)) shouldEqual
       Seq(1, 3, 5, 7, 3)
   }
 }
