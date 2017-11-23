@@ -4,7 +4,11 @@ import scala.annotation.tailrec
 
 object Chapter02_03_examples {
 
-  def digits(n: Int): Iterator[Int] = unfold((n, 0, true)) { case (m, _, x) ⇒ (m / 10, m % 10, x && (m > 0)) }.takeWhile(_._3).map(_._2)
+  def digits(n: Int): Iterator[Int] = Iterator.iterate((n, 0)) {
+    case (m, _) ⇒ (m / 10, m % 10)
+  }.takeWhile {
+    case (m, x) ⇒ m > 0 || x > 0
+  }.map(_._2).drop(1)
 
   // Compute the sum of digits of `n`.
   def ex07(n: Int): Int = unfoldWhile((n, 0)) { case (m, d) ⇒
@@ -43,8 +47,8 @@ object Chapter02_03_examples {
     } // produce an Iterator[(Int, Int, Boolean)]
       .drop(1) // first element is always (n, n, false), not useful
       .scanLeft((Integer.MAX_VALUE, false)) { case ((oldMin, finished), (fast, slow, _)) ⇒
-        (math.min(fast, oldMin), finished || (fast == slow))
-      } // produce an Iterator[(Int, Boolean)]
+      (math.min(fast, oldMin), finished || (fast == slow))
+    } // produce an Iterator[(Int, Boolean)]
       .find(_._2).get // find a `true` value among booleans - guaranteed to exist
       ._1 // get the integer value
   }

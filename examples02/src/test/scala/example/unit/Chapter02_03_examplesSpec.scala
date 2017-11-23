@@ -34,10 +34,11 @@ class Chapter02_03_examplesSpec extends FlatSpec with Matchers {
   behavior of "repeated sum of digits"
 
   it should "compute digits correctly" in {
-    digits(0).toList shouldEqual List(0)
-    digits(4).toList shouldEqual List(0, 4)
-    digits(10).toList shouldEqual List(0, 0, 1)
-    digits(12).toList shouldEqual List(0, 2, 1)
+    digits(1).toList shouldEqual List(1)
+    digits(4).toList shouldEqual List(4)
+    digits(10).toList shouldEqual List(0, 1)
+    digits(12).toList shouldEqual List(2, 1)
+    digits(10200).toList shouldEqual List(0, 0, 2, 0, 1)
   }
 
   it should "be computed using unfold" in {
