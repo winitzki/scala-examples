@@ -12,7 +12,7 @@ lazy val examples01 = (project in file("examples01"))
   .settings(
     scalaVersion := scalaV,
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.4"
+      "org.scalatest" %% "scalatest" % "3.0.4" % Test
     )
   )
 
@@ -20,6 +20,6 @@ lazy val examples02 = (project in file("examples02"))
   .settings(
     scalaVersion := scalaV,
     libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.4"
+      "org.scalatest" %% "scalatest" % "3.0.4" % Test
     )
   )
