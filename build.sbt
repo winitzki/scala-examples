@@ -1,25 +1,24 @@
 val scalaV = "2.12.4"
 
-//lazy val rootProject = Some(scala_examples)
+lazy val scalatest = "org.scalatest" %% "scalatest" % "3.0.4" % Test
+lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.5" % Test
+
+lazy val common = Seq(
+  scalaVersion := scalaV,
+  libraryDependencies ++= Seq(
+    scalatest, scalacheck
+  )
+)
 
 lazy val scala_examples = (project in file("."))
-.settings(
-scalaVersion := scalaV
-)
-.aggregate(examples01, examples02)
+  .settings(common)
+  .aggregate(examples01, examples02)
 
 lazy val examples01 = (project in file("examples01"))
-  .settings(
-    scalaVersion := scalaV,
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.4" % Test
-    )
-  )
+  .settings(common)
 
 lazy val examples02 = (project in file("examples02"))
-  .settings(
-    scalaVersion := scalaV,
-    libraryDependencies ++= Seq(
-      "org.scalatest" %% "scalatest" % "3.0.4" % Test
-    )
-  )
+  .settings(common)
+
+lazy val examples03 = (project in file("examples03"))
+  .settings(common)
