@@ -9,13 +9,25 @@ object CurryHoward {
   private[example] def testType[T]: (String, String) = macro testTypeImpl[T]
 
   def matchType(c: blackbox.Context)(t: c.Type): String = {
-    
-    t match {
-      case _ if t.typeSymbol.fullName == "scala.Function1" ⇒
+
+    t.typeSymbol.fullName match {
+      case "scala.Function1" ⇒
         val args = t.typeArgs
         s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
-      case _ if !t.typeSymbol.isConstructor ⇒ t.toString
-      case _ ⇒ s"<unrecognized so far>$t"
+      case "scala.Option" ⇒
+        val arg = t.typeArgs.head
+        s"(1 + ${matchType(c)(arg)})"
+      case "scala.util.Either" ⇒
+        val args = t.typeArgs
+        s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
+      case "scala.Any" ⇒ "_"
+      case "scala.Nothing" ⇒ "0"
+      case "scala.Unit" ⇒ "1"
+      case _ if t.typeArgs.isEmpty && t.baseClasses.map(_.fullName) == Seq("scala.Any") ⇒
+        s"<tparam>$t"
+      case _ if t.typeArgs.isEmpty ⇒
+        s"<base classes: ${t.baseClasses.map(_.fullName).mkString(", ")}>$t"
+      case _ ⇒ s"<constructor>$t"
     }
   }
 

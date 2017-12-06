@@ -40,29 +40,66 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
   behavior of "type parameter introspection"
 
+  it should "get printable representation of enclosing owner's type" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[Int]
+    result._2 shouldEqual "<base classes: scala.Tuple2, scala.Serializable, java.io.Serializable, scala.Product2, scala.Product, scala.Equals, java.lang.Object, scala.Any>[A, B, C]=> (String, String)"
+  }
+
   it should "get printable representation of simple types" in {
     import CurryHoward._
 
-    def result1[A, B, C]: (String, String) = testType[Int]
+    def result[A, B, C]: (String, String) = testType[Int]
 
-    result1 shouldEqual (("Int", "[A, B, C]=> (String, String)"))
+    result._1 shouldEqual "<base classes: scala.Int, scala.AnyVal, scala.Any>Int"
   }
 
   it should "get printable representation of parametric type" in {
     import CurryHoward._
 
-    def result1[A, B, C]: (String, String) = testType[A]
+    def result[A, B, C]: (String, String) = testType[A]
 
-    result1 shouldEqual (("A", "[A, B, C]=> (String, String)"))
+    result._1 shouldEqual "<tparam>A"
   }
 
   it should "get printable representation of function types" in {
     import CurryHoward._
 
-    def result1[A, B, C]: (String, String) = testType[A ⇒ B]
+    def result[A, B, C]: (String, String) = testType[A ⇒ B]
 
-    result1._1 shouldEqual "A ..=>.. B"
-    result1._2 shouldEqual "[A, B, C]=> (String, String)"
+    result._1 shouldEqual "<tparam>A ..=>.. <tparam>B"
   }
 
+  it should "get printable representation of fixed types with type constructors" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[Option[Seq[Int]] ⇒ Option[List[Set[A]]] ⇒ B]
+
+    result._1 shouldEqual "(1 + <constructor>Seq[Int]) ..=>.. (1 + <constructor>List[Set[A]]) ..=>.. <tparam>B"
+  }
+
+  it should "get printable representation of fixed types with type constructors with [_]" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[Option[_] ⇒ B]
+
+    result._1 shouldEqual "(1 + _) ..=>.. <tparam>B"
+  }
+
+  it should "get printable representation of Option types" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[Option[A] ⇒ Either[A, B]]
+
+    result._1 shouldEqual "(1 + <tparam>A) ..=>.. (<tparam>A + <tparam>B)"
+  }
+
+  it should "get printable representation of Any, Unit, and Nothing types" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[Any ⇒ Nothing ⇒ Unit]
+
+    result._1 shouldEqual "_ ..=>.. 0 ..=>.. 1"
+  }
 }
