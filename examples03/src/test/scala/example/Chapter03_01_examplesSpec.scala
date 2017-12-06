@@ -241,11 +241,11 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
     // q(q(q))
     def qqq[A, B, C, D]: ((((A => (A => B) => B) => B) => B) => D) => D = q[((A => (A => B) => B) ⇒ B) ⇒ B, D](q[(A => (A => B) => B), B](q))
 
-    // q(q)(q) does not work
+    // q(q)(q) does not work?
     "def qqq0[A, B] = q(q)(q[A, B])" shouldNot compile
 
-    // q(q)(q)
-    def qqq1[A, B, C]: ((A => (A => B) => B) => C) => C =
+    // q(q)(q) works when correct type annotations are given:
+    def qqq1[A, B, C] =
       qq[A, B, ((A => (A => B) => B) ⇒ C) ⇒ C](q[A => (A => B) => B, C])
 
     // qq[A, B, C](q[F, T]: F ⇒ (F ⇒ T) ⇒ T)
