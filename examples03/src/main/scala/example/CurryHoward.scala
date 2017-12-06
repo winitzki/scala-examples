@@ -180,7 +180,7 @@ object CurryHoward {
     println(s"DEBUG: Term found: $termFound, propositions: ${termFound.propositions}")
     val paramTerms: Map[PropE, c.Tree] = termFound.propositions.toSeq.map(p ⇒ p → reifyParam(c)(p)).toMap
     val result = reifyTerms(c)(termFound, paramTerms)
-    println(s"DEBUG: returning code: ${showCode(result, printTypes = true)}")
+    println(s"DEBUG: returning code: ${showCode(result)}")
     result
   }
 }
