@@ -8,25 +8,30 @@ object CurryHoward {
 
   private[example] def testType[T]: (String, String) = macro testTypeImpl[T]
 
+  val basicTypes = List("Int", "String", "Boolean", "Float", "Double", "Long", "Symbol", "Char")
+  val basicRegex = s"(?:scala.|java.lang.)*(${basicTypes.mkString("|")})".r
+
   def matchType(c: blackbox.Context)(t: c.Type): String = {
+    val args = t.finalResultType.typeArgs
+    val typeParams = t.typeParams
 
     t.typeSymbol.fullName match {
-      case "scala.Function1" ⇒
-        val args = t.typeArgs
-        s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
-      case "scala.Option" ⇒
-        val arg = t.typeArgs.head
-        s"(1 + ${matchType(c)(arg)})"
-      case "scala.util.Either" ⇒
-        val args = t.typeArgs
-        s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
+      case name if name matches "scala.Tuple[0-9]+" ⇒
+        // Could be the weird type [X, Y] => (type expression), or it could be an actual tuple type.
+        val realTypeArgs = args
+//        if (t.isInstanceOf[Product]) {
+//          t.asInstanceOf[Product].productElement(1).asInstanceOf[c.Symbol].typeSignature.resultType.typeArgs
+//        } else args
+        s"(${realTypeArgs.map(matchType(c)).mkString(", ")})"
+      case "scala.Function1" ⇒ s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
+      case "scala.Option" ⇒ s"(1 + ${matchType(c)(args.head)})"
+      case "scala.util.Either" ⇒ s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
       case "scala.Any" ⇒ "_"
       case "scala.Nothing" ⇒ "0"
       case "scala.Unit" ⇒ "1"
-      case _ if t.typeArgs.isEmpty && t.baseClasses.map(_.fullName) == Seq("scala.Any") ⇒
-        s"<tparam>$t"
-      case _ if t.typeArgs.isEmpty ⇒
-        s"<base classes: ${t.baseClasses.map(_.fullName).mkString(", ")}>$t"
+      case basicRegex(name) ⇒ s"<basic>$name"
+      case _ if args.isEmpty && t.baseClasses.map(_.fullName) == Seq("scala.Any") ⇒ s"<tparam>$t"
+      case _ if args.isEmpty ⇒ s"<base classes: ${t.baseClasses.map(_.fullName).mkString(", ")}>$t"
       case _ ⇒ s"<constructor>$t"
     }
   }
@@ -51,7 +56,7 @@ object CurryHoward {
     import c.universe._
     // TODO: implement
     val typeT: c.Type = c.weakTypeOf[T]
-//
+    //
     typeT match {
       case tq"..$a => $b" ⇒
       case _ ⇒

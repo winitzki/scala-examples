@@ -44,15 +44,15 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     import CurryHoward._
 
     def result[A, B, C]: (String, String) = testType[Int]
-    result._2 shouldEqual "<base classes: scala.Tuple2, scala.Serializable, java.io.Serializable, scala.Product2, scala.Product, scala.Equals, java.lang.Object, scala.Any>[A, B, C]=> (String, String)"
+    result._2 shouldEqual "(<basic>String, <basic>String)"
   }
 
-  it should "get printable representation of simple types" in {
+  it should "get printable representation of basic types" in {
     import CurryHoward._
 
     def result[A, B, C]: (String, String) = testType[Int]
 
-    result._1 shouldEqual "<base classes: scala.Int, scala.AnyVal, scala.Any>Int"
+    result._1 shouldEqual "<basic>Int"
   }
 
   it should "get printable representation of parametric type" in {
@@ -102,4 +102,31 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
     result._1 shouldEqual "_ ..=>.. 0 ..=>.. 1"
   }
+
+  it should "not confuse a type parameter with a type inheriting from Any" in {
+    import CurryHoward._
+
+    class Q
+
+    def result[A, B, C]: (String, String) = testType[A ⇒ Q]
+
+    result._1 shouldEqual "<tparam>A ..=>.. <base classes: example.CurryHowardSpec.Q, java.lang.Object, scala.Any>Q"
+  }
+
+  it should "get printable representation of tuple types" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[(Any, Nothing, Unit, A, B, C)]
+
+    result._1 shouldEqual "(_, 0, 1, <tparam>A, <tparam>B, <tparam>C)"
+  }
+
+  it should "get printable representation of tuple of basic types" in {
+    import CurryHoward._
+
+    def result[A, B, C]: (String, String) = testType[(Int, String, Boolean, Float, Double, Long, Symbol, Char)]
+
+    result._1 shouldEqual "(" + CurryHoward.basicTypes.map("<basic>" + _).mkString(", ") + ")"
+  }
+
 }
