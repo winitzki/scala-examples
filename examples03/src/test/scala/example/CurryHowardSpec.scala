@@ -115,7 +115,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
     def result[A, B, C]: (String, String) = testType[A ⇒ Q]
 
-    result._1 shouldEqual "<tparam>A ..=>.. <base classes: example.CurryHowardSpec.Q, java.lang.Object, scala.Any>Q"
+    result._1 shouldEqual "<tparam>A ..=>.. <other>Q"
   }
 
   it should "get printable representation of tuple types" in {
