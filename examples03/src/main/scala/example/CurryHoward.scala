@@ -12,17 +12,13 @@ object CurryHoward {
   val basicRegex = s"(?:scala.|java.lang.)*(${basicTypes.mkString("|")})".r
 
   def matchType(c: blackbox.Context)(t: c.Type): String = {
+    // Could be the weird type [X, Y] => (type expression), or it could be an actual tuple type.
+    // `finalResultType` seems to help here.
     val args = t.finalResultType.typeArgs
-    val typeParams = t.typeParams
+    val typeParams = t.typeParams // This is nonempty only for the weird types mentioned above.
 
     t.typeSymbol.fullName match {
-      case name if name matches "scala.Tuple[0-9]+" ⇒
-        // Could be the weird type [X, Y] => (type expression), or it could be an actual tuple type.
-        val realTypeArgs = args
-//        if (t.isInstanceOf[Product]) {
-//          t.asInstanceOf[Product].productElement(1).asInstanceOf[c.Symbol].typeSignature.resultType.typeArgs
-//        } else args
-        s"(${realTypeArgs.map(matchType(c)).mkString(", ")})"
+      case name if name matches "scala.Tuple[0-9]+" ⇒ s"(${args.map(matchType(c)).mkString(", ")})"
       case "scala.Function1" ⇒ s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
       case "scala.Option" ⇒ s"(1 + ${matchType(c)(args.head)})"
       case "scala.util.Either" ⇒ s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
