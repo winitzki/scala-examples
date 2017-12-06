@@ -28,14 +28,18 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   it should "compile" in {
     import CurryHoward._
 
-    def f1[X, Y]: X ⇒ Y ⇒ X = inhabit1
+    def f1[X, Y]: X ⇒ Y ⇒ X = inhabit
 
     f1[Int, Boolean] shouldEqual null
 
-    //    def f2[X, Y] = inhabit1[X ⇒ Y ⇒ X] // this does not work if `inhabit` wants to access the type of the enclosing owner! ("recursive method f2 needs type)
-    "def f2[X, Y] = inhabit1[X ⇒ Y ⇒ X]" shouldNot compile
+    // This does not work because `inhabit` needs to access the type of the enclosing owner!
+    // The compiler error is "recursive method f2 needs type".
+    "def f2a[X, Y] = inhabit[X ⇒ Y ⇒ X]" shouldNot compile
 
-    def f2[X, Y] = inhabit[X ⇒ Y ⇒ X]
+    def f2[X, Y] = ofType[X ⇒ Y ⇒ X]
+
+    // TODO: verify this!
+    // def f3[X, Y]: X ⇒ Y ⇒ X = ofType // does not work because ofType[Nothing] is instantiated: the macro does not use the enclosing owner.
   }
 
   behavior of "type parameter introspection"
@@ -44,6 +48,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     import CurryHoward._
 
     def result[A, B, C]: (String, String) = testType[Int]
+
     result._2 shouldEqual "(<basic>String, <basic>String)"
   }
 

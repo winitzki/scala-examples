@@ -44,11 +44,12 @@ object CurryHoward {
     c.Expr[(String, String)](q"($s1,$s2)")
   }
 
+  def ofType[T]: T = macro ofTypeImpl[T]
+
   def inhabit[T]: T = macro inhabitImpl[T]
 
-  def inhabit1[T]: T = macro inhabitImpl1[T]
-
-  def inhabitImpl[T: c.WeakTypeTag](c: blackbox.Context): c.Expr[T] = {
+  // TODO: can we replace this with blackbox? Probably, as long as `def f3[X, Y]: X ⇒ Y ⇒ X = ofType` does not work with whitebox anyway.
+  def ofTypeImpl[T: c.WeakTypeTag](c: whitebox.Context): c.Expr[T] = {
     import c.universe._
     // TODO: implement
     val typeT: c.Type = c.weakTypeOf[T]
@@ -60,7 +61,7 @@ object CurryHoward {
     c.Expr[T](q"null.asInstanceOf[$typeT]")
   }
 
-  def inhabitImpl1[T](c: whitebox.Context): c.Tree = {
+  def inhabitImpl[T](c: whitebox.Context): c.Tree = {
     import c.universe._
     // TODO: implement
 
