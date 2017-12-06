@@ -13,9 +13,9 @@ object CHTypes {
       case AnyT ⇒ "_"
       case NothingT ⇒ "0"
       case UnitT ⇒ "1"
-      case DisjunctT(terms) ⇒ "(" + terms.map(_.toString).mkString(" + ") + ")"
+      case DisjunctT(terms) ⇒ terms.map(_.toString).mkString(" + ")
       case ConjunctT(terms) ⇒ "(" + terms.map(_.toString).mkString(", ") + ")"
-      case ImplicT(head, body) ⇒ head.toString + " ..=>.. " + body.toString
+      case ImplicT(head, body) ⇒ s"($head) ..=>.. $body"
       case ParamT(name) ⇒ s"<tparam>$name"
       case OtherT(name) ⇒ s"<other>$name"
     }

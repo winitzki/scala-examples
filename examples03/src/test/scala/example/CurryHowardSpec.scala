@@ -113,7 +113,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   it should "get printable representation of function types" in {
     def result[A, B, C]: (String, String) = testType[A ⇒ B]
 
-    result._1 shouldEqual "<tparam>A ..=>.. <tparam>B"
+    result._1 shouldEqual "(<tparam>A) ..=>.. <tparam>B"
   }
 
   it should "get printable representation of fixed types with type constructors" in {
@@ -131,13 +131,13 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   it should "get printable representation of Option types" in {
     def result[A, B, C]: (String, String) = testType[Option[A] ⇒ Either[A, B]]
 
-    result._1 shouldEqual "(1 + <tparam>A) ..=>.. (<tparam>A + <tparam>B)"
+    result._1 shouldEqual "(1 + <tparam>A) ..=>.. <tparam>A + <tparam>B"
   }
 
   it should "get printable representation of Any, Unit, and Nothing types" in {
     def result[A, B, C]: (String, String) = testType[Any ⇒ Nothing ⇒ Unit]
 
-    result._1 shouldEqual "_ ..=>.. 0 ..=>.. 1"
+    result._1 shouldEqual "(_) ..=>.. (0) ..=>.. 1"
   }
 
   it should "not confuse a type parameter with a type inheriting from Any" in {
@@ -145,13 +145,19 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
     def result[A, B, C]: (String, String) = testType[A ⇒ Q]
 
-    result._1 shouldEqual "<tparam>A ..=>.. <other>Q"
+    result._1 shouldEqual "(<tparam>A) ..=>.. <other>Q"
   }
 
   it should "get printable representation of tuple types" in {
     def result[A, B, C]: (String, String) = testType[(Any, Nothing, Unit, A, B, C)]
 
     result._1 shouldEqual "(_, 0, 1, <tparam>A, <tparam>B, <tparam>C)"
+  }
+
+  it should "get printable representation of tuple as function argument" in {
+    def result[A, B, C]: (String, String) = testType[((A, B)) ⇒ C]
+
+    result._1 shouldEqual "((<tparam>A, <tparam>B)) ..=>.. <tparam>C"
   }
 
   it should "get printable representation of tuple of basic types" in {

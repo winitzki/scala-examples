@@ -5,6 +5,7 @@ lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.5" % Test
 
 lazy val common = Seq(
   scalaVersion := scalaV,
+  scalacOptions += "-deprecation",
   libraryDependencies ++= Seq(
     scalatest, scalacheck
   )
