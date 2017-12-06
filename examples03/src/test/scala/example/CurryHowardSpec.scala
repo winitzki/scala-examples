@@ -1,5 +1,6 @@
 package example
 
+import example.CHTypes._
 import org.scalatest.{FlatSpec, Matchers}
 
 class CurryHowardSpec extends FlatSpec with Matchers {
@@ -34,12 +35,16 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
     // This does not work because `inhabit` needs to access the type of the enclosing owner!
     // The compiler error is "recursive method f2 needs type".
-    "def f2a[X, Y] = inhabit[X ⇒ Y ⇒ X]" shouldNot compile
+    " def f2a[X, Y] = inhabit[X ⇒ Y ⇒ X] " shouldNot compile
 
     def f2[X, Y] = ofType[X ⇒ Y ⇒ X]
 
-    // TODO: verify this!
-    // def f3[X, Y]: X ⇒ Y ⇒ X = ofType // does not work because ofType[Nothing] is instantiated: the macro does not use the enclosing owner.
+    // does not work because ofType[Nothing] is instantiated: the macro does not use the enclosing owner.
+    " def f3[X, Y]: X ⇒ Y ⇒ X = ofType " shouldNot compile
+  }
+
+  it should "get the list of propositions" in {
+    LamE(PropE("A", "A"), AppE(PropE("A", "A"), PropE("B", "B"))).propositions shouldEqual Set(PropE("A", "A"), PropE("B", "B"))
   }
 
   behavior of "type parameter introspection"
