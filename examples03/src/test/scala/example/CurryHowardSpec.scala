@@ -30,8 +30,6 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   it should "compile" in {
     def f1[X, Y]: X ⇒ Y ⇒ X = inhabit
 
-    f1[Int, Boolean] shouldEqual null
-
     // This does not work because `inhabit` needs to access the type of the enclosing owner!
     // The compiler error is "recursive method f2 needs type".
     " def f2a[X, Y] = inhabit[X ⇒ Y ⇒ X] " shouldNot compile
@@ -56,6 +54,29 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
   it should "generate correct code for the const function" in {
     def f2[X, Y] = ofType[X ⇒ Y ⇒ X]
+
+    val cTrue = f2(true)
+    cTrue(123) shouldEqual true
+    cTrue("abc") shouldEqual true
+    cTrue(true) shouldEqual true
+
+    val c3 = f2(3)
+    c3(123) shouldEqual 3
+    c3("abc") shouldEqual 3
+    c3(true) shouldEqual 3
+
+  }
+
+  it should "generate correct code for the identity function with standard syntax" in {
+    def f1[X]: X ⇒ X = inhabit
+
+    f1(123) shouldEqual 123
+    f1("abc") shouldEqual "abc"
+    f1(true) shouldEqual true
+  }
+
+  it should "generate correct code for the const function with standard syntax" in {
+    def f2[X, Y]: X ⇒ Y ⇒ X = inhabit
 
     val cTrue = f2(true)
     cTrue(123) shouldEqual true

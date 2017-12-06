@@ -155,8 +155,17 @@ object CurryHoward {
 
   // TODO: can we replace this with blackbox? Probably, as long as `def f3[X, Y]: X ⇒ Y ⇒ X = ofType` does not work with whitebox anyway.
   def ofTypeImpl[T: c.WeakTypeTag](c: whitebox.Context): c.Tree = {
-    import c.universe._
     val typeT: c.Type = c.weakTypeOf[T]
+    inhabitInternal(c)(typeT)
+  }
+
+  def inhabitImpl[T](c: whitebox.Context): c.Tree = {
+    val typeT = c.internal.enclosingOwner.typeSignature
+    inhabitInternal(c)(typeT)
+  }
+
+  def inhabitInternal(c: whitebox.Context)(typeT: c.Type): c.Tree = {
+    import c.universe._
     val typeStructure: TypeExpr = matchType(c)(typeT)
     val termFound = ITP(typeStructure) match {
       case Nil ⇒
@@ -171,16 +180,8 @@ object CurryHoward {
     println(s"DEBUG: Term found: $termFound, propositions: ${termFound.propositions}")
     val paramTerms: Map[PropE, c.Tree] = termFound.propositions.toSeq.map(p ⇒ p → reifyParam(c)(p)).toMap
     val result = reifyTerms(c)(termFound, paramTerms)
-    println(s"DEBUG: returning code: ${showRaw(result)}")
+    println(s"DEBUG: returning code: ${showCode(result, printTypes = true)}")
     result
-  }
-
-  def inhabitImpl[T](c: whitebox.Context): c.Tree = {
-    import c.universe._
-    // TODO: implement
-
-    val enclosingType = c.internal.enclosingOwner.typeSignature
-    q"null.asInstanceOf[$enclosingType]"
   }
 }
 
