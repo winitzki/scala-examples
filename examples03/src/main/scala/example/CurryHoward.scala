@@ -1,15 +1,99 @@
 package example
 
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import scala.reflect.macros.whitebox
 
 object CHTypes {
 
-  final case class Sequent[T](premises: Set[T], goal: T)
+  def explode[T](src: Seq[Seq[T]]): Seq[Seq[T]] = {
+    src.foldLeft[Seq[Seq[T]]](Seq(Seq())) { case (prevSeqSeq, newSeq) ⇒
+      for {
+        prev ← prevSeqSeq
+        next ← newSeq
+      } yield prev :+ next
+    }
+  }
 
-  def proofs[T](sequent: Sequent[T]): Seq[TermExpr[T]] = {
-    ???
+  final case class Sequent[T](premises: Seq[T], goal: T)
+
+  type ProofTerm[T] = TermExpr[T]
+
+  trait ForwardTransform[T] {
+    def applyTo(sequent: Sequent[T]): Seq[Sequent[T]]
+
+    def applicableTo(sequent: Sequent[T]): Boolean
+
+    def back(proofs: Seq[ProofTerm[T]]): ProofTerm[T]
+  }
+
+  private val identCount = new AtomicInteger(0)
+
+  private def newIdentCount: Int = identCount.incrementAndGet()
+
+  def freshName: String = "x" + newIdentCount.toString
+
+  def followsFromAxioms[T](sequent: Sequent[T]): Seq[ProofTerm[T]] = {
+    // The LJT calculus has three axioms. We only use the Id axiom, because the T and F axioms are not useful for code generation.
+    val premisesWithIndex = sequent.premises.zipWithIndex
+    premisesWithIndex.filter(_._1 == sequent.goal).map { case (_, index) ⇒
+      val goalVar = PropE(freshName, sequent.goal)
+      // Generate a new term x1 => x2 => ... => x with fresh names. Here `x` is one of the terms, according to the premise that is equal to the goal.
+      premisesWithIndex.foldRight[TermExpr[T]](goalVar) { case ((pr, ind), prevTerm) ⇒
+        val newVar = if (ind == index) goalVar else PropE(freshName, pr)
+        LamE(newVar, prevTerm)
+      }
+    }
+  }
+
+  def invertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
+
+  )
+
+  def nonInvertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
+
+  )
+
+  // Main recursive function that computes the list of available proofs for a sequent.
+  // The main assumption is that the depth-first proof search terminates.
+  // No loop checking is performed on sequents.
+  def findProofTerms[T](sequent: Sequent[T]): Seq[ProofTerm[T]] = {
+    // Check whether the sequent follows directly from an axiom.
+    val fromAxioms: Seq[ProofTerm[T]] = followsFromAxioms(sequent) // This could be empty or non-empty.
+    // Even if the sequent follows from axioms, we should try applying rules in hopes of getting more proofs.
+
+    // Try each rule on sequent. If rule applies, obtain the next sequent.
+    // If all rules were invertible, we would return `fromAxioms ++ fromInvertibleRules`.
+
+    // We try applying just one invertible rule and proceed from there.
+    val fromRules: Seq[ProofTerm[T]] = invertibleRules[T].find(_.applicableTo(sequent)) match {
+      case Some(rule) ⇒
+        val newSequents = rule.applyTo(sequent)
+        // All the new sequents need to be proved before we can continue. They may have several proofs each.
+        val newProofs: Seq[Seq[ProofTerm[T]]] = newSequents.map(findProofTerms)
+        val explodedNewProofs: Seq[Seq[ProofTerm[T]]] = explode(newProofs)
+        explodedNewProofs.map(rule.back) ++ fromAxioms
+
+      case None ⇒
+        // No invertible rules apply, so we need to try all non-invertible (i.e. not guaranteed to work) rules.
+        // Each non-invertible rule will generate some proofs or none.
+        // If a rule generates no proofs, another rule should be used.
+        // If a rule generates some proofs, we append them to `fromAxioms` and keep trying another rule.
+        // If no more rules apply here, we return `fromAxioms`.
+        // Use flatMap to concatenate all results from all applicable non-invertible rules.
+        val fromNoninvertibleRules: Seq[ProofTerm[T]] = nonInvertibleRules[T].filter(_.applicableTo(sequent)).flatMap { rule ⇒
+          val newSequents: Seq[Sequent[T]] = rule.applyTo(sequent)
+          val newProofs: Seq[Seq[ProofTerm[T]]] = newSequents.map(findProofTerms)
+          val explodedNewProofs: Seq[Seq[ProofTerm[T]]] = explode(newProofs)
+          val finalNewProofs: Seq[ProofTerm[T]] = explodedNewProofs.map(rule.back)
+          finalNewProofs
+        }
+        fromNoninvertibleRules ++ fromAxioms
+    }
+    fromRules
   }
 
   sealed trait TypeExpr[+T] {
@@ -91,8 +175,8 @@ object CurryHoward {
 
   private[example] def testType[T]: (String, String) = macro testTypeImpl[T]
 
-  val basicTypes = List("Int", "String", "Boolean", "Float", "Double", "Long", "Symbol", "Char")
-  val basicRegex = s"(?:scala.|java.lang.)*(${basicTypes.mkString("|")})".r
+  private[example] val basicTypes = List("Int", "String", "Boolean", "Float", "Double", "Long", "Symbol", "Char")
+  private val basicRegex = s"(?:scala.|java.lang.)*(${basicTypes.mkString("|")})".r
 
   def matchType(c: whitebox.Context)(t: c.Type): TypeExpr[String] = {
     // Could be the weird type [X, Y] => (type expression), or it could be an actual tuple type.
@@ -102,9 +186,9 @@ object CurryHoward {
 
     t.typeSymbol.fullName match {
       case name if name matches "scala.Tuple[0-9]+" ⇒ ConjunctT(args.map(matchType(c))) //s"(${args.map(matchType(c)).mkString(", ")})"
-      case "scala.Function1" ⇒ ImplicT(matchType(c)(args(0)), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
-      case "scala.Option" ⇒ DisjunctT(Seq(UnitT, matchType(c)(args(0)))) //s"(1 + ${matchType(c)(args.head)})"
-      case "scala.util.Either" ⇒ DisjunctT(Seq(matchType(c)(args(0)), matchType(c)(args(1)))) //s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
+      case "scala.Function1" ⇒ ImplicT(matchType(c)(args.head), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
+      case "scala.Option" ⇒ DisjunctT(Seq(UnitT, matchType(c)(args.head))) //s"(1 + ${matchType(c)(args.head)})"
+      case "scala.util.Either" ⇒ DisjunctT(Seq(matchType(c)(args.head), matchType(c)(args(1)))) //s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
       case "scala.Any" ⇒ AnyT
       case "scala.Nothing" ⇒ NothingT
       case "scala.Unit" ⇒ UnitT

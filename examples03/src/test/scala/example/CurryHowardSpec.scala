@@ -1,7 +1,7 @@
 package example
 
 import example.CHTypes._
-import CurryHoward._
+import example.CurryHoward._
 import org.scalatest.{FlatSpec, Matchers}
 
 class CurryHowardSpec extends FlatSpec with Matchers {
@@ -164,6 +164,25 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     def result[A, B, C]: (String, String) = testType[(Int, String, Boolean, Float, Double, Long, Symbol, Char)]
 
     result._1 shouldEqual "(" + CurryHoward.basicTypes.map("<basic>" + _).mkString(", ") + ")"
+  }
+
+  behavior of "proof search"
+
+  it should "correctly explode sequences of integers" in {
+    explode[Int](Seq(Seq(1, 2))) shouldEqual Seq(Seq(1), Seq(2))
+    explode[Int](Seq(Seq(1, 2), Seq())) shouldEqual Seq()
+    explode[Int](Seq(Seq())) shouldEqual Seq()
+    explode[Int](Seq()) shouldEqual Seq(Seq())
+    explode[Int](Seq(Seq(1, 2), Seq(10, 20, 30))) shouldEqual Seq(Seq(1, 10), Seq(1, 20), Seq(1, 30), Seq(2, 10), Seq(2, 20), Seq(2, 30))
+  }
+
+  it should "correctly produce proofs from axiom" in {
+    followsFromAxioms(Sequent[Int](Seq(1, 2, 3), 0)) shouldEqual Seq()
+    followsFromAxioms(Sequent[Int](Seq(1, 2, 3), 1)) shouldEqual Seq(LamE(PropE("x1", 1), LamE(PropE("x3", 2), LamE(PropE("x2", 3), PropE("x1", 1)))))
+    followsFromAxioms(Sequent[Int](Seq(1, 2, 1), 1)) shouldEqual Seq(
+      LamE(PropE("x4", 1), LamE(PropE("x6", 2), LamE(PropE("x5", 1), PropE("x4", 1)))),
+      LamE(PropE("x9", 1), LamE(PropE("x8", 2), LamE(PropE("x7", 1), PropE("x7", 1))))
+    )
   }
 
 }
