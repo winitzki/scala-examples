@@ -20,13 +20,13 @@ object CHTypes {
   def subformulas[T](typeStructure: TypeExpr[T]): Seq[TypeExpr[T]] = Seq(typeStructure) ++ (typeStructure match {
     case DisjunctT(terms) ⇒ terms.flatMap(subformulas)
     case ConjunctT(terms) ⇒ terms.flatMap(subformulas)
-    case head \-> body ⇒ subformulas(head) ++ subformulas(body) ++ (head match {
-      case DisjunctT(terms) ⇒ terms.flatMap(t ⇒ subformulas(\->(t, body)))
+    case head :-> body ⇒ subformulas(head) ++ subformulas(body) ++ (head match {
+      case DisjunctT(terms) ⇒ terms.flatMap(t ⇒ subformulas(:->(t, body)))
       case ConjunctT(terms) ⇒ subformulas(terms.foldRight(body) { case (t, prev) ⇒ t :-> prev })
-      case _ \-> bd ⇒ subformulas(bd :-> body) // Special subformula case for implication of the form (hd ⇒ bd) ⇒ body
-      case _ ⇒ Seq()
+      case _ :-> bd ⇒ subformulas(bd :-> body) // Special subformula case for implication of the form (hd ⇒ bd) ⇒ body
+      case _ ⇒ Seq() // `head` is an atomic type
     })
-    case _ ⇒ Seq()
+    case _ ⇒ Seq() // `typeStructure` is an atomic type
   }).distinct
 
   def explode[T](src: Seq[Seq[T]]): Seq[Seq[T]] = {
@@ -116,7 +116,7 @@ object CHTypes {
     override def toString: String = this match {
       case DisjunctT(terms) ⇒ terms.map(_.toString).mkString(" + ")
       case ConjunctT(terms) ⇒ "(" + terms.map(_.toString).mkString(", ") + ")"
-      case head \-> body ⇒ s"($head) ..=>.. $body"
+      case head :-> body ⇒ s"($head) ..=>.. $body"
       case BasicT(name) ⇒ s"<basic>$name"
       case ConstructorT(fullExpr) ⇒ s"<constructor>$fullExpr"
       case TP(name) ⇒ s"<tparam>$name"
@@ -128,7 +128,7 @@ object CHTypes {
   }
   object TypeExpr {
     implicit class WithImplication[T](tpe1: TypeExpr[T]) {
-      def :->(tpe2: TypeExpr[T]): TypeExpr[T] = CHTypes.\->(tpe1, tpe2)
+      def :->(tpe2: TypeExpr[T]): TypeExpr[T] = CHTypes.:->(tpe1, tpe2)
     }
   }
 
@@ -136,7 +136,7 @@ object CHTypes {
 
   final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
 
-  final case class \->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T]
+  final case class :->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T]
 
   case object AnyT extends TypeExpr[Nothing]
 
@@ -207,7 +207,7 @@ object CurryHoward {
 
     t.typeSymbol.fullName match {
       case name if name matches "scala.Tuple[0-9]+" ⇒ ConjunctT(args.map(matchType(c))) //s"(${args.map(matchType(c)).mkString(", ")})"
-      case "scala.Function1" ⇒ \->(matchType(c)(args.head), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
+      case "scala.Function1" ⇒ :->(matchType(c)(args.head), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
       case "scala.Option" ⇒ DisjunctT(Seq(UnitT, matchType(c)(args.head))) //s"(1 + ${matchType(c)(args.head)})"
       case "scala.util.Either" ⇒ DisjunctT(Seq(matchType(c)(args.head), matchType(c)(args(1)))) //s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
       case "scala.Any" ⇒ AnyT
@@ -309,8 +309,8 @@ object ITP {
       case BasicT(name) => PropE(name, name)
       case ConstructorT(fullExpr) => PropE("_", fullExpr)
       case ConjunctT(terms) => ConjunctE(terms.map(t ⇒ ITP(t).head))
-      case TP(name) \-> body ⇒ LamE(PropE(name, name), ITP(body).head)
-      case BasicT(name) \-> body => LamE(PropE(name, name), ITP(body).head)
+      case TP(name) :-> body ⇒ LamE(PropE(name, name), ITP(body).head)
+      case BasicT(name) :-> body => LamE(PropE(name, name), ITP(body).head)
       case AnyT => PropE("_", "Any")
       case NothingT => AbsurdumE
       case UnitT => UnitE
