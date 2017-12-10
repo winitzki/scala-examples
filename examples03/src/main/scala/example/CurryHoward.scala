@@ -1,13 +1,33 @@
 package example
 
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import scala.reflect.macros.whitebox
 
+class FreshIdents(prefix: String) {
+  private val identCount = new AtomicInteger(0)
+
+  private def newIdentCount: Int = identCount.incrementAndGet()
+
+  def apply(): String = prefix + newIdentCount.toString
+}
+
 object CHTypes {
+  private val freshSubformulas = new FreshIdents(prefix = "f")
+
+  def subformulas[T](typeStructure: TypeExpr[T]): Seq[TypeExpr[T]] = Seq(typeStructure) ++ (typeStructure match {
+    case DisjunctT(terms) ⇒ terms.flatMap(subformulas)
+    case ConjunctT(terms) ⇒ terms.flatMap(subformulas)
+    case head \-> body ⇒ subformulas(head) ++ subformulas(body) ++ (head match {
+      case DisjunctT(terms) ⇒ terms.flatMap(t ⇒ subformulas(\->(t, body)))
+      case ConjunctT(terms) ⇒ subformulas(terms.foldRight(body) { case (t, prev) ⇒ t :-> prev })
+      case _ \-> bd ⇒ subformulas(bd :-> body) // Special subformula case for implication of the form (hd ⇒ bd) ⇒ body
+      case _ ⇒ Seq()
+    })
+    case _ ⇒ Seq()
+  }).distinct
 
   def explode[T](src: Seq[Seq[T]]): Seq[Seq[T]] = {
     src.foldLeft[Seq[Seq[T]]](Seq(Seq())) { case (prevSeqSeq, newSeq) ⇒
@@ -30,20 +50,16 @@ object CHTypes {
     def back(proofs: Seq[ProofTerm[T]]): ProofTerm[T]
   }
 
-  private val identCount = new AtomicInteger(0)
-
-  private def newIdentCount: Int = identCount.incrementAndGet()
-
-  def freshName: String = "x" + newIdentCount.toString
+  private val freshVar = new FreshIdents(prefix = "x")
 
   def followsFromAxioms[T](sequent: Sequent[T]): Seq[ProofTerm[T]] = {
     // The LJT calculus has three axioms. We only use the Id axiom, because the T and F axioms are not useful for code generation.
     val premisesWithIndex = sequent.premises.zipWithIndex
     premisesWithIndex.filter(_._1 == sequent.goal).map { case (_, index) ⇒
-      val goalVar = PropE(freshName, sequent.goal)
+      val goalVar = PropE(freshVar(), sequent.goal)
       // Generate a new term x1 => x2 => ... => x with fresh names. Here `x` is one of the terms, according to the premise that is equal to the goal.
       premisesWithIndex.foldRight[TermExpr[T]](goalVar) { case ((pr, ind), prevTerm) ⇒
-        val newVar = if (ind == index) goalVar else PropE(freshName, pr)
+        val newVar = if (ind == index) goalVar else PropE(freshVar(), pr)
         LamE(newVar, prevTerm)
       }
     }
@@ -98,28 +114,29 @@ object CHTypes {
 
   sealed trait TypeExpr[+T] {
     override def toString: String = this match {
+      case DisjunctT(terms) ⇒ terms.map(_.toString).mkString(" + ")
+      case ConjunctT(terms) ⇒ "(" + terms.map(_.toString).mkString(", ") + ")"
+      case head \-> body ⇒ s"($head) ..=>.. $body"
       case BasicT(name) ⇒ s"<basic>$name"
       case ConstructorT(fullExpr) ⇒ s"<constructor>$fullExpr"
+      case TP(name) ⇒ s"<tparam>$name"
+      case OtherT(name) ⇒ s"<other>$name"
       case AnyT ⇒ "_"
       case NothingT ⇒ "0"
       case UnitT ⇒ "1"
-      case DisjunctT(terms) ⇒ terms.map(_.toString).mkString(" + ")
-      case ConjunctT(terms) ⇒ "(" + terms.map(_.toString).mkString(", ") + ")"
-      case ImplicT(head, body) ⇒ s"($head) ..=>.. $body"
-      case ParamT(name) ⇒ s"<tparam>$name"
-      case OtherT(name) ⇒ s"<other>$name"
     }
   }
-
-  final case class BasicT[T](name: T) extends TypeExpr[T]
-
-  final case class ConstructorT[T](fullExpr: String) extends TypeExpr[T]
+  object TypeExpr {
+    implicit class WithImplication[T](tpe1: TypeExpr[T]) {
+      def :->(tpe2: TypeExpr[T]): TypeExpr[T] = CHTypes.\->(tpe1, tpe2)
+    }
+  }
 
   final case class DisjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
 
   final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
 
-  final case class ImplicT[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T]
+  final case class \->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T]
 
   case object AnyT extends TypeExpr[Nothing]
 
@@ -127,9 +144,13 @@ object CHTypes {
 
   case object UnitT extends TypeExpr[Nothing]
 
-  case class ParamT[T](name: T) extends TypeExpr[T]
+  case class TP[T](name: T) extends TypeExpr[T]
 
   case class OtherT[T](name: T) extends TypeExpr[T]
+
+  final case class BasicT[T](name: T) extends TypeExpr[T]
+
+  final case class ConstructorT[T](fullExpr: String) extends TypeExpr[T]
 
   object TermExpr {
     def propositions[T](termExpr: TermExpr[T]): Set[PropE[T]] = termExpr match {
@@ -186,14 +207,14 @@ object CurryHoward {
 
     t.typeSymbol.fullName match {
       case name if name matches "scala.Tuple[0-9]+" ⇒ ConjunctT(args.map(matchType(c))) //s"(${args.map(matchType(c)).mkString(", ")})"
-      case "scala.Function1" ⇒ ImplicT(matchType(c)(args.head), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
+      case "scala.Function1" ⇒ \->(matchType(c)(args.head), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
       case "scala.Option" ⇒ DisjunctT(Seq(UnitT, matchType(c)(args.head))) //s"(1 + ${matchType(c)(args.head)})"
       case "scala.util.Either" ⇒ DisjunctT(Seq(matchType(c)(args.head), matchType(c)(args(1)))) //s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
       case "scala.Any" ⇒ AnyT
       case "scala.Nothing" ⇒ NothingT
       case "scala.Unit" ⇒ UnitT
       case basicRegex(name) ⇒ BasicT(name)
-      case _ if args.isEmpty && t.baseClasses.map(_.fullName) == Seq("scala.Any") ⇒ ParamT(t.toString)
+      case _ if args.isEmpty && t.baseClasses.map(_.fullName) == Seq("scala.Any") ⇒ TP(t.toString)
       case _ if args.isEmpty ⇒ OtherT(t.toString)
       case _ ⇒ ConstructorT(t.toString)
     }
@@ -278,16 +299,8 @@ object CurryHoward {
   }
 }
 
-sealed trait Term {
-  def apply[T](x: T): Term = this // dummy implementation to simplify code
-}
-
-final case class \[T](v: Term ⇒ T) extends Term
-
-final case class \:[T](v: Any ⇒ T) extends Term
-
 object ITP {
-  def apply(typeStructure: CHTypes.TypeExpr[String]): List[CHTypes.TermExpr[String]] = {
+  def apply(typeStructure: CHTypes.TypeExpr[String]): Seq[CHTypes.TermExpr[String]] = {
     import CHTypes._
     // TODO: implement intuitionistic theorem prover here
 
@@ -296,15 +309,17 @@ object ITP {
       case BasicT(name) => PropE(name, name)
       case ConstructorT(fullExpr) => PropE("_", fullExpr)
       case ConjunctT(terms) => ConjunctE(terms.map(t ⇒ ITP(t).head))
-      case ImplicT(ParamT(name), body) => LamE(PropE(name, name), ITP(body).head)
-      case ImplicT(BasicT(name), body) => LamE(PropE(name, name), ITP(body).head)
+      case TP(name) \-> body ⇒ LamE(PropE(name, name), ITP(body).head)
+      case BasicT(name) \-> body => LamE(PropE(name, name), ITP(body).head)
       case AnyT => PropE("_", "Any")
       case NothingT => AbsurdumE
       case UnitT => UnitE
-      case ParamT(name) => PropE(name, name)
+      case TP(name) => PropE(name, name)
       case OtherT(name) => PropE("_", name)
       case _ => UnitE
     }
     List(term)
+    //    val subformulaDictionary = CHTypes.subformulas(typeStructure)
+    //    val proofs = CHTypes.findProofTerms(Sequent[String](Seq(),))
   }
 }

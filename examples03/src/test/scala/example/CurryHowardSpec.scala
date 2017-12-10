@@ -1,5 +1,6 @@
 package example
 
+import com.sun.xml.internal.xsom.impl.Ref.Term
 import example.CHTypes._
 import example.CurryHoward._
 import org.scalatest.{FlatSpec, Matchers}
@@ -9,6 +10,13 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   behavior of "syntax for untyped functions"
 
   it should "define syntax for untyped lambda calculus with products" in {
+    sealed trait Term {
+      def apply[T](x: T): Term = this // dummy implementation to simplify code
+    }
+
+    final case class \[T](v: Term ⇒ T) extends Term
+
+    final case class \:[T](v: Any ⇒ T) extends Term
 
     "(x => x)" shouldNot compile
 
@@ -182,6 +190,41 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     followsFromAxioms(Sequent[Int](Seq(1, 2, 1), 1)) shouldEqual Seq(
       LamE(PropE("x4", 1), LamE(PropE("x6", 2), LamE(PropE("x5", 1), PropE("x4", 1)))),
       LamE(PropE("x9", 1), LamE(PropE("x8", 2), LamE(PropE("x7", 1), PropE("x7", 1))))
+    )
+  }
+
+  it should "correctly compute LJT subformulas" in {
+    subformulas[Int](TP(1) :-> TP(1)) shouldEqual Seq(TP(1) :-> TP(1), TP(1))
+    subformulas[Int](TP(1) :-> TP(2)) shouldEqual Seq(TP(1) :-> TP(2), TP(1), TP(2))
+    subformulas[Int](TP(1) :-> (TP(2) :-> TP(3))).toSet shouldEqual Set(TP(1) :-> (TP(2) :-> TP(3)), TP(2) :-> TP(3), TP(1), TP(2), TP(3))
+
+    // Example from the paper.
+    subformulas[String](((TP("A") :-> TP("A")) :-> TP("C")) :-> TP("C")).toSet shouldEqual Set(
+      ((TP("A") :-> TP("A")) :-> TP("C")) :-> TP("C"),
+      (TP("A") :-> TP("A")) :-> TP("C"),
+      TP("A") :-> TP("A"),
+      TP("A") :-> TP("C"),
+      TP("C") :-> TP("C"),
+      TP("A"), TP("C")
+    )
+
+    // Disjunctions.
+    subformulas[Int](DisjunctT(Seq(TP(1), TP(2))) :-> TP(3)).toSet shouldEqual Set(
+      DisjunctT(Seq(TP(1), TP(2))) :-> TP(3),
+      DisjunctT(Seq(TP(1), TP(2))),
+      TP(1) :-> TP(3),
+      TP(2) :-> TP(3),
+      TP(1), TP(2), TP(3)
+    )
+
+    // Conjunctions.
+    subformulas[Int](ConjunctT(Seq(TP(1), TP(2), TP(3))) :-> TP(4)).toSet shouldEqual Set(
+      ConjunctT(Seq(TP(1), TP(2), TP(3))) :-> TP(4),
+      ConjunctT(Seq(TP(1), TP(2), TP(3))),
+      TP(1) :-> (TP(2) :-> (TP(3) :-> TP(4))),
+      TP(2) :-> (TP(3) :-> TP(4)),
+      TP(3) :-> TP(4),
+      TP(1), TP(2), TP(3), TP(4)
     )
   }
 
