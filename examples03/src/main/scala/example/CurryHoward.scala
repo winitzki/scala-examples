@@ -6,7 +6,13 @@ import scala.reflect.macros.whitebox
 
 object CHTypes {
 
-  sealed trait TypeExpr {
+  final case class Sequent[T](premises: Set[T], goal: T)
+
+  def proofs[T](sequent: Sequent[T]): Seq[TermExpr[T]] = {
+    ???
+  }
+
+  sealed trait TypeExpr[+T] {
     override def toString: String = this match {
       case BasicT(name) ⇒ s"<basic>$name"
       case ConstructorT(fullExpr) ⇒ s"<constructor>$fullExpr"
@@ -21,28 +27,40 @@ object CHTypes {
     }
   }
 
-  final case class BasicT(name: String) extends TypeExpr
+  final case class BasicT[T](name: T) extends TypeExpr[T]
 
-  final case class ConstructorT(fullExpr: String) extends TypeExpr
+  final case class ConstructorT[T](fullExpr: String) extends TypeExpr[T]
 
-  final case class DisjunctT(terms: Seq[TypeExpr]) extends TypeExpr
+  final case class DisjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
 
-  final case class ConjunctT(terms: Seq[TypeExpr]) extends TypeExpr
+  final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
 
-  final case class ImplicT(head: TypeExpr, body: TypeExpr) extends TypeExpr
+  final case class ImplicT[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T]
 
-  case object AnyT extends TypeExpr
+  case object AnyT extends TypeExpr[Nothing]
 
-  case object NothingT extends TypeExpr
+  case object NothingT extends TypeExpr[Nothing]
 
-  case object UnitT extends TypeExpr
+  case object UnitT extends TypeExpr[Nothing]
 
-  case class ParamT(name: String) extends TypeExpr
+  case class ParamT[T](name: T) extends TypeExpr[T]
 
-  case class OtherT(name: String) extends TypeExpr
+  case class OtherT[T](name: T) extends TypeExpr[T]
 
+  object TermExpr {
+    def propositions[T](termExpr: TermExpr[T]): Set[PropE[T]] = termExpr match {
+      case p: PropE[T] ⇒ Set(p) // Need to specify type parameter in match... `case p@PropE(_)` does not work.
+      case AppE(head, arg) ⇒ propositions(head) ++ propositions(arg)
+      case l: LamE[T] ⇒ // Can't pattern-match directly for some reason! Some trouble with the type parameter T.
+        Set(l.head) ++ propositions(l.body)
+      case UnitE ⇒ Set()
+      case AbsurdumE ⇒ Set()
+      case ConjunctE(terms) ⇒ terms.flatMap(propositions).toSet
+    }
 
-  sealed trait TermExpr {
+  }
+
+  sealed trait TermExpr[+T] {
     override def toString: String = this match {
       case PropE(name, typeName) => s"($name:$typeName)"
       case AppE(head, arg) => s"($head)($arg)"
@@ -51,28 +69,19 @@ object CHTypes {
       case AbsurdumE => "Nothing"
       case ConjunctE(terms) => "(" + terms.map(_.toString).mkString(", ") + ")"
     }
-
-    def propositions: Set[PropE] = this match {
-      case p@PropE(name, typeName) => Set(p)
-      case AppE(head, arg) => head.propositions ++ arg.propositions
-      case LamE(head, body) => Set(head) ++ body.propositions
-      case UnitE => Set()
-      case AbsurdumE => Set()
-      case ConjunctE(terms) => terms.flatMap(_.propositions).toSet
-    }
   }
 
-  final case class PropE(name: String, typeName: String) extends TermExpr
+  final case class PropE[T](name: String, typeName: T) extends TermExpr[T]
 
-  final case class AppE(head: TermExpr, arg: TermExpr) extends TermExpr
+  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T]) extends TermExpr[T]
 
-  final case class LamE(head: PropE, body: TermExpr) extends TermExpr
+  final case class LamE[T](head: PropE[T], body: TermExpr[T]) extends TermExpr[T]
 
-  case object UnitE extends TermExpr
+  case object UnitE extends TermExpr[Nothing]
 
-  case object AbsurdumE extends TermExpr
+  case object AbsurdumE extends TermExpr[Nothing]
 
-  final case class ConjunctE(terms: Seq[TermExpr]) extends TermExpr
+  final case class ConjunctE[T](terms: Seq[TermExpr[T]]) extends TermExpr[T]
 
 }
 
@@ -85,7 +94,7 @@ object CurryHoward {
   val basicTypes = List("Int", "String", "Boolean", "Float", "Double", "Long", "Symbol", "Char")
   val basicRegex = s"(?:scala.|java.lang.)*(${basicTypes.mkString("|")})".r
 
-  def matchType(c: whitebox.Context)(t: c.Type): TypeExpr = {
+  def matchType(c: whitebox.Context)(t: c.Type): TypeExpr[String] = {
     // Could be the weird type [X, Y] => (type expression), or it could be an actual tuple type.
     // `finalResultType` seems to help here.
     val args = t.finalResultType.typeArgs
@@ -106,7 +115,7 @@ object CurryHoward {
     }
   }
 
-  def reifyParam(c: whitebox.Context)(term: PropE): c.Tree = {
+  def reifyParam(c: whitebox.Context)(term: PropE[String]): c.Tree = {
     import c.universe._
     term match {
       case PropE(name, typeName) ⇒
@@ -120,7 +129,7 @@ object CurryHoward {
     }
   }
 
-  def reifyTerms(c: whitebox.Context)(termExpr: TermExpr, paramTerms: Map[PropE, c.Tree]): c.Tree = {
+  def reifyTerms(c: whitebox.Context)(termExpr: TermExpr[String], paramTerms: Map[PropE[String], c.Tree]): c.Tree = {
     import c.universe._
 
     termExpr match {
@@ -166,7 +175,7 @@ object CurryHoward {
 
   def inhabitInternal(c: whitebox.Context)(typeT: c.Type): c.Tree = {
     import c.universe._
-    val typeStructure: TypeExpr = matchType(c)(typeT)
+    val typeStructure: TypeExpr[String] = matchType(c)(typeT)
     val termFound = ITP(typeStructure) match {
       case Nil ⇒
         c.error(c.enclosingPosition, s"type $typeStructure cannot be inhabited")
@@ -177,8 +186,8 @@ object CurryHoward {
         UnitE
     }
 
-    println(s"DEBUG: Term found: $termFound, propositions: ${termFound.propositions}")
-    val paramTerms: Map[PropE, c.Tree] = termFound.propositions.toSeq.map(p ⇒ p → reifyParam(c)(p)).toMap
+    println(s"DEBUG: Term found: $termFound, propositions: ${TermExpr.propositions(termFound)}")
+    val paramTerms: Map[PropE[String], c.Tree] = TermExpr.propositions(termFound).toSeq.map(p ⇒ p → reifyParam(c)(p)).toMap
     val result = reifyTerms(c)(termFound, paramTerms)
     println(s"DEBUG: returning code: ${showCode(result)}")
     result
@@ -194,7 +203,7 @@ final case class \[T](v: Term ⇒ T) extends Term
 final case class \:[T](v: Any ⇒ T) extends Term
 
 object ITP {
-  def apply(typeStructure: CHTypes.TypeExpr): List[CHTypes.TermExpr] = {
+  def apply(typeStructure: CHTypes.TypeExpr[String]): List[CHTypes.TermExpr[String]] = {
     import CHTypes._
     // TODO: implement intuitionistic theorem prover here
 

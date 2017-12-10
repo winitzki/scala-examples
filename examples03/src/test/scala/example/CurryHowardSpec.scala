@@ -41,7 +41,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   }
 
   it should "get the list of propositions" in {
-    LamE(PropE("A", "A"), AppE(PropE("A", "A"), PropE("B", "B"))).propositions shouldEqual Set(PropE("A", "A"), PropE("B", "B"))
+    TermExpr.propositions(LamE(PropE("A", "A"), AppE(PropE("A", "A"), PropE("B", "B")))) shouldEqual Set(PropE("A", "A"), PropE("B", "B"))
   }
 
   it should "generate correct code for the identity function" in {
