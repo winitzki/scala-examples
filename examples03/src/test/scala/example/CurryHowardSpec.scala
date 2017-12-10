@@ -194,12 +194,12 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   }
 
   it should "correctly compute LJT subformulas" in {
-    subformulas[Int](TP(1) :-> TP(1)) shouldEqual Seq(TP(1) :-> TP(1), TP(1))
-    subformulas[Int](TP(1) :-> TP(2)) shouldEqual Seq(TP(1) :-> TP(2), TP(1), TP(2))
-    subformulas[Int](TP(1) :-> (TP(2) :-> TP(3))).toSet shouldEqual Set(TP(1) :-> (TP(2) :-> TP(3)), TP(2) :-> TP(3), TP(1), TP(2), TP(3))
+    subformulas[Int](TP(1) :-> TP(1)) shouldEqual Set(TP(1) :-> TP(1), TP(1))
+    subformulas[Int](TP(1) :-> TP(2)) shouldEqual Set(TP(1) :-> TP(2), TP(1), TP(2))
+    subformulas[Int](TP(1) :-> (TP(2) :-> TP(3))) shouldEqual Set(TP(1) :-> (TP(2) :-> TP(3)), TP(2) :-> TP(3), TP(1), TP(2), TP(3))
 
     // Example from the paper.
-    subformulas[String](((TP("A") :-> TP("A")) :-> TP("C")) :-> TP("C")).toSet shouldEqual Set(
+    subformulas[String](((TP("A") :-> TP("A")) :-> TP("C")) :-> TP("C")) shouldEqual Set(
       ((TP("A") :-> TP("A")) :-> TP("C")) :-> TP("C"),
       (TP("A") :-> TP("A")) :-> TP("C"),
       TP("A") :-> TP("A"),
@@ -209,7 +209,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     )
 
     // Disjunctions.
-    subformulas[Int](DisjunctT(Seq(TP(1), TP(2))) :-> TP(3)).toSet shouldEqual Set(
+    subformulas[Int](DisjunctT(Seq(TP(1), TP(2))) :-> TP(3)) shouldEqual Set(
       DisjunctT(Seq(TP(1), TP(2))) :-> TP(3),
       DisjunctT(Seq(TP(1), TP(2))),
       TP(1) :-> TP(3),
@@ -218,7 +218,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     )
 
     // Conjunctions.
-    subformulas[Int](ConjunctT(Seq(TP(1), TP(2), TP(3))) :-> TP(4)).toSet shouldEqual Set(
+    subformulas[Int](ConjunctT(Seq(TP(1), TP(2), TP(3))) :-> TP(4)) shouldEqual Set(
       ConjunctT(Seq(TP(1), TP(2), TP(3))) :-> TP(4),
       ConjunctT(Seq(TP(1), TP(2), TP(3))),
       TP(1) :-> (TP(2) :-> (TP(3) :-> TP(4))),
@@ -226,6 +226,17 @@ class CurryHowardSpec extends FlatSpec with Matchers {
       TP(3) :-> TP(4),
       TP(1), TP(2), TP(3), TP(4)
     )
+  }
+
+  it should "find proof term for given sequent" in {
+    val sequent = Sequent(List(TP(1)), TP(1))
+    CHTypes.findProofTerms(sequent) shouldEqual Seq(LamE(PropE("x10", TP(1)), PropE("x10", TP(1))))
+  }
+
+  it should "find proof term for identity type using rule ->R" in {
+    val typeExpr = TP(1) :-> TP(1)
+    val proofs = ITP.findProofs(typeExpr)
+    proofs shouldEqual Seq(LamE(PropE("x0", 1), PropE("x0", 1)))
   }
 
 }

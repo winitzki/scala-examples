@@ -17,7 +17,7 @@ class FreshIdents(prefix: String) {
 object CHTypes {
   private val freshSubformulas = new FreshIdents(prefix = "f")
 
-  def subformulas[T](typeStructure: TypeExpr[T]): Seq[TypeExpr[T]] = Seq(typeStructure) ++ (typeStructure match {
+  def subformulas[T](typeStructure: TypeExpr[T]): Set[TypeExpr[T]] = Set(typeStructure) ++ (typeStructure match {
     case DisjunctT(terms) ⇒ terms.flatMap(subformulas)
     case ConjunctT(terms) ⇒ terms.flatMap(subformulas)
     case head :-> body ⇒ subformulas(head) ++ subformulas(body) ++ (head match {
@@ -27,7 +27,7 @@ object CHTypes {
       case _ ⇒ Seq() // `head` is an atomic type
     })
     case _ ⇒ Seq() // `typeStructure` is an atomic type
-  }).distinct
+  }).toSet
 
   def explode[T](src: Seq[Seq[T]]): Seq[Seq[T]] = {
     src.foldLeft[Seq[Seq[T]]](Seq(Seq())) { case (prevSeqSeq, newSeq) ⇒
@@ -125,32 +125,53 @@ object CHTypes {
       case NothingT ⇒ "0"
       case UnitT ⇒ "1"
     }
+
+    def isAtomic: Boolean
   }
+
+  sealed trait NonAtomicTypeExpr {
+    def isAtomic: Boolean = false
+  }
+
+  sealed trait AtomicTypeExpr[T] {
+    def isAtomic: Boolean = true
+
+    def name: T
+  }
+
   object TypeExpr {
+
     implicit class WithImplication[T](tpe1: TypeExpr[T]) {
       def :->(tpe2: TypeExpr[T]): TypeExpr[T] = CHTypes.:->(tpe1, tpe2)
     }
+
   }
 
-  final case class DisjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
+  final case class DisjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T] with NonAtomicTypeExpr
 
-  final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T]
+  final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T] with NonAtomicTypeExpr
 
-  final case class :->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T]
+  final case class :->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T] with NonAtomicTypeExpr
 
-  case object AnyT extends TypeExpr[Nothing]
+  case object AnyT extends TypeExpr[Nothing] with AtomicTypeExpr[Nothing] {
+    override def name: Nothing = ???
+  }
 
-  case object NothingT extends TypeExpr[Nothing]
+  case object NothingT extends TypeExpr[Nothing] with AtomicTypeExpr[Nothing] {
+    override def name: Nothing = ???
+  }
 
-  case object UnitT extends TypeExpr[Nothing]
+  case object UnitT extends TypeExpr[Nothing] with AtomicTypeExpr[Nothing] {
+    override def name: Nothing = ???
+  }
 
-  case class TP[T](name: T) extends TypeExpr[T]
+  case class TP[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
 
-  case class OtherT[T](name: T) extends TypeExpr[T]
+  case class OtherT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
 
-  final case class BasicT[T](name: T) extends TypeExpr[T]
+  final case class BasicT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
 
-  final case class ConstructorT[T](fullExpr: String) extends TypeExpr[T]
+  final case class ConstructorT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
 
   object TermExpr {
     def propositions[T](termExpr: TermExpr[T]): Set[PropE[T]] = termExpr match {
@@ -174,19 +195,33 @@ object CHTypes {
       case AbsurdumE => "Nothing"
       case ConjunctE(terms) => "(" + terms.map(_.toString).mkString(", ") + ")"
     }
+
+    def map[U](f: T ⇒ U): TermExpr[U]
   }
 
-  final case class PropE[T](name: String, typeName: T) extends TermExpr[T]
+  final case class PropE[T](name: String, typeName: T) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): PropE[U] = PropE(name, f(typeName))
+  }
 
-  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T]) extends TermExpr[T]
+  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = AppE(head.map(f), arg.map(f))
+  }
 
-  final case class LamE[T](head: PropE[T], body: TermExpr[T]) extends TermExpr[T]
+  final case class LamE[T](head: PropE[T], body: TermExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = LamE(head.map(f), body.map(f))
+  }
 
-  case object UnitE extends TermExpr[Nothing]
+  case object UnitE extends TermExpr[Nothing] {
+    override def map[U](f: Nothing ⇒ U): TermExpr[U] = UnitE
+  }
 
-  case object AbsurdumE extends TermExpr[Nothing]
+  case object AbsurdumE extends TermExpr[Nothing] {
+    override def map[U](f: Nothing ⇒ U): TermExpr[U] = AbsurdumE
+  }
 
-  final case class ConjunctE[T](terms: Seq[TermExpr[T]]) extends TermExpr[T]
+  final case class ConjunctE[T](terms: Seq[TermExpr[T]]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = ConjunctE(terms.map(_.map(f)))
+  }
 
 }
 
@@ -300,11 +335,11 @@ object CurryHoward {
 }
 
 object ITP {
-  def apply(typeStructure: CHTypes.TypeExpr[String]): Seq[CHTypes.TermExpr[String]] = {
-    import CHTypes._
-    // TODO: implement intuitionistic theorem prover here
 
-    // only accept types of the form a=>b=>c here
+  def apply(typeStructure: CHTypes.TypeExpr[String]): List[CHTypes.TermExpr[String]] = {
+    import CHTypes._
+
+    //     only accept types of the form a=>b=>c here
     val term = typeStructure match {
       case BasicT(name) => PropE(name, name)
       case ConstructorT(fullExpr) => PropE("_", fullExpr)
@@ -319,7 +354,14 @@ object ITP {
       case _ => UnitE
     }
     List(term)
-    //    val subformulaDictionary = CHTypes.subformulas(typeStructure)
-    //    val proofs = CHTypes.findProofTerms(Sequent[String](Seq(),))
+  }
+
+  def findProofs[T](typeStructure: CHTypes.TypeExpr[T]): List[CHTypes.TermExpr[T]] = {
+    import CHTypes._
+    // TODO: implement intuitionistic theorem prover here
+    val subformulaDictionary: Map[TypeExpr[T], Int] = CHTypes.subformulas(typeStructure).zipWithIndex.toMap
+    val reverseDictionary: Map[Int, T] = subformulaDictionary.collect { case (k: AtomicTypeExpr[T], v) ⇒ v → k.name }
+    val proofs: Seq[ProofTerm[Int]] = CHTypes.findProofTerms(Sequent[Int](Seq(), subformulaDictionary(typeStructure)))
+    proofs.map(_.map(i ⇒ reverseDictionary(i))).toList
   }
 }
