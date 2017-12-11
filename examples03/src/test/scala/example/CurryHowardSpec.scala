@@ -248,10 +248,20 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     )
   }
 
-  it should "find proof term for identity type using rule ->R" in {
+  it should "find proof term for the I combinator using rule ->R" in {
     val typeExpr = TP(1) :-> TP(1)
     val proofs = ITP.findProofs(typeExpr)
     proofs shouldEqual Seq(LamE(PropE("x14", TP(1)), PropE("x14", TP(1)), TP(1) :-> TP(1)))
   }
 
+  it should "find proof term for the K combinator using rule ->R" in {
+    val typeExpr = TP(1) :-> (TP(2) :-> TP(1))
+    val proofs = ITP.findProofs(typeExpr)
+    proofs shouldEqual Seq(
+      LamE(PropE("x17", TP(1)),
+        LamE(PropE("x16", TP(2)), PropE("x17", TP(1)), TP(2) :-> TP(1)),
+        TP(1) :-> (TP(2) :-> TP(1))
+      )
+    )
+  }
 }
