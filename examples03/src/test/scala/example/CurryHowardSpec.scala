@@ -132,7 +132,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   }
 
   it should "get the list of propositions" in {
-    TermExpr.propositions(LamE(PropE("A", TP("A")), AppE(PropE("A", TP("A")), PropE("B", TP("B")), TP("C")), TP("D"))) shouldEqual Set(PropE("A", TP("A")), PropE("B", TP("B")))
+    TermExpr.propositions(CurriedE(List(PropE("A", TP("A"))), AppE(PropE("A", TP("A")), PropE("B", TP("B")), TP("")), TP(""))) shouldEqual Set(PropE("A", TP("A")), PropE("B", TP("B")))
   }
 
   it should "generate correct code for the identity function" in {
@@ -191,16 +191,19 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     explode[Int](Seq(Seq(1, 2), Seq(10, 20, 30))) shouldEqual Seq(Seq(1, 10), Seq(1, 20), Seq(1, 30), Seq(2, 10), Seq(2, 20), Seq(2, 30))
   }
 
-  val sfIndexMap: Map[TypeExpr[Int], SFIndex] = Map(TP(0) → 0, TP(1) → 1, TP(2) → 2, TP(3) → 3)
+  val sfIndexMap: Map[TypeExpr[Int], SFIndex] = (0 to 3).map(x ⇒ TP(x) → x).toMap
 
   it should "correctly produce proofs from the Id axiom" in {
     followsFromAxioms(Sequent[Int](List(3, 2, 1), 0, sfIndexMap)) shouldEqual Seq()
+
     followsFromAxioms(Sequent[Int](List(3, 2, 1), 1, sfIndexMap)) shouldEqual Seq(
-      LamE(PropE("x6", TP(1)), LamE(PropE("x5", TP(2)), LamE(PropE("x4", TP(3)), PropE("x6", TP(1)), TP(3) :-> TP(1)), TP(2) :-> (TP(3) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(1))))
+      CurriedE(List(PropE("x4", TP(3)), PropE("x5", TP(2)), PropE("x6", TP(1))), PropE("x6", TP(1)), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(1))))
     )
+  }
+  it should "produce several proofs from the Id axiom" in {
     followsFromAxioms(Sequent[Int](List(1, 2, 1), 1, sfIndexMap)) shouldEqual Seq(
-      LamE(PropE("x9", TP(1)), LamE(PropE("x8", TP(2)), LamE(PropE("x7", TP(1)), PropE("x7", TP(1)), TP(1) :-> TP(1)), TP(2) :-> (TP(1) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1)))),
-      LamE(PropE("x9", TP(1)), LamE(PropE("x8", TP(2)), LamE(PropE("x7", TP(1)), PropE("x9", TP(1)), TP(1) :-> TP(1)), TP(2) :-> (TP(1) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1))))
+      CurriedE(List(PropE("x7", TP(1)), PropE("x8", TP(2)), PropE("x9", TP(1))), PropE("x7", TP(1)), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1)))),
+      CurriedE(List(PropE("x7", TP(1)), PropE("x8", TP(2)), PropE("x9", TP(1))), PropE("x9", TP(1)), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1))))
     )
   }
 
@@ -241,27 +244,24 @@ class CurryHowardSpec extends FlatSpec with Matchers {
 
   it should "find proof term for given sequent with premises" in {
     val sequent = Sequent(List(1), 1, sfIndexMap)
-    CHTypes.findProofTerms(sequent) shouldEqual Seq(LamE(PropE("x10", TP(1)), PropE("x10", TP(1)), TP(1) :-> TP(1)))
+    CHTypes.findProofTerms(sequent) shouldEqual Seq(CurriedE(List(PropE("x10", TP(1))), PropE("x10", TP(1)), TP(1) :-> TP(1)))
     val sequent2 = Sequent(List(3, 2, 1), 2, sfIndexMap)
     CHTypes.findProofTerms(sequent2) shouldEqual Seq(
-      LamE(PropE("x13", TP(1)), LamE(PropE("x12", TP(2)), LamE(PropE("x11", TP(3)), PropE("x12", TP(2)), TP(3) :-> TP(2)), TP(2) :-> (TP(3) :-> TP(2))), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(2))))
+      CurriedE(List(PropE("x11", TP(3)), PropE("x12", TP(2)), PropE("x13", TP(1))), PropE("x12", TP(2)), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(2))))
     )
   }
 
   it should "find proof term for the I combinator using rule ->R" in {
     val typeExpr = TP(1) :-> TP(1)
     val proofs = ITP.findProofs(typeExpr)
-    proofs shouldEqual Seq(LamE(PropE("x14", TP(1)), PropE("x14", TP(1)), TP(1) :-> TP(1)))
+    proofs shouldEqual Seq(CurriedE(List(PropE("x14", TP(1))), PropE("x14", TP(1)), TP(1) :-> TP(1)))
   }
 
   it should "find proof term for the K combinator using rule ->R" in {
     val typeExpr = TP(1) :-> (TP(2) :-> TP(1))
     val proofs = ITP.findProofs(typeExpr)
     proofs shouldEqual Seq(
-      LamE(PropE("x17", TP(1)),
-        LamE(PropE("x16", TP(2)), PropE("x17", TP(1)), TP(2) :-> TP(1)),
-        TP(1) :-> (TP(2) :-> TP(1))
-      )
+      CurriedE(List(PropE("x16", TP(2)), PropE("x17", TP(1))), PropE("x17", TP(1)), TP(1) :-> (TP(2) :-> TP(1)))
     )
   }
 }

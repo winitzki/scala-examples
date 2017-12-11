@@ -2,6 +2,8 @@ package example
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import example.CHTypes.Sequent
+
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import scala.reflect.macros.whitebox
@@ -45,13 +47,13 @@ object CHTypes {
 
     val tExprAtSFIndex: Map[SFIndex, TypeExpr[T]] = sfIndexOfTExpr.map { case (k, v) ⇒ v → k }
 
-    val premiseVars: Seq[PropE[T]] = premises.map { premiseSFIndex ⇒ PropE(freshVar(), tExprAtSFIndex(premiseSFIndex)) }
+    val premiseVars: List[PropE[T]] = premises.map { premiseSFIndex ⇒ PropE(freshVar(), tExprAtSFIndex(premiseSFIndex)) }
 
-    def constructResultTerm(result: TermExpr[T]): TermExpr[T] = {
-      premises.zip(premiseVars).foldLeft(result) { case (prevTerm, (sfIndex, premiseVar)) ⇒
-        LamE(premiseVar, prevTerm, premiseVar.tExpr :-> prevTerm.tExpr)
-      }
+    private def constructResultType(result: CHTypes.TypeExpr[T]): TypeExpr[T] = premiseVars.foldLeft(result) { case (prev, premiseVar) ⇒
+        premiseVar.tExpr :-> prev
     }
+
+    def constructResultTerm(result: TermExpr[T]): TermExpr[T] = CurriedE(premiseVars, result, constructResultType(result.tExpr))
 
     // Convenience method.
     def goalExpr: TypeExpr[T] = tExprAtSFIndex(goal)
@@ -107,9 +109,10 @@ object CHTypes {
       atomicPremise ← sequent.premises.find(sfIndex ⇒ sequent.tExprAtSFIndex(sfIndex).isAtomic)
       implicationPremise ← sequent.premises.find(sfIndex ⇒ sequent.tExprAtSFIndex(sfIndex) match {
         case head :-> body ⇒ sequent.sfIndexOfTExpr(head) == atomicPremise
+        case _ ⇒ false
       })
     } yield {
-      
+
       ???
     }
   )
@@ -266,8 +269,8 @@ object CHTypes {
     def propositions[T](termExpr: TermExpr[T]): Set[PropE[T]] = termExpr match {
       case p: PropE[T] ⇒ Set(p) // Need to specify type parameter in match... `case p@PropE(_)` does not work.
       case AppE(head, arg, _) ⇒ propositions(head) ++ propositions(arg)
-      case l: LamE[T] ⇒ // Can't pattern-match directly for some reason! Some trouble with the type parameter T.
-        Set(l.head) ++ propositions(l.body)
+      case l: CurriedE[T] ⇒ // Can't pattern-match directly for some reason! Some trouble with the type parameter T.
+        l.heads.toSet ++ propositions(l.body)
       case UnitE(tExpr) ⇒ Set()
       case ConjunctE(terms, _) ⇒ terms.flatMap(propositions).toSet
     }
@@ -280,7 +283,7 @@ object CHTypes {
     override def toString: String = this match {
       case PropE(name, tExpr) => s"($name:$tExpr)"
       case AppE(head, arg, _) => s"($head)($arg)"
-      case LamE(head, body, _) => s"\\($head -> $body)"
+      case CurriedE(heads, body, _) => s"\\(${heads.reverse.mkString(" -> ")} -> $body)"
       case UnitE(tExpr) => "()"
       case ConjunctE(terms, _) => "(" + terms.map(_.toString).mkString(", ") + ")"
     }
@@ -289,15 +292,16 @@ object CHTypes {
   }
 
   final case class PropE[T](name: String, tExpr: TypeExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): PropE[U] = PropE(name, tExpr.map(f))
+    override def map[U](f: T ⇒ U): PropE[U] = PropE(name, tExpr map f)
   }
 
   final case class AppE[T](head: TermExpr[T], arg: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
     override def map[U](f: T ⇒ U): TermExpr[U] = AppE(head map f, arg map f, tExpr map f)
   }
 
-  final case class LamE[T](head: PropE[T], body: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = LamE(head map f, body map f, tExpr map f)
+  // Note: the order of `heads` is reversed, so `CurriedE(List(1,2,3), body, ...)` represents the term `x3 -> x2 -> x1 -> body`
+  final case class CurriedE[T](heads: List[PropE[T]], body: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = CurriedE(heads map (_ map f), body map f, tExpr map f)
   }
 
   final case class UnitE[T](tExpr: TypeExpr[T]) extends TermExpr[T] {
@@ -366,9 +370,10 @@ object CurryHoward {
         val tn = TermName("t_" + name)
         q"$tn"
       case AppE(head, arg, _) => q"${reifyTerms(c)(head, paramTerms)}(${reifyTerms(c)(arg, paramTerms)})"
-      case LamE(p, body, _) =>
-        val param = paramTerms(p)
-        q"($param ⇒ ${reifyTerms(c)(body, paramTerms)})"
+      case CurriedE(heads, body, _) ⇒ heads.foldLeft(reifyTerms(c)(body, paramTerms)) { case (prevTree, paramE) ⇒
+        val param = paramTerms(paramE)
+        q"($param ⇒ $prevTree)"
+      }
       case UnitE(_) => q"()"
       case ConjunctE(terms, _) => q"(..${terms.map(t ⇒ reifyTerms(c)(t, paramTerms))})"
     }
