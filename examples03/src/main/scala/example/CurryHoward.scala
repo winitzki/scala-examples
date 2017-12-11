@@ -2,11 +2,24 @@ package example
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import example.CHTypes.Sequent
-
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import scala.reflect.macros.whitebox
+
+// TODO:
+/*  Priority is given in parentheses.
+- implement all rules of the LJT calculus (1)
+- check unused arguments and sort results accordingly (3)
+- only output the results with smallest number of unused arguments (3)
+- implement uncurried functions (6)
+- make sure Unit works (2)
+- support natural syntax def f[T](x: T): T = implement (3)
+- use c.Type instead of String (3)
+- use blackbox macros instead of whitebox if possible (4)
+- use a special subclass of Function1 that also carries symbolic information about the lambda-term (6)
+
+ Release as a separate open-source project after (1)-(4) are done.
+ */
 
 class FreshIdents(prefix: String) {
   private val identCount = new AtomicInteger(0)
@@ -393,7 +406,7 @@ object CurryHoward {
 
   def ofType[T]: T = macro ofTypeImpl[T]
 
-  def inhabit[T]: T = macro inhabitImpl[T]
+  def implement[T]: T = macro inhabitImpl[T]
 
   // TODO: can we replace this with blackbox? Probably, as long as `def f3[X, Y]: X ⇒ Y ⇒ X = ofType` does not work with whitebox anyway.
   def ofTypeImpl[T: c.WeakTypeTag](c: whitebox.Context): c.Tree = {

@@ -119,7 +119,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   behavior of "syntax of `inhabit`"
 
   it should "compile" in {
-    def f1[X, Y]: X ⇒ Y ⇒ X = inhabit
+    def f1[X, Y]: X ⇒ Y ⇒ X = implement
 
     // This does not work because `inhabit` needs to access the type of the enclosing owner!
     // The compiler error is "recursive method f2 needs type".
@@ -135,7 +135,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     TermExpr.propositions(CurriedE(List(PropE("A", TP("A"))), AppE(PropE("A", TP("A")), PropE("B", TP("B")), TP("")), TP(""))) shouldEqual Set(PropE("A", TP("A")), PropE("B", TP("B")))
   }
 
-  it should "generate correct code for the identity function" in {
+  it should "generate correct code for the identity function with `ofType[]` syntax" in {
     def f1[X] = ofType[X ⇒ X]
 
     f1(123) shouldEqual 123
@@ -143,7 +143,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     f1(true) shouldEqual true
   }
 
-  it should "generate correct code for the const function" in {
+  it should "generate correct code for the const function with `ofType[]` syntax" in {
     def f2[X, Y] = ofType[X ⇒ Y ⇒ X]
 
     val cTrue = f2(true)
@@ -155,11 +155,10 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     c3(123) shouldEqual 3
     c3("abc") shouldEqual 3
     c3(true) shouldEqual 3
-
   }
 
   it should "generate correct code for the identity function with standard syntax" in {
-    def f1[X]: X ⇒ X = inhabit
+    def f1[X]: X ⇒ X = implement
 
     f1(123) shouldEqual 123
     f1("abc") shouldEqual "abc"
@@ -167,7 +166,7 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   }
 
   it should "generate correct code for the const function with standard syntax" in {
-    def f2[X, Y]: X ⇒ Y ⇒ X = inhabit
+    def f2[X, Y]: X ⇒ Y ⇒ X = implement
 
     val cTrue = f2(true)
     cTrue(123) shouldEqual true
@@ -178,8 +177,24 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     c3(123) shouldEqual 3
     c3("abc") shouldEqual 3
     c3(true) shouldEqual 3
-
   }
+
+  it should "generate correct code for the const function with extra unused arguments" in {
+    def f1[X, A, B]: X ⇒ A ⇒ B ⇒ X = implement
+
+    f1(123)("q")(true) shouldEqual 123
+    f1("abc")(Some((1,1)))(Map()) shouldEqual "abc"
+    f1(true)(123.0)('blah) shouldEqual true
+  }
+
+  // TODO: make this work too!
+//  it should "generate correct code for the identity function with explicit arguments" in {
+//    def f1[X](x: X): X = implement
+//
+//    f1(123) shouldEqual 123
+//    f1("abc") shouldEqual "abc"
+//    f1(true) shouldEqual true
+//  }
 
   behavior of "proof search"
 
