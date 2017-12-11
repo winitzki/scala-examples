@@ -41,47 +41,42 @@ object CHTypes {
   // Subformula index.
   type SFIndex = Int
 
-  final case class Sequent[T](
-    premises: Seq[SFIndex],
-    goal: SFIndex,
-    sfIndexOfTExpr: Map[TypeExpr[T], SFIndex]
-  ) {
+  final case class Sequent[T](premises: List[SFIndex], goal: SFIndex, sfIndexOfTExpr: Map[TypeExpr[T], SFIndex]) {
+
     val tExprAtSFIndex: Map[SFIndex, TypeExpr[T]] = sfIndexOfTExpr.map { case (k, v) ⇒ v → k }
 
     val premiseVars: Seq[PropE[T]] = premises.map { premiseSFIndex ⇒ PropE(freshVar(), tExprAtSFIndex(premiseSFIndex)) }
 
     def constructResultTerm(result: TermExpr[T]): TermExpr[T] = {
-      premises.zip(premiseVars).foldRight(result) { case ((sfIndex, premiseVar), prevTerm) ⇒
+      premises.zip(premiseVars).foldLeft(result) { case (prevTerm, (sfIndex, premiseVar)) ⇒
         LamE(premiseVar, prevTerm, premiseVar.tExpr :-> prevTerm.tExpr)
       }
     }
+
+    // Convenience method.
+    def goalExpr: TypeExpr[T] = tExprAtSFIndex(goal)
   }
 
   type ProofTerm[T] = TermExpr[T]
 
-  trait ForwardTransform[T] {
-    def applyTo(sequent: Sequent[T]): Seq[Sequent[T]]
+  type BackTransform[T] = Seq[ProofTerm[T]] ⇒ ProofTerm[T]
 
-    def applicableTo(sequent: Sequent[T]): Boolean
-
-    def back(proofs: Seq[ProofTerm[T]]): ProofTerm[T]
-  }
+  final case class ForwardTransform[T](name: String, applyTo: Sequent[T] ⇒ Option[(Seq[Sequent[T]], BackTransform[T])])
 
   private val freshVar = new FreshIdents(prefix = "x")
 
   def followsFromAxioms[T](sequent: Sequent[T]): Seq[ProofTerm[T]] = {
     // The LJT calculus has three axioms. We use the Id axiom and the T axiom because F axiom is not useful for code generation.
 
-    val premisesWithIndex: Seq[((PropE[T], Int), SFIndex)] = sequent.premiseVars.zipWithIndex.zip(sequent.premises)
-
-    val fromIdAxiom: Seq[TermExpr[T]] = premisesWithIndex.filter(_._2 == sequent.goal).map { case ((premiseVar, index), _) ⇒
-      // Generate a new term x1 ⇒ x2 ⇒ ... ⇒ xN ⇒ xK with fresh names. Here `xK` is one of the variables, selecting the premise that is equal to the goal.
-      premisesWithIndex.foldRight[TermExpr[T]](premiseVar) { case (((prV, ind), _), prevTerm) ⇒
-        val newVar = if (ind == index) premiseVar else prV
-        LamE(newVar, prevTerm, newVar.tExpr :-> prevTerm.tExpr)
+    val fromIdAxiom: Seq[TermExpr[T]] = sequent.premiseVars
+      .zip(sequent.premises)
+      .filter(_._2 == sequent.goal)
+      .map { case (premiseVar, _) ⇒
+        // Generate a new term x1 ⇒ x2 ⇒ ... ⇒ xN ⇒ xK with fresh names. Here `xK` is one of the variables, selecting the premise that is equal to the goal.
+        // At this iteration, we already selected the premise that is equal to the goal.
+        sequent.constructResultTerm(premiseVar)
       }
-    }
-    val fromTAxiom: Seq[TermExpr[T]] = sequent.tExprAtSFIndex(sequent.goal) match {
+    val fromTAxiom: Seq[TermExpr[T]] = sequent.goalExpr match {
       case unitT: UnitT[T] ⇒ Seq(sequent.constructResultTerm(UnitE(unitT)))
       case _ ⇒ Seq()
     }
@@ -89,7 +84,21 @@ object CHTypes {
   }
 
   def invertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
-
+    ForwardTransform[T]("->R", sequent ⇒ sequent.goalExpr match {
+      case a :-> b ⇒
+        val aIndex = sequent.sfIndexOfTExpr(a)
+        val bIndex = sequent.sfIndexOfTExpr(b)
+        val newSequent = sequent.copy(premises = aIndex :: sequent.premises, goal = bIndex)
+        Some(Seq(newSequent), { proofTerms ⇒
+          // This rule expects only one sub-proof term.
+          val subProof = proofTerms.head
+          // `subProof` is the proof of (G, A) |- B, and we need a proof of G |- A ⇒ B.
+          // `subProof` is x ⇒ y ⇒ ... ⇒ z ⇒ a ⇒ <some term depending on (a, x, y, z)>
+          // This proof will be exactly what we need if we reverse the order of curried arguments w.r.t. the list order of premises.
+          subProof
+        })
+      case _ ⇒ None
+    })
   )
 
   def nonInvertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
@@ -108,13 +117,12 @@ object CHTypes {
     // If all rules were invertible, we would return `fromAxioms ++ fromInvertibleRules`.
 
     // We try applying just one invertible rule and proceed from there.
-    val fromRules: Seq[ProofTerm[T]] = invertibleRules[T].find(_.applicableTo(sequent)) match {
-      case Some(rule) ⇒
-        val newSequents = rule.applyTo(sequent)
+    val fromRules: Seq[ProofTerm[T]] = invertibleRules[T].view.flatMap(_.applyTo(sequent)).headOption match {
+      case Some((newSequents, backTransform)) ⇒
         // All the new sequents need to be proved before we can continue. They may have several proofs each.
         val newProofs: Seq[Seq[ProofTerm[T]]] = newSequents.map(findProofTerms)
         val explodedNewProofs: Seq[Seq[ProofTerm[T]]] = explode(newProofs)
-        explodedNewProofs.map(rule.back) ++ fromAxioms
+        explodedNewProofs.map(backTransform) ++ fromAxioms
 
       case None ⇒
         // No invertible rules apply, so we need to try all non-invertible (i.e. not guaranteed to work) rules.
@@ -123,11 +131,10 @@ object CHTypes {
         // If a rule generates some proofs, we append them to `fromAxioms` and keep trying another rule.
         // If no more rules apply here, we return `fromAxioms`.
         // Use flatMap to concatenate all results from all applicable non-invertible rules.
-        val fromNoninvertibleRules: Seq[ProofTerm[T]] = nonInvertibleRules[T].filter(_.applicableTo(sequent)).flatMap { rule ⇒
-          val newSequents: Seq[Sequent[T]] = rule.applyTo(sequent)
+        val fromNoninvertibleRules: Seq[ProofTerm[T]] = nonInvertibleRules[T].flatMap(_.applyTo(sequent)).flatMap { case ((newSequents, backTransform)) ⇒
           val newProofs: Seq[Seq[ProofTerm[T]]] = newSequents.map(findProofTerms)
           val explodedNewProofs: Seq[Seq[ProofTerm[T]]] = explode(newProofs)
-          val finalNewProofs: Seq[ProofTerm[T]] = explodedNewProofs.map(rule.back)
+          val finalNewProofs: Seq[ProofTerm[T]] = explodedNewProofs.map(backTransform)
           finalNewProofs
         }
         fromNoninvertibleRules ++ fromAxioms
@@ -293,7 +300,7 @@ object CurryHoward {
       case PropE(name, tExpr) ⇒
         val tpt = tExpr match {
           case _: NothingT[String] ⇒ tq""
-            // TODO: Stop using String as type parameter T, use c.Type instead
+          // TODO: Stop using String as type parameter T, use c.Type instead
           case TP(name) ⇒
             val tpn = TypeName(name)
             tq"$tpn"
@@ -392,7 +399,7 @@ object ITP {
     import CHTypes._
     // TODO: implement intuitionistic theorem prover here
     val subformulaDictionary: Map[TypeExpr[T], SFIndex] = CHTypes.subformulas(typeStructure).zipWithIndex.toMap
-    val mainSequent = Sequent[T](Seq(), subformulaDictionary(typeStructure), subformulaDictionary)
+    val mainSequent = Sequent[T](List(), subformulaDictionary(typeStructure), subformulaDictionary)
     val proofs: Seq[ProofTerm[T]] = CHTypes.findProofTerms(mainSequent)
     proofs.toList
   }

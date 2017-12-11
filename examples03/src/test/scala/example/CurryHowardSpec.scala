@@ -194,13 +194,13 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   val sfIndexMap: Map[TypeExpr[Int], SFIndex] = Map(TP(0) → 0, TP(1) → 1, TP(2) → 2, TP(3) → 3)
 
   it should "correctly produce proofs from the Id axiom" in {
-    followsFromAxioms(Sequent[Int](Seq(1, 2, 3), 0, sfIndexMap)) shouldEqual Seq()
-    followsFromAxioms(Sequent[Int](Seq(1, 2, 3), 1, sfIndexMap)) shouldEqual Seq(
-      LamE(PropE("x4", TP(1)), LamE(PropE("x5", TP(2)), LamE(PropE("x6", TP(3)), PropE("x4", TP(1)), TP(3) :-> TP(1)), TP(2) :-> (TP(3) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(1))))
+    followsFromAxioms(Sequent[Int](List(3, 2, 1), 0, sfIndexMap)) shouldEqual Seq()
+    followsFromAxioms(Sequent[Int](List(3, 2, 1), 1, sfIndexMap)) shouldEqual Seq(
+      LamE(PropE("x6", TP(1)), LamE(PropE("x5", TP(2)), LamE(PropE("x4", TP(3)), PropE("x6", TP(1)), TP(3) :-> TP(1)), TP(2) :-> (TP(3) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(1))))
     )
-    followsFromAxioms(Sequent[Int](Seq(1, 2, 1), 1, sfIndexMap)) shouldEqual Seq(
-      LamE(PropE("x7", TP(1)), LamE(PropE("x8", TP(2)), LamE(PropE("x9", TP(1)), PropE("x7", TP(1)), TP(1) :-> TP(1)), TP(2) :-> (TP(1) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1)))),
-      LamE(PropE("x7", TP(1)), LamE(PropE("x8", TP(2)), LamE(PropE("x9", TP(1)), PropE("x9", TP(1)), TP(1) :-> TP(1)), TP(2) :-> (TP(1) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1))))
+    followsFromAxioms(Sequent[Int](List(1, 2, 1), 1, sfIndexMap)) shouldEqual Seq(
+      LamE(PropE("x9", TP(1)), LamE(PropE("x8", TP(2)), LamE(PropE("x7", TP(1)), PropE("x7", TP(1)), TP(1) :-> TP(1)), TP(2) :-> (TP(1) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1)))),
+      LamE(PropE("x9", TP(1)), LamE(PropE("x8", TP(2)), LamE(PropE("x7", TP(1)), PropE("x9", TP(1)), TP(1) :-> TP(1)), TP(2) :-> (TP(1) :-> TP(1))), TP(1) :-> (TP(2) :-> (TP(1) :-> TP(1))))
     )
   }
 
@@ -240,11 +240,11 @@ class CurryHowardSpec extends FlatSpec with Matchers {
   }
 
   it should "find proof term for given sequent with premises" in {
-    val sequent = Sequent(Seq(1), 1, sfIndexMap)
+    val sequent = Sequent(List(1), 1, sfIndexMap)
     CHTypes.findProofTerms(sequent) shouldEqual Seq(LamE(PropE("x10", TP(1)), PropE("x10", TP(1)), TP(1) :-> TP(1)))
-    val sequent2 = Sequent(Seq(1, 2, 3), 2, sfIndexMap)
+    val sequent2 = Sequent(List(3, 2, 1), 2, sfIndexMap)
     CHTypes.findProofTerms(sequent2) shouldEqual Seq(
-      LamE(PropE("x11", TP(1)), LamE(PropE("x12", TP(2)), LamE(PropE("x13", TP(3)), PropE("x12", TP(2)), TP(3) :-> TP(2)), TP(2) :-> (TP(3) :-> TP(2))), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(2))))
+      LamE(PropE("x13", TP(1)), LamE(PropE("x12", TP(2)), LamE(PropE("x11", TP(3)), PropE("x12", TP(2)), TP(3) :-> TP(2)), TP(2) :-> (TP(3) :-> TP(2))), TP(1) :-> (TP(2) :-> (TP(3) :-> TP(2))))
     )
   }
 
