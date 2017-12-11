@@ -378,26 +378,26 @@ object CurryHoward {
 object ITP {
 
   def apply(typeStructure: CHTypes.TypeExpr[String]): List[CHTypes.TermExpr[String]] = {
-    import CHTypes._
-
-    //     only accept types of the form a=>b=>c here
-    val term = typeStructure match {
-      case BasicT(name) ⇒ PropE(name, typeStructure)
-      case ConstructorT(fullExpr) ⇒ PropE("_", typeStructure)
-      case ConjunctT(terms) ⇒ ConjunctE(terms.map(t ⇒ ITP(t).head), typeStructure)
-      case (t@TP(name)) :-> body ⇒ LamE(PropE(name, t), ITP(body).head, typeStructure)
-      case (t@BasicT(name)) :-> body ⇒ LamE(PropE(name, t), ITP(body).head, typeStructure)
-      case UnitT(_) ⇒ UnitE(typeStructure)
-      case TP(name) ⇒ PropE(name, typeStructure)
-      case OtherT(name) ⇒ PropE("_", typeStructure)
-      case _ ⇒ UnitE(typeStructure)
-    }
-    List(term)
+//    import CHTypes._
+//
+//    //     only accept types of the form a=>b=>c here
+//    val term = typeStructure match {
+//      case BasicT(name) ⇒ PropE(name, typeStructure)
+//      case ConstructorT(fullExpr) ⇒ PropE("_", typeStructure)
+//      case ConjunctT(terms) ⇒ ConjunctE(terms.map(t ⇒ ITP(t).head), typeStructure)
+//      case (t@TP(name)) :-> body ⇒ LamE(PropE(name, t), ITP(body).head, typeStructure)
+//      case (t@BasicT(name)) :-> body ⇒ LamE(PropE(name, t), ITP(body).head, typeStructure)
+//      case UnitT(_) ⇒ UnitE(typeStructure)
+//      case TP(name) ⇒ PropE(name, typeStructure)
+//      case OtherT(name) ⇒ PropE("_", typeStructure)
+//      case _ ⇒ UnitE(typeStructure)
+//    }
+//    List(term)
+    findProofs(typeStructure)
   }
 
   def findProofs[T](typeStructure: CHTypes.TypeExpr[T]): List[CHTypes.TermExpr[T]] = {
     import CHTypes._
-    // TODO: implement intuitionistic theorem prover here
     val subformulaDictionary: Map[TypeExpr[T], SFIndex] = CHTypes.subformulas(typeStructure).zipWithIndex.toMap
     val mainSequent = Sequent[T](List(), subformulaDictionary(typeStructure), subformulaDictionary)
     val proofs: Seq[ProofTerm[T]] = CHTypes.findProofTerms(mainSequent)
