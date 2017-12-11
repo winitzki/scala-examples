@@ -17,6 +17,7 @@ import scala.reflect.macros.whitebox
 - use c.Type instead of String (3)
 - use blackbox macros instead of whitebox if possible (4)
 - use a special subclass of Function1 that also carries symbolic information about the lambda-term (6)
+- add more error messages: print alternative lambda terms
 
  Release as a separate open-source project after (1)-(4) are done.
  */
