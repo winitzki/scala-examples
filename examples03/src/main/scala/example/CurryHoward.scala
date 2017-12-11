@@ -61,16 +61,16 @@ object CHTypes {
 
   type BackTransform[T] = Seq[ProofTerm[T]] ⇒ ProofTerm[T]
 
-  final case class ForwardTransform[T](name: String, applyTo: Sequent[T] ⇒ Option[(Seq[Sequent[T]], BackTransform[T])])
+  final case class ForwardRule[T](name: String, applyTo: Sequent[T] ⇒ Option[(Seq[Sequent[T]], BackTransform[T])])
 
   private val freshVar = new FreshIdents(prefix = "x")
 
   def followsFromAxioms[T](sequent: Sequent[T]): Seq[ProofTerm[T]] = {
-    // The LJT calculus has three axioms. We use the Id axiom and the T axiom because F axiom is not useful for code generation.
+    // The LJT calculus has three axioms. We use the Id axiom and the T axiom only, because the F axiom is not useful for code generation.
 
     val fromIdAxiom: Seq[TermExpr[T]] = sequent.premiseVars
       .zip(sequent.premises)
-      .filter(_._2 == sequent.goal)
+      .filter(_._2 == sequent.goal && sequent.goalExpr.isAtomic)
       .map { case (premiseVar, _) ⇒
         // Generate a new term x1 ⇒ x2 ⇒ ... ⇒ xN ⇒ xK with fresh names. Here `xK` is one of the variables, selecting the premise that is equal to the goal.
         // At this iteration, we already selected the premise that is equal to the goal.
@@ -83,8 +83,9 @@ object CHTypes {
     fromIdAxiom ++ fromTAxiom
   }
 
-  def invertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
-    ForwardTransform[T]("->R", sequent ⇒ sequent.goalExpr match {
+  // G* |- A ⇒ B when (G*, A) |- B  -- rule ->R
+  private def ruleImplicationAtRight[T] = ForwardRule[T](name = "->R", sequent ⇒
+    sequent.goalExpr match {
       case a :-> b ⇒
         val aIndex = sequent.sfIndexOfTExpr(a)
         val bIndex = sequent.sfIndexOfTExpr(b)
@@ -99,9 +100,55 @@ object CHTypes {
         })
       case _ ⇒ None
     })
+
+  // (G*, X, X ⇒ A) |- B when (G*, X, A) |- B  -- rule ->L1
+  private def ruleImplicationAtLeft1[T] = ForwardRule[T](name = "->L1", sequent ⇒
+    for {
+      atomicPremise ← sequent.premises.find(sfIndex ⇒ sequent.tExprAtSFIndex(sfIndex).isAtomic)
+      implicationPremise ← sequent.premises.find(sfIndex ⇒ sequent.tExprAtSFIndex(sfIndex) match {
+        case head :-> body ⇒ sequent.sfIndexOfTExpr(head) == atomicPremise
+      })
+    } yield {
+      
+      ???
+    }
   )
 
-  def nonInvertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
+  /*
+
+  Axioms:
+  -------
+
+  (G*, X) |- X  -- axiom Id -- here X is atomic, although the same rule would be valid for non-atomic X, we will not use it because in that way we avoid duplication of derivations.
+  G* |- 1  -- axiom T -- here 1 represents the Unit type, and the expression must be constructed somehow in the term.
+  (G*, 0) |- A  -- axiom F -- we will not use it. Instead, we will treat `Nothing` as just another type parameter. (We will treat `Any` in this way, too.)
+
+  Invertible rules:
+  -----------------
+
+  (G*, A & B) |- C when (G*, A, B) |- C  -- rule &L
+  G* |- A & B when G* |- A and G* |- B  -- rule &R -- duplicates the context G*
+  (G*, A + B) |- C when (G*, A) |- C and (G*, B) |- C  -- rule +L -- duplicates the context G*
+  G* |- A ⇒ B when (G*, A) |- B  -- rule ->R
+  (G*, X, X ⇒ A) |- B when (G*, X, A) |- B  -- rule ->L1 -- here X is atomic, although the same rule would be valid for non-atomic X.
+  (G*, (A & B) ⇒ C) |- D when (G*, A ⇒ B ⇒ C) |- D  -- rule ->L2
+  (G*, (A + B) ⇒ C) |- D when (G*, A ⇒ C, B ⇒ C) |- D  - rule ->L3
+
+  Non-invertible rules:
+  ---------------------
+
+  G* |- A + B when G* |- A  -- rule +R1
+  G* |- A + B when G* |- B  -- rule +R2
+  (G*, (A ⇒ B) ⇒ C) |- D when (G*, C) |- D and (G*, B ⇒ C) |- A ⇒ B  -- rule ->L4
+
+   */
+
+  def invertibleRules[T]: Seq[ForwardRule[T]] = Seq(
+    ruleImplicationAtRight,
+    ruleImplicationAtLeft1
+  )
+
+  def nonInvertibleRules[T]: Seq[ForwardRule[T]] = Seq(
 
   )
 
