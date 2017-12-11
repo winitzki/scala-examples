@@ -181,7 +181,6 @@ object CHTypes {
     sequent.goalExpr match {
       case conjunctType: ConjunctT[T] ⇒ Some((conjunctType.terms.map(t ⇒ sequent.copy(goal = sequent.sfIndexOfTExpr(t))), { proofTerms ⇒
         // This rule takes any number of proof terms.
-        // TODO: This is wrong! Need a helper function to quickly apply proof terms to our context G*.
         sequent.constructResultTerm(ConjunctE(proofTerms.map(p ⇒ sequent.substitute(p))))
       })
       )
@@ -199,9 +198,9 @@ object CHTypes {
           // This rule expects a single proof term.
           val proofTerm = proofTerms.head
           proofTerm match {
-            case CurriedE(heads, body) ⇒
+            case CurriedE(heads, body) ⇒ // The goal had some premises.
               CurriedE(heads, DisjunctE(indexInDisjunct, disjunctType.terms.length, body, disjunctType))
-            case _ ⇒ // no premises
+            case _ ⇒ // The goal has no premises.
               DisjunctE(0, disjunctType.terms.length, proofTerm, disjunctType)
           }
 
@@ -211,10 +210,16 @@ object CHTypes {
     }
   )
 
-  def nonInvertibleRules[T]: Seq[ForwardRule[T]] = Seq(
-    //    ruleDisjunctionAtRight1,
-    //    ruleDisjunctionAtRight2
-  )
+  def nonInvertibleRules[T](sequent: Sequent[T]): Seq[ForwardRule[T]] = {
+    // Generate all +Rn rules if the sequent has a disjunction goal.
+    (sequent.goalExpr match {
+      case DisjunctT(terms) ⇒ terms.indices.map(ruleDisjunctionAtRight[T])
+      case _ ⇒ Seq()
+    }) ++ Seq(
+      //    ruleDisjunctionAtRight1,
+      //    ruleDisjunctionAtRight2
+    )
+  }
 
   // Main recursive function that computes the list of available proofs for a sequent.
   // The main assumption is that the depth-first proof search terminates.
@@ -242,7 +247,7 @@ object CHTypes {
         // If a rule generates some proofs, we append them to `fromAxioms` and keep trying another rule.
         // If no more rules apply here, we return `fromAxioms`.
         // Use flatMap to concatenate all results from all applicable non-invertible rules.
-        val fromNoninvertibleRules: Seq[ProofTerm[T]] = nonInvertibleRules[T].flatMap(_.applyTo(sequent)).flatMap { case ((newSequents, backTransform)) ⇒
+        val fromNoninvertibleRules: Seq[ProofTerm[T]] = nonInvertibleRules[T](sequent).flatMap(_.applyTo(sequent)).flatMap { case ((newSequents, backTransform)) ⇒
           val newProofs: Seq[Seq[ProofTerm[T]]] = newSequents.map(findProofTerms)
           val explodedNewProofs: Seq[Seq[ProofTerm[T]]] = explode(newProofs)
           val finalNewProofs: Seq[ProofTerm[T]] = explodedNewProofs.map(backTransform)
