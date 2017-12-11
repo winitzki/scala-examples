@@ -179,12 +179,24 @@ class CurryHowardSpec extends FlatSpec with Matchers {
     c3(true) shouldEqual 3
   }
 
+  it should "fail to compile when two possible implementations are equally good" in {
+    "def f1[X, A, B]: X ⇒ A ⇒ X ⇒ X = implement" shouldNot compile
+  }
+
   it should "generate correct code for the const function with extra unused arguments" in {
     def f1[X, A, B]: X ⇒ A ⇒ B ⇒ X = implement
 
     f1(123)("q")(true) shouldEqual 123
     f1("abc")(Some((1,1)))(Map()) shouldEqual "abc"
     f1(true)(123.0)('blah) shouldEqual true
+  }
+
+  it should "generate correct code for the const function with more unused arguments of coincident type" in {
+    def f1[X, A, B]: A ⇒ X ⇒ A ⇒ B ⇒ X = implement
+
+    f1("b")(123)("q")(true) shouldEqual 123
+    f1(Some((3, 4)))("abc")(Some((1,1)))(Map()) shouldEqual "abc"
+    f1(0.0)(true)(123.0)('blah) shouldEqual true
   }
 
   // TODO: make this work too!
