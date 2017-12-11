@@ -38,7 +38,24 @@ object CHTypes {
     }
   }
 
-  final case class Sequent[T](premises: Seq[T], goal: T)
+  // Subformula index.
+  type SFIndex = Int
+
+  final case class Sequent[T](
+    premises: Seq[SFIndex],
+    goal: SFIndex,
+    sfIndexOfTExpr: Map[TypeExpr[T], SFIndex]
+  ) {
+    val tExprAtSFIndex: Map[SFIndex, TypeExpr[T]] = sfIndexOfTExpr.map { case (k, v) ⇒ v → k }
+
+    val premiseVars: Seq[PropE[T]] = premises.map { premiseSFIndex ⇒ PropE(freshVar(), tExprAtSFIndex(premiseSFIndex)) }
+
+    def constructResultTerm(result: TermExpr[T]): TermExpr[T] = {
+      premises.zip(premiseVars).foldRight(result) { case ((sfIndex, premiseVar), prevTerm) ⇒
+        LamE(premiseVar, prevTerm, premiseVar.tExpr :-> prevTerm.tExpr)
+      }
+    }
+  }
 
   type ProofTerm[T] = TermExpr[T]
 
@@ -53,16 +70,22 @@ object CHTypes {
   private val freshVar = new FreshIdents(prefix = "x")
 
   def followsFromAxioms[T](sequent: Sequent[T]): Seq[ProofTerm[T]] = {
-    // The LJT calculus has three axioms. We only use the Id axiom, because the T and F axioms are not useful for code generation.
-    val premisesWithIndex = sequent.premises.zipWithIndex
-    premisesWithIndex.filter(_._1 == sequent.goal).map { case (_, index) ⇒
-      val goalVar = PropE(freshVar(), sequent.goal)
-      // Generate a new term x1 => x2 => ... => x with fresh names. Here `x` is one of the terms, according to the premise that is equal to the goal.
-      premisesWithIndex.foldRight[TermExpr[T]](goalVar) { case ((pr, ind), prevTerm) ⇒
-        val newVar = if (ind == index) goalVar else PropE(freshVar(), pr)
-        LamE(newVar, prevTerm)
+    // The LJT calculus has three axioms. We use the Id axiom and the T axiom because F axiom is not useful for code generation.
+
+    val premisesWithIndex: Seq[((PropE[T], Int), SFIndex)] = sequent.premiseVars.zipWithIndex.zip(sequent.premises)
+
+    val fromIdAxiom: Seq[TermExpr[T]] = premisesWithIndex.filter(_._2 == sequent.goal).map { case ((premiseVar, index), _) ⇒
+      // Generate a new term x1 ⇒ x2 ⇒ ... ⇒ xN ⇒ xK with fresh names. Here `xK` is one of the variables, selecting the premise that is equal to the goal.
+      premisesWithIndex.foldRight[TermExpr[T]](premiseVar) { case (((prV, ind), _), prevTerm) ⇒
+        val newVar = if (ind == index) premiseVar else prV
+        LamE(newVar, prevTerm, newVar.tExpr :-> prevTerm.tExpr)
       }
     }
+    val fromTAxiom: Seq[TermExpr[T]] = sequent.tExprAtSFIndex(sequent.goal) match {
+      case unitT: UnitT[T] ⇒ Seq(sequent.constructResultTerm(UnitE(unitT)))
+      case _ ⇒ Seq()
+    }
+    fromIdAxiom ++ fromTAxiom
   }
 
   def invertibleRules[T]: Seq[ForwardTransform[T]] = Seq(
@@ -121,12 +144,13 @@ object CHTypes {
       case ConstructorT(fullExpr) ⇒ s"<constructor>$fullExpr"
       case TP(name) ⇒ s"<tparam>$name"
       case OtherT(name) ⇒ s"<other>$name"
-      case AnyT ⇒ "_"
-      case NothingT ⇒ "0"
-      case UnitT ⇒ "1"
+      case NothingT(_) ⇒ "0"
+      case UnitT(_) ⇒ "1"
     }
 
     def isAtomic: Boolean
+
+    def map[U](f: T ⇒ U): TypeExpr[U]
   }
 
   sealed trait NonAtomicTypeExpr {
@@ -147,80 +171,87 @@ object CHTypes {
 
   }
 
-  final case class DisjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T] with NonAtomicTypeExpr
-
-  final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T] with NonAtomicTypeExpr
-
-  final case class :->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T] with NonAtomicTypeExpr
-
-  case object AnyT extends TypeExpr[Nothing] with AtomicTypeExpr[Nothing] {
-    override def name: Nothing = ???
+  final case class DisjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T] with NonAtomicTypeExpr {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = DisjunctT(terms.map(_.map(f)))
   }
 
-  case object NothingT extends TypeExpr[Nothing] with AtomicTypeExpr[Nothing] {
-    override def name: Nothing = ???
+  final case class ConjunctT[T](terms: Seq[TypeExpr[T]]) extends TypeExpr[T] with NonAtomicTypeExpr {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = ConjunctT(terms.map(_.map(f)))
   }
 
-  case object UnitT extends TypeExpr[Nothing] with AtomicTypeExpr[Nothing] {
-    override def name: Nothing = ???
+  final case class :->[T](head: TypeExpr[T], body: TypeExpr[T]) extends TypeExpr[T] with NonAtomicTypeExpr {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = :->(head.map(f), body.map(f))
   }
 
-  case class TP[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
+  final case class NothingT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T] {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = NothingT(f(name))
+  }
 
-  case class OtherT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
+  final case class UnitT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T] {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = UnitT(f(name))
+  }
 
-  final case class BasicT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
+  // Type parameter. Use a short name for convenience.
+  case class TP[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T] {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = TP(f(name))
+  }
 
-  final case class ConstructorT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T]
+  case class OtherT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T] {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = OtherT(f(name))
+  }
+
+  final case class BasicT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T] {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = BasicT(f(name))
+  }
+
+  final case class ConstructorT[T](name: T) extends TypeExpr[T] with AtomicTypeExpr[T] {
+    override def map[U](f: T ⇒ U): TypeExpr[U] = ConstructorT(f(name))
+  }
 
   object TermExpr {
     def propositions[T](termExpr: TermExpr[T]): Set[PropE[T]] = termExpr match {
       case p: PropE[T] ⇒ Set(p) // Need to specify type parameter in match... `case p@PropE(_)` does not work.
-      case AppE(head, arg) ⇒ propositions(head) ++ propositions(arg)
+      case AppE(head, arg, _) ⇒ propositions(head) ++ propositions(arg)
       case l: LamE[T] ⇒ // Can't pattern-match directly for some reason! Some trouble with the type parameter T.
         Set(l.head) ++ propositions(l.body)
-      case UnitE ⇒ Set()
-      case AbsurdumE ⇒ Set()
-      case ConjunctE(terms) ⇒ terms.flatMap(propositions).toSet
+      case UnitE(tExpr) ⇒ Set()
+      case ConjunctE(terms, _) ⇒ terms.flatMap(propositions).toSet
     }
 
   }
 
   sealed trait TermExpr[+T] {
+    def tExpr: TypeExpr[T]
+
     override def toString: String = this match {
-      case PropE(name, typeName) => s"($name:$typeName)"
-      case AppE(head, arg) => s"($head)($arg)"
-      case LamE(head, body) => s"\\($head -> $body)"
-      case UnitE => "()"
-      case AbsurdumE => "Nothing"
-      case ConjunctE(terms) => "(" + terms.map(_.toString).mkString(", ") + ")"
+      case PropE(name, tExpr) => s"($name:$tExpr)"
+      case AppE(head, arg, _) => s"($head)($arg)"
+      case LamE(head, body, _) => s"\\($head -> $body)"
+      case UnitE(tExpr) => "()"
+      case ConjunctE(terms, _) => "(" + terms.map(_.toString).mkString(", ") + ")"
     }
 
     def map[U](f: T ⇒ U): TermExpr[U]
   }
 
-  final case class PropE[T](name: String, typeName: T) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): PropE[U] = PropE(name, f(typeName))
+  final case class PropE[T](name: String, tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): PropE[U] = PropE(name, tExpr.map(f))
   }
 
-  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = AppE(head.map(f), arg.map(f))
+  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = AppE(head map f, arg map f, tExpr map f)
   }
 
-  final case class LamE[T](head: PropE[T], body: TermExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = LamE(head.map(f), body.map(f))
+  final case class LamE[T](head: PropE[T], body: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = LamE(head map f, body map f, tExpr map f)
   }
 
-  case object UnitE extends TermExpr[Nothing] {
-    override def map[U](f: Nothing ⇒ U): TermExpr[U] = UnitE
+  final case class UnitE[T](tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = UnitE(tExpr map f)
   }
 
-  case object AbsurdumE extends TermExpr[Nothing] {
-    override def map[U](f: Nothing ⇒ U): TermExpr[U] = AbsurdumE
-  }
-
-  final case class ConjunctE[T](terms: Seq[TermExpr[T]]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = ConjunctE(terms.map(_.map(f)))
+  final case class ConjunctE[T](terms: Seq[TermExpr[T]], tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = ConjunctE(terms.map(_.map(f)), tExpr map f)
   }
 
 }
@@ -234,6 +265,7 @@ object CurryHoward {
   private[example] val basicTypes = List("Int", "String", "Boolean", "Float", "Double", "Long", "Symbol", "Char")
   private val basicRegex = s"(?:scala.|java.lang.)*(${basicTypes.mkString("|")})".r
 
+  // TODO: use c.Type instead of String
   def matchType(c: whitebox.Context)(t: c.Type): TypeExpr[String] = {
     // Could be the weird type [X, Y] => (type expression), or it could be an actual tuple type.
     // `finalResultType` seems to help here.
@@ -243,11 +275,11 @@ object CurryHoward {
     t.typeSymbol.fullName match {
       case name if name matches "scala.Tuple[0-9]+" ⇒ ConjunctT(args.map(matchType(c))) //s"(${args.map(matchType(c)).mkString(", ")})"
       case "scala.Function1" ⇒ :->(matchType(c)(args.head), matchType(c)(args(1))) // s"${matchType(c)(args(0))} ..=>.. ${matchType(c)(args(1))}"
-      case "scala.Option" ⇒ DisjunctT(Seq(UnitT, matchType(c)(args.head))) //s"(1 + ${matchType(c)(args.head)})"
+      case "scala.Option" ⇒ DisjunctT(Seq(UnitT("Unit"), matchType(c)(args.head))) //s"(1 + ${matchType(c)(args.head)})"
       case "scala.util.Either" ⇒ DisjunctT(Seq(matchType(c)(args.head), matchType(c)(args(1)))) //s"(${matchType(c)(args(0))} + ${matchType(c)(args(1))})"
-      case "scala.Any" ⇒ AnyT
-      case "scala.Nothing" ⇒ NothingT
-      case "scala.Unit" ⇒ UnitT
+      case "scala.Any" ⇒ OtherT("_")
+      case "scala.Nothing" ⇒ NothingT("Nothing")
+      case "scala.Unit" ⇒ UnitT("Unit")
       case basicRegex(name) ⇒ BasicT(name)
       case _ if args.isEmpty && t.baseClasses.map(_.fullName) == Seq("scala.Any") ⇒ TP(t.toString)
       case _ if args.isEmpty ⇒ OtherT(t.toString)
@@ -258,10 +290,13 @@ object CurryHoward {
   def reifyParam(c: whitebox.Context)(term: PropE[String]): c.Tree = {
     import c.universe._
     term match {
-      case PropE(name, typeName) ⇒
-        val tpt = if (typeName.isEmpty) tq"" else {
-          val tpn = TypeName(typeName)
-          tq"$tpn"
+      case PropE(name, tExpr) ⇒
+        val tpt = tExpr match {
+          case _: NothingT[String] ⇒ tq""
+            // TODO: Stop using String as type parameter T, use c.Type instead
+          case TP(name) ⇒
+            val tpn = TypeName(name)
+            tq"$tpn"
         }
         val termName = TermName("t_" + name)
         val param = q"val $termName: $tpt"
@@ -276,13 +311,12 @@ object CurryHoward {
       case p@PropE(name, typeName) =>
         val tn = TermName("t_" + name)
         q"$tn"
-      case AppE(head, arg) => q"${reifyTerms(c)(head, paramTerms)}(${reifyTerms(c)(arg, paramTerms)})"
-      case LamE(p@PropE(name, typeName), body) =>
+      case AppE(head, arg, _) => q"${reifyTerms(c)(head, paramTerms)}(${reifyTerms(c)(arg, paramTerms)})"
+      case LamE(p, body, _) =>
         val param = paramTerms(p)
         q"($param ⇒ ${reifyTerms(c)(body, paramTerms)})"
-      case UnitE => q"()"
-      case AbsurdumE => q"???"
-      case ConjunctE(terms) => q"(..${terms.map(t ⇒ reifyTerms(c)(t, paramTerms))})"
+      case UnitE(_) => q"()"
+      case ConjunctE(terms, _) => q"(..${terms.map(t ⇒ reifyTerms(c)(t, paramTerms))})"
     }
   }
 
@@ -316,14 +350,14 @@ object CurryHoward {
   def inhabitInternal(c: whitebox.Context)(typeT: c.Type): c.Tree = {
     import c.universe._
     val typeStructure: TypeExpr[String] = matchType(c)(typeT)
-    val termFound = ITP(typeStructure) match {
+    val termFound: TermExpr[String] = ITP(typeStructure) match {
       case Nil ⇒
         c.error(c.enclosingPosition, s"type $typeStructure cannot be inhabited")
-        UnitE
+        null
       case List(term) ⇒ term
       case list ⇒
         c.error(c.enclosingPosition, s"type $typeStructure can be inhabited in ${list.length} different ways")
-        UnitE
+        null
     }
 
     println(s"DEBUG: Term found: $termFound, propositions: ${TermExpr.propositions(termFound)}")
@@ -341,17 +375,15 @@ object ITP {
 
     //     only accept types of the form a=>b=>c here
     val term = typeStructure match {
-      case BasicT(name) => PropE(name, name)
-      case ConstructorT(fullExpr) => PropE("_", fullExpr)
-      case ConjunctT(terms) => ConjunctE(terms.map(t ⇒ ITP(t).head))
-      case TP(name) :-> body ⇒ LamE(PropE(name, name), ITP(body).head)
-      case BasicT(name) :-> body => LamE(PropE(name, name), ITP(body).head)
-      case AnyT => PropE("_", "Any")
-      case NothingT => AbsurdumE
-      case UnitT => UnitE
-      case TP(name) => PropE(name, name)
-      case OtherT(name) => PropE("_", name)
-      case _ => UnitE
+      case BasicT(name) ⇒ PropE(name, typeStructure)
+      case ConstructorT(fullExpr) ⇒ PropE("_", typeStructure)
+      case ConjunctT(terms) ⇒ ConjunctE(terms.map(t ⇒ ITP(t).head), typeStructure)
+      case (t@TP(name)) :-> body ⇒ LamE(PropE(name, t), ITP(body).head, typeStructure)
+      case (t@BasicT(name)) :-> body ⇒ LamE(PropE(name, t), ITP(body).head, typeStructure)
+      case UnitT(_) ⇒ UnitE(typeStructure)
+      case TP(name) ⇒ PropE(name, typeStructure)
+      case OtherT(name) ⇒ PropE("_", typeStructure)
+      case _ ⇒ UnitE(typeStructure)
     }
     List(term)
   }
@@ -359,9 +391,9 @@ object ITP {
   def findProofs[T](typeStructure: CHTypes.TypeExpr[T]): List[CHTypes.TermExpr[T]] = {
     import CHTypes._
     // TODO: implement intuitionistic theorem prover here
-    val subformulaDictionary: Map[TypeExpr[T], Int] = CHTypes.subformulas(typeStructure).zipWithIndex.toMap
-    val reverseDictionary: Map[Int, T] = subformulaDictionary.collect { case (k: AtomicTypeExpr[T], v) ⇒ v → k.name }
-    val proofs: Seq[ProofTerm[Int]] = CHTypes.findProofTerms(Sequent[Int](Seq(), subformulaDictionary(typeStructure)))
-    proofs.map(_.map(i ⇒ reverseDictionary(i))).toList
+    val subformulaDictionary: Map[TypeExpr[T], SFIndex] = CHTypes.subformulas(typeStructure).zipWithIndex.toMap
+    val mainSequent = Sequent[T](Seq(), subformulaDictionary(typeStructure), subformulaDictionary)
+    val proofs: Seq[ProofTerm[T]] = CHTypes.findProofTerms(mainSequent)
+    proofs.toList
   }
 }
