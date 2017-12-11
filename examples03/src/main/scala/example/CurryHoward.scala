@@ -8,6 +8,8 @@ import scala.reflect.macros.whitebox
 
 // TODO:
 /*  Priority is given in parentheses.
+- refactor disjuncts to contain at most 2 elements (0) ??? probably not necessary.
+- reverse the direction of CurriedE because we want to reuse argument lists more (0)
 - implement all rules of the LJT calculus (1)
 - check unused arguments and sort results accordingly (3)
 - only output the results with smallest number of unused arguments (3)
@@ -15,9 +17,11 @@ import scala.reflect.macros.whitebox
 - make sure Unit works (2)
 - support natural syntax def f[T](x: T): T = implement (3)
 - use c.Type instead of String (3)
-- use blackbox macros instead of whitebox if possible (4)
+- use blackbox macros instead of whitebox if possible (5)
 - use a special subclass of Function1 that also carries symbolic information about the lambda-term (6)
-- add more error messages: print alternative lambda terms
+- add more error messages: print alternative lambda-terms when we refuse to implement (5)
+- use a symbolic evaluator to simplify the lambda-terms (5)
+- support sealed traits / case classes (5)
 
  Release as a separate open-source project after (1)-(4) are done.
  */
@@ -57,17 +61,23 @@ object CHTypes {
   // Subformula index.
   type SFIndex = Int
 
+  // Premises are reverse ordered.
   final case class Sequent[T](premises: List[SFIndex], goal: SFIndex, sfIndexOfTExpr: Map[TypeExpr[T], SFIndex]) {
-
     val tExprAtSFIndex: Map[SFIndex, TypeExpr[T]] = sfIndexOfTExpr.map { case (k, v) ⇒ v → k }
 
     val premiseVars: List[PropE[T]] = premises.map { premiseSFIndex ⇒ PropE(freshVar(), tExprAtSFIndex(premiseSFIndex)) }
 
-    private def constructResultType(result: CHTypes.TypeExpr[T]): TypeExpr[T] = premiseVars.foldLeft(result) { case (prev, premiseVar) ⇒
-        premiseVar.tExpr :-> prev
+    def substitute(p: ProofTerm[T]): ProofTerm[T] = {
+      // Assuming that p takes as many arguments as our premises, substitute all premises into p.
+      // AppE( AppE( AppE(p, premise3), premise2), premise1)
+      premiseVars.foldLeft(p) { case (prev, premise) ⇒ AppE(prev, premise) }
     }
 
-    def constructResultTerm(result: TermExpr[T]): TermExpr[T] = CurriedE(premiseVars, result, constructResultType(result.tExpr))
+    private def constructResultType(result: CHTypes.TypeExpr[T], skip: Int = 0): TypeExpr[T] = {
+      premiseVars.drop(skip).foldLeft(result) { case (prev, premiseVar) ⇒ premiseVar.tExpr :-> prev }
+    }
+
+    def constructResultTerm(result: TermExpr[T]): TermExpr[T] = CurriedE(premiseVars, result)
 
     // Convenience method.
     def goalExpr: TypeExpr[T] = tExprAtSFIndex(goal)
@@ -162,11 +172,48 @@ object CHTypes {
 
   def invertibleRules[T]: Seq[ForwardRule[T]] = Seq(
     ruleImplicationAtRight,
-    ruleImplicationAtLeft1
+    ruleImplicationAtLeft1,
+    ruleConjunctionAtRight // Put this later in the sequence because it duplicates the context G*.
+  )
+
+  // G* |- A & B when G* |- A and G* |- B  -- rule &R -- duplicates the context G*
+  private def ruleConjunctionAtRight[T] = ForwardRule[T](name = "&R", sequent ⇒
+    sequent.goalExpr match {
+      case conjunctType: ConjunctT[T] ⇒ Some((conjunctType.terms.map(t ⇒ sequent.copy(goal = sequent.sfIndexOfTExpr(t))), { proofTerms ⇒
+        // This rule takes any number of proof terms.
+        // TODO: This is wrong! Need a helper function to quickly apply proof terms to our context G*.
+        sequent.constructResultTerm(ConjunctE(proofTerms.map(p ⇒ sequent.substitute(p))))
+      })
+      )
+      case _ ⇒ None
+    }
+  )
+
+  // G* |- A + B when G* |- A  -- rule +R1
+  // Generate all such rules for any disjunct.
+  private def ruleDisjunctionAtRight[T](indexInDisjunct: Int) = ForwardRule[T](name = "+R1", sequent ⇒
+    sequent.goalExpr match {
+      case disjunctType: DisjunctT[T] ⇒
+        val mainExpression = disjunctType.terms(indexInDisjunct)
+        Some((List(sequent.copy(goal = sequent.sfIndexOfTExpr(mainExpression))), { proofTerms ⇒
+          // This rule expects a single proof term.
+          val proofTerm = proofTerms.head
+          proofTerm match {
+            case CurriedE(heads, body) ⇒
+              CurriedE(heads, DisjunctE(indexInDisjunct, disjunctType.terms.length, body, disjunctType))
+            case _ ⇒ // no premises
+              DisjunctE(0, disjunctType.terms.length, proofTerm, disjunctType)
+          }
+
+        })
+        )
+      case _ ⇒ None
+    }
   )
 
   def nonInvertibleRules[T]: Seq[ForwardRule[T]] = Seq(
-
+    //    ruleDisjunctionAtRight1,
+    //    ruleDisjunctionAtRight2
   )
 
   // Main recursive function that computes the list of available proofs for a sequent.
@@ -282,11 +329,11 @@ object CHTypes {
   object TermExpr {
     def propositions[T](termExpr: TermExpr[T]): Set[PropE[T]] = termExpr match {
       case p: PropE[T] ⇒ Set(p) // Need to specify type parameter in match... `case p@PropE(_)` does not work.
-      case AppE(head, arg, _) ⇒ propositions(head) ++ propositions(arg)
+      case AppE(head, arg) ⇒ propositions(head) ++ propositions(arg)
       case l: CurriedE[T] ⇒ // Can't pattern-match directly for some reason! Some trouble with the type parameter T.
         l.heads.toSet ++ propositions(l.body)
-      case UnitE(tExpr) ⇒ Set()
-      case ConjunctE(terms, _) ⇒ terms.flatMap(propositions).toSet
+      case ConjunctE(terms) ⇒ terms.flatMap(propositions).toSet
+      case _ ⇒ Set()
     }
 
   }
@@ -296,10 +343,11 @@ object CHTypes {
 
     override def toString: String = this match {
       case PropE(name, tExpr) => s"($name:$tExpr)"
-      case AppE(head, arg, _) => s"($head)($arg)"
-      case CurriedE(heads, body, _) => s"\\(${heads.reverse.mkString(" -> ")} -> $body)"
+      case AppE(head, arg) => s"($head)($arg)"
+      case CurriedE(heads, body) => s"\\(${heads.reverse.mkString(" -> ")} -> $body)"
       case UnitE(tExpr) => "()"
-      case ConjunctE(terms, _) => "(" + terms.map(_.toString).mkString(", ") + ")"
+      case ConjunctE(terms) => "(" + terms.map(_.toString).mkString(", ") + ")"
+      case DisjunctE(index, total, term, _) => "(" + Seq.fill(index)("0").mkString(" + ") + term.toString + Seq.fill(total - index - 1)("0").mkString(" + ") + ")"
     }
 
     def map[U](f: T ⇒ U): TermExpr[U]
@@ -309,21 +357,33 @@ object CHTypes {
     override def map[U](f: T ⇒ U): PropE[U] = PropE(name, tExpr map f)
   }
 
-  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = AppE(head map f, arg map f, tExpr map f)
+  final case class AppE[T](head: TermExpr[T], arg: TermExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = AppE(head map f, arg map f)
+
+    def tExpr: TypeExpr[T] = head match {
+      case CurriedE(heads, body) ⇒ CurriedE(heads.drop(1), body).tExpr
+    }
   }
 
   // Note: the order of `heads` is reversed, so `CurriedE(List(1,2,3), body, ...)` represents the term `x3 -> x2 -> x1 -> body`
-  final case class CurriedE[T](heads: List[PropE[T]], body: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = CurriedE(heads map (_ map f), body map f, tExpr map f)
+  final case class CurriedE[T](heads: List[PropE[T]], body: TermExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = CurriedE(heads map (_ map f), body map f)
+
+    def tExpr: TypeExpr[T] = heads.foldLeft(body.tExpr) { case (prev, head) ⇒ head.tExpr :-> prev }
   }
 
   final case class UnitE[T](tExpr: TypeExpr[T]) extends TermExpr[T] {
     override def map[U](f: T ⇒ U): TermExpr[U] = UnitE(tExpr map f)
   }
 
-  final case class ConjunctE[T](terms: Seq[TermExpr[T]], tExpr: TypeExpr[T]) extends TermExpr[T] {
-    override def map[U](f: T ⇒ U): TermExpr[U] = ConjunctE(terms.map(_.map(f)), tExpr map f)
+  final case class ConjunctE[T](terms: Seq[TermExpr[T]]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = ConjunctE(terms.map(_.map(f)))
+
+    def tExpr: TypeExpr[T] = ConjunctT(terms.map(_.tExpr))
+  }
+
+  final case class DisjunctE[T](index: Int, total: Int, term: TermExpr[T], tExpr: TypeExpr[T]) extends TermExpr[T] {
+    override def map[U](f: T ⇒ U): TermExpr[U] = DisjunctE(index, total, term map f, tExpr map f)
   }
 
 }
@@ -366,8 +426,8 @@ object CurryHoward {
         val tpt = tExpr match {
           case _: NothingT[String] ⇒ tq""
           // TODO: Stop using String as type parameter T, use c.Type instead
-          case TP(name) ⇒
-            val tpn = TypeName(name)
+          case TP(nameT) ⇒
+            val tpn = TypeName(nameT)
             tq"$tpn"
         }
         val termName = TermName("t_" + name)
@@ -383,13 +443,13 @@ object CurryHoward {
       case p@PropE(name, typeName) =>
         val tn = TermName("t_" + name)
         q"$tn"
-      case AppE(head, arg, _) => q"${reifyTerms(c)(head, paramTerms)}(${reifyTerms(c)(arg, paramTerms)})"
-      case CurriedE(heads, body, _) ⇒ heads.foldLeft(reifyTerms(c)(body, paramTerms)) { case (prevTree, paramE) ⇒
+      case AppE(head, arg) => q"${reifyTerms(c)(head, paramTerms)}(${reifyTerms(c)(arg, paramTerms)})"
+      case CurriedE(heads, body) ⇒ heads.foldLeft(reifyTerms(c)(body, paramTerms)) { case (prevTree, paramE) ⇒
         val param = paramTerms(paramE)
         q"($param ⇒ $prevTree)"
       }
       case UnitE(_) => q"()"
-      case ConjunctE(terms, _) => q"(..${terms.map(t ⇒ reifyTerms(c)(t, paramTerms))})"
+      case ConjunctE(terms) => q"(..${terms.map(t ⇒ reifyTerms(c)(t, paramTerms))})"
     }
   }
 
