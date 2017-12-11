@@ -210,14 +210,25 @@ object CHTypes {
     }
   )
 
+  // (G*, (A ⇒ B) ⇒ C) |- D when (G*, C) |- D and (G*, B ⇒ C) |- A ⇒ B  -- rule ->L4
+  // This rule needs a lemma:  |-  ((A ⇒ B) ⇒ C) ⇒ B ⇒ C
+  private def ruleImplicationAtLeft4[T] = ForwardRule[T](name = "->L4", sequent ⇒
+    Some((List(sequent.copy(goal = ???)), { proofTerms ⇒
+      // This rule expects two different proof terms.
+      ???
+    }
+    )
+
+    )
+  )
+
   def nonInvertibleRules[T](sequent: Sequent[T]): Seq[ForwardRule[T]] = {
     // Generate all +Rn rules if the sequent has a disjunction goal.
     (sequent.goalExpr match {
       case DisjunctT(terms) ⇒ terms.indices.map(ruleDisjunctionAtRight[T])
       case _ ⇒ Seq()
     }) ++ Seq(
-      //    ruleDisjunctionAtRight1,
-      //    ruleDisjunctionAtRight2
+      //    ruleImplicationAtLeft4
     )
   }
 
