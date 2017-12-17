@@ -14,9 +14,9 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
 
   // ∀A : A × 1 ≡ A
   it should "verify example 1" in {
-    def f1[A]: ((A, Unit)) ⇒ A = _._1
+    def f1[A]: ((A, Unit)) ⇒ A = ???
 
-    def f2[A]: A ⇒ (A, Unit) = a ⇒ (a, ())
+    def f2[A]: A ⇒ (A, Unit) = ???
 
     forAll { (n: Int) ⇒ f1(f2(n)) shouldEqual n }
     forAll { (x: ((String, Unit))) ⇒ f2(f1(x)) shouldEqual x }
@@ -24,9 +24,9 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
 
   // It is not true that ∀A : A + 1 ≡ 1, although these are equivalent in logic.
   it should "falsify example 2" in {
-    def f1[A]: Either[A, Unit] ⇒ Unit = _ ⇒ ()
+    def f1[A]: Either[A, Unit] ⇒ Unit = ???
 
-    def f2[A]: Unit ⇒ Either[A, Unit] = _ ⇒ Right(())
+    def f2[A]: Unit ⇒ Either[A, Unit] = ???
 
     val u: Unit = ()
 
@@ -49,13 +49,9 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
 
   // ∀A∀B∀C : (A × B) × C ≡ A × (B × C)
   it should "verify example 3" in {
-    def f1[A, B, C]: (((A, B), C)) ⇒ (A, (B, C)) = {
-      case ((a, b), c) ⇒ (a, (b, c))
-    }
+    def f1[A, B, C]: (((A, B), C)) ⇒ (A, (B, C)) = ???
 
-    def f2[A, B, C]: ((A, (B, C))) ⇒ ((A, B), C) = {
-      case (a, (b, c)) ⇒ ((a, b), c)
-    }
+    def f2[A, B, C]: ((A, (B, C))) ⇒ ((A, B), C) = ???
 
     forAll { (q: ((Int, Boolean), String)) ⇒ f2(f1(q)) shouldEqual q }
 
@@ -64,17 +60,9 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
 
   // ∀A∀B∀C : (A + B) × C ≡ A × C + B × C
   it should "verify example 4" in {
-    def f1[A, B, C]: ((Either[A, B], C)) ⇒ Either[(A, C), (B, C)] = {
-      case (ab, c) ⇒ ab match {
-        case Left(a) => Left((a, c))
-        case Right(b) => Right((b, c))
-      }
-    }
+    def f1[A, B, C]: ((Either[A, B], C)) ⇒ Either[(A, C), (B, C)] = ???
 
-    def f2[A, B, C]: Either[(A, C), (B, C)] ⇒ (Either[A, B], C) = {
-      case Left((a, c)) ⇒ (Left(a), c)
-      case Right((b, c)) ⇒ (Right(b), c)
-    }
+    def f2[A, B, C]: Either[(A, C), (B, C)] ⇒ (Either[A, B], C) = ???
 
     forAll { (q: (Either[Int, Boolean], String)) ⇒ f2(f1(q)) shouldEqual q }
     forAll { (q: Either[(Int, String), (Boolean, String)]) ⇒ f1(f2(q)) shouldEqual q }
@@ -136,7 +124,7 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
       forAll { (v: Either[A, (B, C)]) ⇒ f2(f1(v)) shouldEqual v }
 
       //      forAll { (v: (Either[A, B], Either[A, C])) ⇒ f1(f2(v)) shouldEqual v } // This fails.
-      
+
       exists(sampleValuesAB_AC) { (v: (Either[A, B], Either[A, C])) ⇒ f1(f2(v)) should not equal v }
     }
 
