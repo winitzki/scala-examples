@@ -1,14 +1,25 @@
 package example
 
-import org.scalatest.{FlatSpec, Matchers}
-import org.scalacheck._
 import org.scalacheck.Arbitrary._
-import org.scalatest.prop.TableDrivenPropertyChecks
-//import org.scalacheck.Prop._
-import org.scalatest.prop.{Checkers, GeneratorDrivenPropertyChecks}
-import org.scalatest.prop.Checkers._
+import org.scalacheck._
+import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
+import org.scalatest.{Assertion, FlatSpec, Matchers}
 
-class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers with GeneratorDrivenPropertyChecks with TableDrivenPropertyChecks {
+class Chapter03_03_examples1Spec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with TableDrivenPropertyChecks {
+
+  // The ScalaTest library does not have an adapter for "exists" that works similarly to "forAll".
+
+  // See https://groups.google.com/forum/#!msg/scalacheck/Ped7joQLhnY/gNH0SSWkKUgJ
+
+  // "The reason there's no exists in GeneratorDrivenPropertyChecks is that
+  // I haven't every had a user request it (until you asked about it now)."
+  // -- Bill Venners
+
+  def existsSome[T: Arbitrary](test: T ⇒ Assertion): Assertion = {
+    val sampleValues = Iterator.continually(arbitrary[T].sample).collect { case Some(x) ⇒ x }.take(100).toSeq
+    val sampleTable = Table("sample", sampleValues: _*)
+    exists(sampleTable)(test)
+  }
 
   behavior of "Curry-Howard correspondence"
 
@@ -32,19 +43,7 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
 
     f1(f2(u)) shouldEqual u
 
-    // The ScalaTest library does not have an adapter for "exists" that works similarly to "forAll".
-
-    // See https://groups.google.com/forum/#!msg/scalacheck/Ped7joQLhnY/gNH0SSWkKUgJ
-
-    // "The reason there's no exists in GeneratorDrivenPropertyChecks is that
-    // I haven't every had a user request it (until you asked about it now)."
-    // -- Bill Venners
-
-    val eiu = Seq.fill(100)(arbitrary[Either[Int, Unit]].sample.get)
-
-    val sampleValues = Table("either Int or Unit", eiu: _*)
-
-    exists(sampleValues) { (v: Either[Int, Unit]) ⇒ f2(f1(v)) should not equal v }
+    existsSome { (v: Either[Int, Unit]) ⇒ f2(f1(v)) should not equal v }
   }
 
   // ∀A∀B∀C : (A × B) × C ≡ A × (B × C)
@@ -113,19 +112,9 @@ class Chapter03_03_examplesSpec extends FlatSpec with Matchers with Checkers wit
     }
 
     def check[A: Arbitrary, B: Arbitrary, C: Arbitrary]() = {
-      val randomA_BC = Seq.fill(100)(arbitrary[Either[A, (B, C)]].sample.get)
-
-      val sampleValuesA_BC = Table("A + BC", randomA_BC: _*)
-
-      val randomAB_AC = Seq.fill(100)(arbitrary[(Either[A, B], Either[A, C])].sample.get)
-
-      val sampleValuesAB_AC = Table("(A+B)*(A+C)", randomAB_AC: _*)
-
       forAll { (v: Either[A, (B, C)]) ⇒ f2(f1(v)) shouldEqual v }
 
-      //      forAll { (v: (Either[A, B], Either[A, C])) ⇒ f1(f2(v)) shouldEqual v } // This fails.
-
-      exists(sampleValuesAB_AC) { (v: (Either[A, B], Either[A, C])) ⇒ f1(f2(v)) should not equal v }
+      existsSome { (v: (Either[A, B], Either[A, C])) ⇒ f1(f2(v)) should not equal v }
     }
 
     check[Int, Boolean, String]()

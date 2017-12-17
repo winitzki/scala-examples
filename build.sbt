@@ -26,9 +26,6 @@ lazy val examples03 = (project in file("examples03"))
   .settings(
 //    scalacOptions += "-Ymacro-debug-lite",
     libraryDependencies ++= Seq(
-      // We only need the Scala compiler if we want to debug macros.
-      "org.scala-lang" % "scala-compiler" % scalaVersion.value,
-      // We need scala-reflect because we use macros.
-      "org.scala-lang" % "scala-reflect" % scalaVersion.value
+      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
     )
   )
