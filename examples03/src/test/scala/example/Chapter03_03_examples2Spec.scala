@@ -6,8 +6,6 @@ import org.scalacheck.ScalacheckShapeless._
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, TableDrivenPropertyChecks}
 import org.scalatest.{Assertion, FlatSpec, Matchers}
 
-import scala.annotation.tailrec
-
 class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDrivenPropertyChecks with TableDrivenPropertyChecks {
 
   def existsSome[T: Arbitrary](test: T ⇒ Assertion): Assertion = {
@@ -19,6 +17,7 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
   behavior of "worked examples"
 
   it should "ex01" in {
+    // or:  final case class MyT[T](f: Boolean ⇒ MyTVals[T])
     type MyT[T] = Boolean ⇒ MyTVals[T]
 
     sealed trait MyTVals[T]
@@ -91,7 +90,7 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
 
   it should "ex04" in {
     // show (A×B)⇒C not equal (A⇒C)+(B⇒C) in logic
-    def f1[A, B, C](fabc: ((A, B)) ⇒ C): Either[A ⇒ C, B ⇒ C] = {
+    def f1[A, B, C]: (((A, B)) ⇒ C) ⇒ Either[A ⇒ C, B ⇒ C] = { fabc ⇒
       // Need to produce either A ⇒ C or B ⇒ C, and must now decide which one!
       // Suppose we decide to produce A ⇒ C.
       Left((a: A) ⇒
@@ -158,7 +157,7 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
       case None ⇒ None
     }
 
-    // The other possibility is to always return `None`:
+    // The other possibility is to always return `None` ("information loss"):
     def mapBad[A, B](optA: Option[A])(f: A ⇒ B): Option[B] = None
 
     def check[A: Arbitrary]() = {
@@ -175,11 +174,11 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
       case Left(l) ⇒ Left(l)
     }
 
+    // Seq(1,2,3).flatMap(x => Seq(x,x,x))
+    // (x: Seq[T]) . flatMap (T => Seq[U]) : Seq[U]
+
     def flatMap[L, R, T](e: Either[L, R])(f: R ⇒ Either[L, T]): Either[L, T] = e match {
-      case Right(r) ⇒ f(r) match {
-        case Right(rx) ⇒ Right(rx)
-        case Left(lx) ⇒ Left(lx)
-      }
+      case Right(r) ⇒ f(r)
       case Left(l) ⇒ Left(l)
     }
   }
@@ -205,10 +204,9 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
     }
   }
 
+  // NEList[T] ≡ T + T × NEList[T]
   sealed trait NEList[T]
-
   final case class NEHead[T](head: T) extends NEList[T]
-
   final case class NETail[T](head: T, tail: NEList[T]) extends NEList[T]
 
   it should "ex09" in {

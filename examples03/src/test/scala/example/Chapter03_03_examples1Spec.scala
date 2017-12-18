@@ -25,19 +25,21 @@ class Chapter03_03_examples1Spec extends FlatSpec with Matchers with GeneratorDr
 
   // ∀A : A × 1 ≡ A
   it should "verify example 1" in {
-    def f1[A]: ((A, Unit)) ⇒ A = ???
+    def f1[A]: ((A, Unit)) ⇒ A = {
+      case (a, b) ⇒ a
+    }
 
-    def f2[A]: A ⇒ (A, Unit) = ???
+    def f2[A]: A ⇒ (A, Unit) = a ⇒ (a, ())
 
     forAll { (n: Int) ⇒ f1(f2(n)) shouldEqual n }
-    forAll { (x: ((String, Unit))) ⇒ f2(f1(x)) shouldEqual x }
+    forAll { (x: (String, Unit)) ⇒ f2(f1(x)) shouldEqual x }
   }
 
   // It is not true that ∀A : A + 1 ≡ 1, although these are equivalent in logic.
   it should "falsify example 2" in {
-    def f1[A]: Either[A, Unit] ⇒ Unit = ???
+    def f1[A]: Either[A, Unit] ⇒ Unit = _ ⇒ () // "information loss"
 
-    def f2[A]: Unit ⇒ Either[A, Unit] = ???
+    def f2[A]: Unit ⇒ Either[A, Unit] = _ ⇒ Right(())
 
     val u: Unit = ()
 
@@ -48,9 +50,13 @@ class Chapter03_03_examples1Spec extends FlatSpec with Matchers with GeneratorDr
 
   // ∀A∀B∀C : (A × B) × C ≡ A × (B × C)
   it should "verify example 3" in {
-    def f1[A, B, C]: (((A, B), C)) ⇒ (A, (B, C)) = ???
+    def f1[A, B, C]: (((A, B), C)) ⇒ (A, (B, C)) = {
+      case ((x, y), z) ⇒ (x, (y, z))
+    }
 
-    def f2[A, B, C]: ((A, (B, C))) ⇒ ((A, B), C) = ???
+    def f2[A, B, C]: ((A, (B, C))) ⇒ ((A, B), C) = {
+      case (x, (y, z)) ⇒ ((x, y), z)
+    }
 
     forAll { (q: ((Int, Boolean), String)) ⇒ f2(f1(q)) shouldEqual q }
 
@@ -59,9 +65,17 @@ class Chapter03_03_examples1Spec extends FlatSpec with Matchers with GeneratorDr
 
   // ∀A∀B∀C : (A + B) × C ≡ A × C + B × C
   it should "verify example 4" in {
-    def f1[A, B, C]: ((Either[A, B], C)) ⇒ Either[(A, C), (B, C)] = ???
+    def f1[A, B, C]: ((Either[A, B], C)) ⇒ Either[(A, C), (B, C)] = {
+      case (eab, c) ⇒ eab match {
+        case Left(a) ⇒ Left((a, c))
+        case Right(b) ⇒ Right((b, c))
+      }
+    }
 
-    def f2[A, B, C]: Either[(A, C), (B, C)] ⇒ (Either[A, B], C) = ???
+    def f2[A, B, C]: Either[(A, C), (B, C)] ⇒ (Either[A, B], C) = {
+      case Left((a, c)) ⇒ (Left(a), c)
+      case Right((b, c)) ⇒ (Right(b), c)
+    }
 
     forAll { (q: (Either[Int, Boolean], String)) ⇒ f2(f1(q)) shouldEqual q }
     forAll { (q: Either[(Int, String), (Boolean, String)]) ⇒ f1(f2(q)) shouldEqual q }
@@ -70,18 +84,18 @@ class Chapter03_03_examples1Spec extends FlatSpec with Matchers with GeneratorDr
   // ∀A∀B∀C : (A + B) ⇒ C ≡ (A ⇒ C) × (B ⇒ C)
   it should "verify example 5" in {
     def f1[A, B, C]: (Either[A, B] ⇒ C) ⇒ (A ⇒ C, B ⇒ C) = { p ⇒
-      (a => p(Left(a)), b ⇒ p(Right(b)))
+      (a ⇒ p(Left(a)), b ⇒ p(Right(b)))
     }
 
     def f2[A, B, C]: ((A ⇒ C, B ⇒ C)) ⇒ Either[A, B] ⇒ C = {
-      case (ac, bc) ⇒ {
-        case Left(a) => ac(a)
-        case Right(b) => bc(b)
+      case (ac, bc) ⇒ eab ⇒ eab match {
+        case Left(a) ⇒ ac(a)
+        case Right(b) ⇒ bc(b)
       }
     }
 
     forAll { (p: Either[Int, Boolean] ⇒ String) ⇒
-      val p12: Either[Int, Boolean] => String = f2(f1(p))
+      val p12: Either[Int, Boolean] ⇒ String = f2(f1(p))
       forAll { (ab: Either[Int, Boolean]) ⇒ p(ab) shouldEqual p12(ab) }
     }
 
