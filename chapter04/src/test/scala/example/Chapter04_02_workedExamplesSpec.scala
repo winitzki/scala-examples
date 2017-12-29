@@ -2,6 +2,7 @@ package example
 
 import io.chymyst.ch._
 import org.scalacheck.Arbitrary
+import org.scalacheck.ScalacheckShapeless._
 
 class Chapter04_02_workedExamplesSpec extends LawChecking {
 
@@ -112,6 +113,36 @@ class Chapter04_02_workedExamplesSpec extends LawChecking {
   }
 
   it should "create a functor by applying type recursion" in {
-    
+    // Bifunctor R[A, T] = A + A × T
+
+    type R[A, T] = Either[A, (A, T)] // Taking recursion w.r.t. T will generates the non-empty list functor.
+
+    // Recursive functor Data[A] = A + A × Data[A] = R[A, Data[A]]
+    case class Data[A](r: R[A, Data[A]])
+
+    def dataEqual[A](value: Data[A], value1: Data[A]) = value shouldEqual value1
+
+    val fmap: FMap[Data] = new FMap[Data] {
+      // recursive definition
+      override def code[A, B]: (A => B) => Data[A] => Data[B] = {
+        f ⇒
+          f3a ⇒
+          f3a.r match {
+            case Left(xa) ⇒ Data(Left(f(xa)))
+            case Right((ya, yf3a)) ⇒ Data(Right((f(ya), code(f)(yf3a))))
+          }
+      }
+    }
+
+    // Identity law.
+    forAll { (x: Data[Double]) ⇒ dataEqual(x, fmap.code(identity[Double])(x)) }
+
+    // Composition law.
+    forAll { (x: Data[Double], f: Double ⇒ String, g: String ⇒ Long) ⇒
+      dataEqual(
+        fmap.code(f andThen g)(x),
+        (fmap.code(f) andThen fmap.code(g)) (x)
+      )
+    }
   }
 }
