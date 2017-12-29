@@ -11,36 +11,33 @@ lazy val common = Seq(
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
-    "-language:implicitConversions"
+    "-language:implicitConversions",
+    "-Ypartial-unification"
   ),
   libraryDependencies ++= Seq(
-    scalatest, scalacheck
+    scalatest, scalacheck,
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
   )
 )
 
 lazy val scala_examples = (project in file("."))
   .settings(common)
-  .aggregate(examples01, examples02)
+  .aggregate(chapter01, chapter02, chapter03, chapter04)
 
-lazy val examples01 = (project in file("examples01"))
+lazy val chapter01 = (project in file("chapter01"))
   .settings(common)
 
-lazy val examples02 = (project in file("examples02"))
+lazy val chapter02 = (project in file("chapter02"))
   .settings(common)
 
-lazy val examples03 = (project in file("examples03"))
+lazy val chapter03 = (project in file("chapter03"))
   .settings(common)
-  .settings(
-    libraryDependencies ++= Seq(
-      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
-    )
-  )
 
-lazy val examples04 = (project in file("examples04"))
+lazy val chapter04 = (project in file("chapter04"))
   .settings(common)
   .settings(
     libraryDependencies ++= Seq(
-      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test,
-      "io.chymyst" %% "curryhoward" % "latest.integration"
+      "io.chymyst" %% "curryhoward" % "latest.integration",
+      "org.typelevel" %% "cats-core" % "1.0.0"
     )
   )
