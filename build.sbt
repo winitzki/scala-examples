@@ -5,7 +5,14 @@ lazy val scalacheck = "org.scalacheck" %% "scalacheck" % "1.13.5" % Test
 
 lazy val common = Seq(
   scalaVersion := scalaV,
-  scalacOptions += "-deprecation",
+  scalacOptions ++= Seq(
+    "-deprecation",
+    "-encoding", "UTF-8",
+    "-feature",
+    "-language:existentials",
+    "-language:higherKinds",
+    "-language:implicitConversions"
+  ),
   libraryDependencies ++= Seq(
     scalatest, scalacheck
   )
@@ -24,8 +31,16 @@ lazy val examples02 = (project in file("examples02"))
 lazy val examples03 = (project in file("examples03"))
   .settings(common)
   .settings(
-//    scalacOptions += "-Ymacro-debug-lite",
     libraryDependencies ++= Seq(
       "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
+    )
+  )
+
+lazy val examples04 = (project in file("examples04"))
+  .settings(common)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test,
+      "io.chymyst" %% "curryhoward" % "latest.integration"
     )
   )

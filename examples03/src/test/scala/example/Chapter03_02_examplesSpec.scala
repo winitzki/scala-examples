@@ -1,6 +1,6 @@
 package example
 
-import java.time.{DayOfWeek, LocalDate, LocalDateTime}
+import java.time.LocalDateTime
 
 import org.scalatest.{FlatSpec, Matchers}
 
