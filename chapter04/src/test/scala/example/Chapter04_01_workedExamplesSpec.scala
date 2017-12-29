@@ -1,7 +1,6 @@
 package example
 
 import org.scalacheck.Arbitrary
-import org.scalatest.Failed
 import org.scalacheck.ScalacheckShapeless._
 
 class Chapter04_01_workedExamplesSpec extends LawChecking {
@@ -69,13 +68,13 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
           case Left(Data2(g2, da2)) ⇒
             da1 shouldEqual da2
             g1(s)(i) shouldEqual g2(s)(i)
-          case _ ⇒ Failed
+          case _ ⇒ fail
         }
         case Right(Data2(g1, da1)) ⇒ d2 match {
           case Right(Data2(g2, da2)) ⇒
             da1 shouldEqual da2
             g1(b)(d) shouldEqual g2(b)(d)
-          case _ ⇒ Failed
+          case _ ⇒ fail
         }
       }
     }
@@ -110,11 +109,11 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
       d1 match {
         case Left(g1) ⇒ d2 match {
           case Left(g2) ⇒ g1(x) shouldEqual g2(x)
-          case _ ⇒ Failed
+          case _ ⇒ fail
         }
         case Right(g1) ⇒ d2 match {
           case Right(g2) ⇒ g1(x)(y) shouldEqual g2(x)(y)
-          case _ ⇒ Failed
+          case _ ⇒ fail
         }
       }
     }

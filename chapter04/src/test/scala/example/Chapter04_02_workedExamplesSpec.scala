@@ -1,23 +1,117 @@
 package example
 
+import io.chymyst.ch._
+import org.scalacheck.Arbitrary
+
 class Chapter04_02_workedExamplesSpec extends LawChecking {
+
+
+  // First functor
+  type F1[A] = (A, Int)
+
+  val fmap1: FMap[F1] = new FMap[F1] {
+    override def code[A, B]: (A => B) => ((A, Int)) => (B, Int) = implement
+  }
+
+  def f2Equal[A](value1: F2[A], value2: F2[A]) = value1 match {
+    case Left(intToA1) => value2 match {
+      case Left(intToA2) => forAll { (x: Int) ⇒ intToA1(x) shouldEqual intToA2(x) }
+      case Right(_) => fail
+    }
+    case Right(a1) => value2 match {
+      case Left(_) => fail
+      case Right(a2) => a1 shouldEqual a2
+    }
+  }
+
+  // Second functor
+  type F2[A] = Either[Int ⇒ A, A]
+
+  val fmap2: FMap[F2] = new FMap[F2] {
+    override def code[A, B]: (A => B) => Either[Int ⇒ A, A] => Either[Int ⇒ B, B] = implement
+  }
+
 
   behavior of "proving laws for functor combinations"
 
   it should "create a disjunction of functors" in {
-    type FPlusG[F[_], G[_]] = ({type FPG[A] = Either[F[A], G[A]]})#FPG
+    // Functor Data is the disjunction of F1 and F2.
+    type Data[A] = Either[F1[A], F2[A]]
 
-    def makeFmap[F[_], G[_]](fMapF: FMap[F], fMapG: FMap[G]): FMap[FPlusG[F, G]] = new FMap[FPlusG[F, G]] {
-      type FPG[A] = Either[F[A], G[A]]
-
-      override def f[A, B]: (A => B) => FPG[A] => FPG[B] = f ⇒   {
-        case Left(fa) ⇒ Left(fMapF.f(f)(fa))
-        case Right(ga) ⇒ Right(fMapG.f(f)(ga))
+    val fmap: FMap[Data] = new FMap[Data] {
+      override def code[A, B]: (A => B) => Data[A] => Data[B] = f ⇒ {
+        case Left(f1a) ⇒ Left(fmap1.code(f)(f1a))
+        case Right(f2a) ⇒ Right(fmap2.code(f)(f2a))
       }
     }
 
+    def dataEqual[A](d1: Data[A], d2: Data[A]) = d1 match {
+      case Left(value1) => d2 match {
+        case Left(value2) => value1 shouldEqual value2
+        case Right(_) => fail
+      }
+      case Right(value1) => d2 match {
+        case Left(_) => fail
+        case Right(value2) => f2Equal(value1, value2)
+      }
+    }
 
+    // Identity law.
+    forAll { (x: Data[Double]) ⇒ dataEqual(x, fmap.code(identity[Double])(x)) }
+
+    // Composition law.
+    forAll { (x: Data[Double], f: Double ⇒ String, g: String ⇒ Long) ⇒
+      dataEqual(
+        fmap.code(f andThen g)(x),
+        (fmap.code(f) andThen fmap.code(g)) (x)
+      )
+    }
 
   }
 
+  // First contrafunctor
+  type CF1[A] = (A ⇒ Int)
+
+  val contrafmap1: ContraFMap[CF1] = new ContraFMap[CF1] {
+    override def code[A, B]: (B => A) => (A ⇒ Int) => (B ⇒ Int) = implement
+  }
+
+  def cf1Equal[A: Arbitrary](value1: CF1[A], value2: CF1[A]) = forAll { (x: A) ⇒ value1(x) shouldEqual value2(x) }
+
+
+  it should "create an implication from contrafunctor to functor" in {
+
+    type Data[A] = CF1[A] ⇒ F2[A]
+
+    def dataEqual[A: Arbitrary](value1: Data[A], value2: Data[A])(implicit cf1: Arbitrary[CF1[A]]) = {
+      forAll { (cf1: CF1[A]) ⇒
+        f2Equal(value1(cf1), value2(cf1))
+      }
+    }
+
+    val fmap: FMap[Data] = new FMap[Data] {
+      override def code[A, B]: (A => B) => (Data[A]) => Data[B] = {
+        (f: A ⇒ B) ⇒
+          (da: CF1[A] ⇒ F2[A]) ⇒
+            (cf1b: CF1[B]) ⇒
+              // Need to return a value of type F2[B] = Either[Int ⇒ B, B]
+              fmap2.code(f)(da(contrafmap1.code(f)(cf1b)))
+      }
+    }
+
+    // Identity law.
+    forAll { (x: Data[Double]) ⇒ dataEqual(x, fmap.code(identity[Double])(x)) }
+
+    // Composition law.
+    forAll { (x: Data[Double], f: Double ⇒ String, g: String ⇒ Long) ⇒
+      dataEqual(
+        fmap.code(f andThen g)(x),
+        (fmap.code(f) andThen fmap.code(g)) (x)
+      )
+    }
+  }
+
+  it should "create a functor by applying type recursion" in {
+    
+  }
 }
