@@ -1,5 +1,6 @@
 package example
 
+import io.chymyst.ch._
 import org.scalacheck.Arbitrary
 import org.scalacheck.ScalacheckShapeless._
 
@@ -29,6 +30,7 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
 
   it should "ex01-2" in {
     // Data[A] ≡ 1 + A × (Int × String + A)
+    // Data[B] ≡ 1 + B × (Int × String + B)
     final case class Data[A](d: Option[(A, Data2[A])]) //  1 + A × Data2[A]
 
     sealed trait Data2[A]
@@ -81,7 +83,8 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
 
     def fmap[A, B](f: A ⇒ B): Data[A] ⇒ Data[B] = {
       case Left(Data2(g, da)) ⇒
-        val newData2: Data2[String, Int, B] = Data2(x ⇒ y ⇒ f(g(x)(y)), f(da))
+        val newG = ofType[String ⇒ Int ⇒ B](f, g)
+        val newData2: Data2[String, Int, B] = Data2(newG, f(da))
         Left(newData2)
       case Right(Data2(g, da)) ⇒
         val newData2: Data2[Boolean, Double, B] = Data2(x ⇒ y ⇒ f(g(x)(y)), f(da))
@@ -103,6 +106,8 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
 
   it should "ex02-1" in {
     // Data[A] ≡ (A ⇒ Int) + (A ⇒ A ⇒ String)
+    // Data[B] ≡ (B ⇒ Int) + (B ⇒ B ⇒ String)
+
     type Data[A] = Either[A ⇒ Int, A ⇒ A ⇒ String]
 
     def dataEqual[A: Arbitrary](d1: Data[A], d2: Data[A]) = forAll { (x: A, y: A) ⇒
@@ -119,8 +124,8 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
     }
 
     def contrafmap[A, B](f: B ⇒ A): Data[A] ⇒ Data[B] = {
-      case Left(aToInt) ⇒ Left(a ⇒ aToInt(f(a)))
-      case Right(aToAToString) ⇒ Right(b ⇒ c ⇒ aToAToString(f(b))(f(c)))
+      case Left(aToInt) ⇒ Left(b ⇒ aToInt(f(b)))
+      case Right(aToAToString) ⇒ Right(b1 ⇒ b2 ⇒ aToAToString(f(b1))(f(b2)))
     }
 
     // Identity law.
@@ -166,7 +171,7 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
 
     def fmap[X, Y, B](f: X ⇒ Y): Data[X, B] ⇒ Data[Y, B] = data ⇒ {
       val newAB: Either[Y, B] = data.ab match {
-        case Left(aValue) ⇒ Left(f(aValue))
+        case Left(xValue) ⇒ Left(f(xValue))
         case Right(bValue) ⇒ Right(bValue)
       }
       val newD: (Y ⇒ Int) ⇒ B = g ⇒ data.d(x ⇒ g(f(x)))

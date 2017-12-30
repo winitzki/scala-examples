@@ -89,7 +89,8 @@ class Chapter04_01_examplesSpec extends LawChecking with ExistsProperty {
       case QueryResult(name, time, data) ⇒ QueryResult(name, time, f(data))
     }
 
-    def fmap1[A, B](f: A ⇒ B): QueryResult[A] ⇒ QueryResult[B] = qr ⇒ qr.copy(data = f(qr.data))
+    def fmap1[A, B](f: A ⇒ B): QueryResult[A] ⇒ QueryResult[B] = qr ⇒
+      qr.copy(data = f(qr.data))
 
     def fmapAuto[A, B](f: A ⇒ B): QueryResult[A] ⇒ QueryResult[B] = implement
 
