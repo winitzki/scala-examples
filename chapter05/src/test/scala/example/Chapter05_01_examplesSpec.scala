@@ -5,7 +5,7 @@ import org.scalatest.{Assertion, FlatSpec}
 
 class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
-  behavior of "type classes"
+  behavior of "simple type classes"
 
   it should "implement Summable without any data in PTTF" in {
     // PTTF without any data, defined on Int and String.
@@ -65,6 +65,8 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
     "add3(Some(1), Some(2), Some(3))" shouldNot compile
   }
+
+  behavior of "monoid type class"
 
   it should "implement Monoid without using traits" in {
     // PTTF
