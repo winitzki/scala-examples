@@ -13,6 +13,25 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     final case class Case2() extends MyTC[String]
 
     "def f[A]: MyTC[A] = Case2()" shouldNot typeCheck
+
+    type T1 = MyTC[Int] // PTTF applied to Int
+    type T2 = MyTC[String] // PTTF applied to String
+
+    val x1: T1 = Case1(1.0) // OK
+    val x2: T2 = Case2() // OK
+
+    ((x2 : MyTC[_]) match {
+      case Case1(x) ⇒ x
+      case Case2() ⇒ 0.0
+    }) shouldEqual 0.0
+
+    type T3 = MyTC[Boolean] // PTTF applied to Boolean, outside its type domain.
+
+    "val x3: T3 = Case2()" shouldNot typeCheck // Unable to compute any values of x3.
+
+    val x3: T3 = x2.asInstanceOf[T3] // Run-time type cast kills type checking. Will not help to do anything useful with x3.
+
+    "x3 match { case Case2() ⇒ 0.0 }" shouldNot typeCheck
   }
 
   it should "implement Semigroup without any data in PTTF" in {
