@@ -15,7 +15,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
       def fmap[A, B](f: A ⇒ B): F[A] ⇒ F[B]
     }
 
-    final case class Data1[T](t1: T, t2: T)
+    final case class Data1[X](x1: X, x2: X)
 
     // Provide evidence that the type domain of Functor[] includes Data1.
     implicit object functorData1Evidence extends Functor[Data1] {
@@ -68,5 +68,126 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     }
 
     checkCatsFunctorLaws[Data1, Int, String, Double]()
+  }
+
+  behavior of "higher-order types"
+
+  it should "fail to typecheck with wrong kinds" in {
+
+    type G[A] = Either[(A, A, String), A] // Some type constructor.
+
+    type Ap[F[_], A] = F[A]
+
+    type X = Ap[G, Int] // OK; X is now Either[(Int, Int, String), Int]
+
+    val x: X = Left((123, 456, "abc")) // OK
+
+    "type Y = Ap[Int, Int]" shouldNot typeCheck
+
+    "type Z = Ap[G, G]" shouldNot typeCheck
+  }
+
+  it should "correctly handle higher-order constructor kinds" in {
+
+    // `G` is a first-order type constructor.
+    // The **kind** notation:
+    // G: * → *
+    // More verbosely: G: (A: *) → *
+    type G[A] = Either[(A, A, String), A]
+
+    // `Ap` is a second-order type constructor with two arguments.
+    // Ap: (* → *, *) → *
+    // More verbosely: Ap: (F: * → *, A: *) → *
+    type Ap[F[_], A] = F[A]
+
+    // `Ap2` is a third-order type constructor with three arguments.
+    // App: ((* → *, *) → *, * → *, *) → *
+    // More verbosely: App: (P: (* → *, *) → *, Q: * → *, R: *) → *
+    type App[P[_[_], _], Q[_], R] = P[Q, R]
+
+    // Use them all.
+    // X: *
+    type X = App[Ap, G, Int] // OK; X is now Either[(Int, Int, String), Int]
+
+    val x: X = Left((123, 456, "abc")) // OK
+
+    "type Y = Ap2[Ap, Ap, Int]" shouldNot typeCheck
+
+    "type Z = Ap2[G, G, Int]" shouldNot typeCheck
+  }
+
+  // see https://github.com/non/kind-projector
+  it should "handle higher-order constructor kinds with the kind projector syntax" in {
+
+    // O2: * → *
+    type O2[A] = Option[(A, A)]
+
+    // Ap: (* → *, *) → *
+    type Ap[F[_], A] = F[A]
+
+    // App2 will apply the type constructor Q twice to its type argument.
+    // The **kind** of App2 is the same as the kind of App in the previous test.
+    // App2: ((* → *, *) → *, * → *, *) → *
+    type App2[P[_[_], _], Q[_], R] = P[λ[X ⇒ Q[Q[X]]], R]
+
+    type X2 = App2[Ap, O2, Int] // X2 is now Option[(Option[(Int, Int)], Option[(Int, Int)])]
+
+    val x: X2 = Some((Some((1, 2)), Some((3, 4)))) // OK
+  }
+
+  behavior of "type class syntax - implicit methods"
+
+  it should "implement Monoid type class with syntax" in {
+
+    // PTTF.
+    trait Monoid[T] {
+      def zero: T
+
+      def add: (T, T) ⇒ T
+    }
+
+    // Implementation of the "implicit method" syntax.
+    object Monoid {
+
+      // This code is in the `Monoid` companion object because the code is generic, not specific to `MyLogData`.
+      implicit class MonoidSyntax[M](x: M)(implicit evM: Monoid[M]) {
+        // This is an "implicit method" syntax for `add`. Let's rename it to `append`.
+        def append(y: M): M = evM.add(x, y)
+      }
+
+    }
+
+    // Use the implicit method syntax now.
+    final case class MyLogData(log: String = MyLogData.emptyLog)
+
+    // Declare that MyLogData belongs to the Monoid type class.
+
+    object MyLogData {
+      val emptyLog = "no logs so far"
+
+      // Type class instance implemented as an implicit in the companion object.
+      implicit val myLogDataMonoidInstance: Monoid[MyLogData] = new Monoid[MyLogData] {
+        def zero = MyLogData()
+
+        // Add to log, with some formatting.
+        def add: (MyLogData, MyLogData) ⇒ MyLogData = (x, y) ⇒ if (x.log == emptyLog)
+          y
+        else if (y.log == emptyLog)
+          x
+        else
+          MyLogData(x.log + "\n" + y.log)
+      }
+    }
+
+    import Monoid.MonoidSyntax // Import is required for this to work.
+
+    val initialLog = MyLogData()
+
+    val logData1 = MyLogData("all is well")
+    val logData2 = MyLogData("error code 12345 found")
+
+    val logResult = initialLog append logData1 append logData2
+
+    logResult shouldEqual MyLogData("all is well\nerror code 12345 found")
   }
 }

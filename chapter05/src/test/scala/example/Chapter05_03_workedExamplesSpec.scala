@@ -236,8 +236,8 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     checkCatsFunctorLaws[Q, Int, String, Long](cEqual)
   }
 
-
   // * If F and G are functors, define functor instance for F + G
+  // Using the "kind projector" plugin, see https://github.com/non/kind-projector
   it should "ex09" in {
     implicit def fgFunctorInstance[F[_], G[_]](implicit evF: Functor[F], evG: Functor[G]): Functor[λ[X ⇒ Either[F[X], G[X]]]] = {
       // Define the new functor as a type here, for convenience.

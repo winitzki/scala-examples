@@ -7,6 +7,14 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   behavior of "simple type classes"
 
+  it should "implement GADT" in {
+    sealed trait MyTC[Z]
+    final case class Case1(d: Double) extends MyTC[Int]
+    final case class Case2() extends MyTC[String]
+
+    "def f[Z]: MyTC[Z] = Case2()" shouldNot typeCheck
+  }
+
   it should "implement Summable without any data in PTTF" in {
     // PTTF without any data, defined on Int and String.
     sealed trait Summable[T]
