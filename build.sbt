@@ -23,7 +23,7 @@ lazy val common = Seq(
 
 lazy val scala_examples = (project in file("."))
   .settings(common)
-  .aggregate(chapter01, chapter02, chapter03, chapter04)
+  .aggregate(chapter01, chapter02, chapter03, chapter04, chapter05)
 
 lazy val chapter01 = (project in file("chapter01"))
   .settings(common)
