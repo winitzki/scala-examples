@@ -20,16 +20,15 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     val x1: T1 = Case1(1.0) // OK
     val x2: T2 = Case2() // OK
 
-    ((x2 : MyTC[_]) match {
-      case Case1(x) ⇒ x
+    (x2 match {
       case Case2() ⇒ 0.0
     }) shouldEqual 0.0
 
-    type T3 = MyTC[Boolean] // PTTF applied to Boolean, outside its type domain.
+    type T3 = MyTC[Boolean] // PTTF applied to Boolean, outside its type domain. The Scala compiler does not discover this.
 
-    "val x3: T3 = Case2()" shouldNot typeCheck // Unable to compute any values of x3.
+    "val x3: T3 = Case2()" shouldNot typeCheck // But, we are unable to compute any values of x3.
 
-    val x3: T3 = x2.asInstanceOf[T3] // Run-time type cast kills type checking. Will not help to do anything useful with x3.
+    val x3: T3 = x2.asInstanceOf[T3] // Run-time type cast kills type checking. Still, this will not help us do anything useful with `x3`.
 
     "x3 match { case Case2() ⇒ 0.0 }" shouldNot typeCheck
   }
