@@ -15,36 +15,36 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     "def f[A]: MyTC[A] = Case2()" shouldNot typeCheck
   }
 
-  it should "implement Summable without any data in PTTF" in {
+  it should "implement Semigroup without any data in PTTF" in {
     // PTTF without any data, defined on Int and String.
-    sealed trait Summable[T]
-    implicit case object SummableIntEvidence extends Summable[Int]
-    implicit case object SummableStringEvidence extends Summable[String]
+    sealed trait Semigroup[T]
+    implicit case object SemigroupIntEvidence extends Semigroup[Int]
+    implicit case object SemigroupStringEvidence extends Semigroup[String]
 
-    // PTVF defined by explicit type matching and type casting.
-    // This code is unsafe and error-prone! Shown here only for comparison.
-    def add[T](x: T, y: T)(implicit ev: Summable[T]): T = x match {
-      case _: Int ⇒ (x.asInstanceOf[Int] + y.asInstanceOf[Int]).asInstanceOf[T]
-      case _: String ⇒ (x.asInstanceOf[String] + y.asInstanceOf[String]).asInstanceOf[T]
+    // PTVF defined by explicit type casting.
+    // This code is unsafe and error-prone! Shown here only for comparison with better implementations.
+    def op[T](x: T, y: T)(implicit ev: Semigroup[T]): T = ev match {
+      case SemigroupIntEvidence ⇒ (x.asInstanceOf[Int] + y.asInstanceOf[Int]).asInstanceOf[T]
+      case SemigroupStringEvidence ⇒ (x.asInstanceOf[String] + y.asInstanceOf[String]).asInstanceOf[T]
     }
 
-    add(1, 2) shouldEqual 3
+    op(1, 2) shouldEqual 3
 
-    add("a", "b") shouldEqual "ab"
+    op("a", "b") shouldEqual "ab"
 
     "add(Some(1), Some(2))" shouldNot compile
   }
 
-  it should "implement Summable by putting evidence data into PTTF type" in {
+  it should "implement Semigroup by putting unnamed evidence data into PTTF type" in {
     // PTTF carrying a function.
-    type Summable[T] = (T, T) ⇒ T
+    type Semigroup[T] = (T, T) ⇒ T
 
     // Define the type domain.
-    implicit val summableIntEvidence: Summable[Int] = _ + _
-    implicit val summableStringEvidence: Summable[String] = _ + _
+    implicit val semigroupIntEvidence: Semigroup[Int] = _ + _
+    implicit val semigroupStringEvidence: Semigroup[String] = _ + _
 
     // PTVF
-    def sum[T](ts: Seq[T], default: T)(implicit ev: Summable[T]): T = ts.foldLeft(default)(ev)
+    def sum[T](ts: Seq[T], default: T)(implicit ev: Semigroup[T]): T = ts.foldLeft(default)(ev)
 
     sum(Seq(1, 2, 3), 0) shouldEqual 6
 
@@ -52,20 +52,20 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   }
 
-  it should "implement Summable with data in PTTF trait" in {
-    // PTTF as a trait with an abstract `plus` method
-    sealed trait Summable[T] {
-      def plus(x: T, y: T): T
+  it should "implement Semigroup with data in PTTF trait" in {
+    // PTTF as a trait with an abstract `op` method.
+    sealed trait Semigroup[T] {
+      def op(x: T, y: T): T
     }
-    implicit case object SummableIntEvidence extends Summable[Int] {
-      def plus(x: Int, y: Int): Int = x + y
+    implicit case object SemigroupIntEvidence extends Semigroup[Int] {
+      override def op(x: Int, y: Int): Int = x + y
     }
-    implicit case object SummableStringEvidence extends Summable[String] {
-      def plus(x: String, y: String): String = x + y
+    implicit case object SemigroupStringEvidence extends Semigroup[String] {
+      override def op(x: String, y: String): String = x + y
     }
 
-    // PTVF defined by using the `plus` method.
-    def add3[T](x: T, y: T, z: T)(implicit ev: Summable[T]): T = ev.plus(x, ev.plus(y, z))
+    // PTVF defined externally, by using the `op` method.
+    def add3[T](x: T, y: T, z: T)(implicit ev: Semigroup[T]): T = ev.op(x, ev.op(y, z))
 
     add3(1, 2, 3) shouldEqual 6
 
@@ -76,7 +76,7 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   behavior of "monoid type class"
 
-  it should "implement Monoid without using traits" in {
+  it should "implement Monoid without using traits and without method names" in {
     // PTTF
     type Monoid[T] = (T, (T, T) ⇒ T)
 
@@ -94,14 +94,14 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   it should "implement Monoid using a case class as PTTF" in {
     // PTTF
-    final case class Monoid[T](zero: T, add: (T, T) ⇒ T)
+    final case class Monoid[T](empty: T, combine: (T, T) ⇒ T)
 
     // Define the type domain.
     implicit val monoidIntEvidence: Monoid[Int] = Monoid(0, _ + _)
     implicit val monoidStringEvidence: Monoid[String] = Monoid("", _ + _)
 
-    // PTVF
-    def sum[T](ts: Seq[T])(implicit ev: Monoid[T]): T = ts.foldLeft(ev.zero)(ev.add)
+    // PTVF defined externally.
+    def sum[T](ts: Seq[T])(implicit ev: Monoid[T]): T = ts.foldLeft(ev.empty)(ev.combine)
 
     sum(Seq(1, 2, 3)) shouldEqual 6
 
@@ -121,7 +121,7 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
   implicit val semigroupIntEvidence: Semigroup[Int] = Semigroup(_ + _)
   implicit val semigroupStringEvidence: Semigroup[String] = Semigroup(_ + _)
 
-  final case class Monoid[T](zero: T, add: (T, T) ⇒ T)
+  final case class Monoid[T](empty: T, combine: (T, T) ⇒ T)
 
   // Automatically derive class instances for Monoid for pointed semigroups.
   implicit def monoidInstance[T](implicit semigroupEv: Semigroup[T], pointedEv: Pointed[T]): Monoid[T] =
@@ -129,8 +129,8 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   it should "define Monoid using Pointed and Semigroup" in {
     // Define `sum` for monoids as before.
-    // PTVF
-    def sum[T](ts: Seq[T])(implicit ev: Monoid[T]): T = ts.foldLeft(ev.zero)(ev.add)
+    // PTVF defined externally.
+    def sum[T](ts: Seq[T])(implicit ev: Monoid[T]): T = ts.foldLeft(ev.empty)(ev.combine)
 
     sum(Seq(1, 2, 3)) shouldEqual 6
 
@@ -139,9 +139,9 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   it should "define `sum` using cats.Monoid" in {
     implicit def catsMonoidInstance[T](implicit semigroupEv: Semigroup[T], pointedEv: Pointed[T]): cats.Monoid[T] = new cats.Monoid[T] {
-      def empty: T = pointedEv.point
+      override def empty: T = pointedEv.point
 
-      def combine(x: T, y: T): T = semigroupEv.op(x, y)
+      override def combine(x: T, y: T): T = semigroupEv.op(x, y)
     }
 
     // Define `sum` for monoids as before.
@@ -172,8 +172,8 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
   }
 
   def checkMonoidLaw[T: Arbitrary](implicit monoidEv: Monoid[T]): Assertion = forAll { (x: T) ⇒
-    monoidEv.add(x, monoidEv.zero) shouldEqual x
-    monoidEv.add(monoidEv.zero, x) shouldEqual x
+    monoidEv.combine(x, monoidEv.empty) shouldEqual x
+    monoidEv.combine(monoidEv.empty, x) shouldEqual x
   }
 
   it should "check monoid law for Int and String" in {
@@ -182,10 +182,11 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
   }
 
   it should "detect non-associative operation" in {
-    // classical implication (if x then y) is not associative
+    // Boolean implication (if x then y) is not associative
     implicit val badSemigroupEvidence: Semigroup[Boolean] = Semigroup((x, y) ⇒ if (x) y else true)
 
     //    checkSemigroupLaw[Boolean] // fails and prints a counterexample (x = false, y = true, z = false)
+    // So, let's run the test on this counterexample.
 
     val op = implicitly[Semigroup[Boolean]].op
 

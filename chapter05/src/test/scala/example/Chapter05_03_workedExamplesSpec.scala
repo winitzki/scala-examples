@@ -35,9 +35,9 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     // Boring instance: often produce None
     val monoidInstance1 = new Monoid[Data] {
-      def empty: Data = Some(identity[String])
+      override def empty: Data = Some(identity[String])
 
-      def combine(x: Data, y: Data): Data = x match {
+      override def combine(x: Data, y: Data): Data = x match {
         case Some(s2sX) ⇒ y match {
           case Some(s2sY) ⇒ Some(s2sX andThen s2sY)
           case None ⇒ None
@@ -48,9 +48,9 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     // Interesting instance: rarely produce None
     val monoidInstance2 = new Monoid[Data] {
-      def empty: Data = None
+      override def empty: Data = None
 
-      def combine(x: Data, y: Data): Data = x match {
+      override def combine(x: Data, y: Data): Data = x match {
         case Some(s2sX) ⇒ y match {
           case Some(s2sY) ⇒ Some(s2sX andThen s2sY)
           case None ⇒ x
@@ -76,14 +76,14 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   //    If A and B are monoids, define monoid instance for A × B
   it should "ex03" in {
     implicit def monoidABInstance[A, B](implicit evA: Monoid[A], evB: Monoid[B]): Monoid[(A, B)] = new Monoid[(A, B)] {
-      def empty: (A, B) = (evA.empty, evB.empty)
+      override def empty: (A, B) = (evA.empty, evB.empty)
 
-      def combine(x: (A, B), y: (A, B)): (A, B) = (evA.combine(x._1, y._1), evB.combine(x._2, y._2))
+      override def combine(x: (A, B), y: (A, B)): (A, B) = (evA.combine(x._1, y._1), evB.combine(x._2, y._2))
     }
 
     // Testing.
 
-    // By default, have no Int or Double monoid instances in scope.
+    // Initially, we have no Int or Double monoid instances in scope.
 
     "implicitly[Monoid[Int]]" shouldNot compile
     "implicitly[Monoid[Double]]" shouldNot compile
@@ -91,28 +91,33 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     // Declare these instances now.
 
     implicit val monoidIntInstance = new Monoid[Int] {
-      def empty: Int = 1
+      override def empty: Int = 1
 
-      def combine(x: Int, y: Int): Int = x * y
+      override def combine(x: Int, y: Int): Int = x * y
     }
 
     // Multiplication for Double is not precisely associative.
     implicit val monoidDoubleInstance = new Monoid[Double] {
-      def empty: Double = 0.0
+      override def empty: Double = 0.0
 
-      def combine(x: Double, y: Double): Double = x + y
+      override def combine(x: Double, y: Double): Double = x + y
     }
 
-    // Should be able to derive monoid instance for (Int, Double) now
+    // After this, we have both Int and Double monoid instances in scope.
+
+    implicitly[Monoid[Int]]
+    implicitly[Monoid[Double]]
+
+    // Should be able to derive monoid instance for (Int, Double) automatically now.
     checkCatsMonoidLaws[(Int, Double)]()
   }
 
   //    If A is a monoid and B is a semigroup then A+B is a monoid
   it should "ex04" in {
     implicit def monoidABInstance[A, B](implicit evA: Monoid[A], evB: Semigroup[B]): Monoid[Either[A, B]] = new Monoid[Either[A, B]] {
-      def empty: Either[A, B] = Left(evA.empty) // No choice since we don't have a chosen element in B.
+      override def empty: Either[A, B] = Left(evA.empty) // No choice since we don't have a chosen element in B.
 
-      def combine(x: Either[A, B], y: Either[A, B]): Either[A, B] = x match {
+      override def combine(x: Either[A, B], y: Either[A, B]): Either[A, B] = x match {
         case Left(xa) ⇒ y match {
           case Left(ya) ⇒ Left(evA.combine(xa, ya))
           case Right(yb) ⇒ y // Laws do not hold if we put x here.
@@ -130,16 +135,19 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     "implicitly[Monoid[Double]]" shouldNot compile
 
     // Declare these instances now.
+    implicit val semigroupIntInstanceNonCommutAssoc = new Semigroup[Int] {
+      override def combine(x: Int, y: Int): Int = nonCommutAssoc(x, y)
 
-    implicit val semigroupIntInstanceUsingBuddenFunction = new Semigroup[Int] {
-      def combine(x: Int, y: Int): Int = if (x % 2 == 0) x + y else x - y
+      // Budden's function: see F. J. Budden, A Non-Commutative, Associative Operation on the Reals.
+      //   The Mathematical Gazette, Vol. 54, No. 390 (Dec., 1970), pp. 368-372
+      private def nonCommutAssoc(x: Int, y: Int): Int = if (x % 2 == 0) x + y else x - y
     }
 
     // Multiplication for Double is not precisely associative.
     implicit val monoidDoubleInstance = new Monoid[Double] {
-      def empty: Double = 0.0
+      override def empty: Double = 0.0
 
-      def combine(x: Double, y: Double): Double = x + y
+      override def combine(x: Double, y: Double): Double = x + y
     }
 
     // Should be able to derive monoid instance for (Int, Double) now
@@ -151,7 +159,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     type F[T] = Seq[Try[T]]
 
     implicit val fFunctorInstance: Functor[F] = new Functor[F] {
-      def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = fa.map(_.map(f))
+      override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = fa.map(_.map(f))
     }
   }
 
@@ -162,7 +170,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     type Q[X, Y] = Either[X, (X, Y)]
 
     implicit val bifBifunctorInstance = new Bifunctor[Q] {
-      def bimap[A, B, C, D](fab: Either[A, (A, B)])(f: A ⇒ C, g: B ⇒ D): Either[C, (C, D)] = implement
+      override def bimap[A, B, C, D](fab: Either[A, (A, B)])(f: A ⇒ C, g: B ⇒ D): Either[C, (C, D)] = implement
     }
 
     checkCatsBifunctorLaws[Q, Int, String, Boolean, Char, Long, Double]()
@@ -181,7 +189,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     }
     // Type domain includes C.
     implicit object ReaderCF extends ContraFunctor[C] {
-      def contrafmap[A, B](f: B ⇒ A): (A ⇒ Int) ⇒ B ⇒ Int = implement
+      override def contrafmap[A, B](f: B ⇒ A): (A ⇒ Int) ⇒ B ⇒ Int = implement
     }
 
   }
@@ -189,7 +197,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   it should "do ex07 with Cats" in {
 
     implicit val cContraFunctorInstance = new Contravariant[C] {
-      def contramap[A, B](fa: A ⇒ Int)(f: B ⇒ A): B ⇒ Int = implement
+      override def contramap[A, B](fa: A ⇒ Int)(f: B ⇒ A): B ⇒ Int = implement
     }
 
     def cEqual[T: Arbitrary](c1: C[T], c2: C[T]): Assertion = forAll { t: T ⇒ c1(t) shouldEqual c2(t) }
@@ -244,7 +252,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
       type EitherFG[T] = Either[F[T], G[T]]
 
       new Functor[EitherFG] {
-        def map[A, B](fga: EitherFG[A])(t: A ⇒ B): EitherFG[B] = fga match {
+        override def map[A, B](fga: EitherFG[A])(t: A ⇒ B): EitherFG[B] = fga match {
           case Left(fa) ⇒ Left(evF.map(fa)(t))
           case Right(ga) ⇒ Right(evG.map(ga)(t))
         }
@@ -281,7 +289,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
       type EitherFG[T] = Either[F[T], G[T]]
 
       implicit val d1ord2Instance = new Functor[EitherFG] {
-        def map[A, B](fga: EitherFG[A])(t: A ⇒ B): EitherFG[B] = fga match {
+        override def map[A, B](fga: EitherFG[A])(t: A ⇒ B): EitherFG[B] = fga match {
           case Left(fa) ⇒ Left(evF.map(fa)(t))
           case Right(ga) ⇒ Right(evG.map(ga)(t))
         }
@@ -295,10 +303,10 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     type D1[T] = (T, Int)
     type D2[T] = Either[T, String]
     implicit val d1FunctorInstance = new Functor[D1] {
-      def map[A, B](fa: (A, Int))(f: A ⇒ B): (B, Int) = implement
+      override def map[A, B](fa: (A, Int))(f: A ⇒ B): (B, Int) = implement
     }
     implicit val d2FunctorInstance = new Functor[D2] {
-      def map[A, B](fa: Either[A, String])(f: A ⇒ B): Either[B, String] = implement
+      override def map[A, B](fa: Either[A, String])(f: A ⇒ B): Either[B, String] = implement
     }
 
     checkEx06[D1, D2, Double, Int]

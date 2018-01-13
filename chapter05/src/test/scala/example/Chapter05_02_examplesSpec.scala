@@ -19,7 +19,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
 
     // Provide evidence that the type domain of Functor[] includes Data1.
     implicit object functorData1Evidence extends Functor[Data1] {
-      def fmap[A, B](f: A ⇒ B): Data1[A] ⇒ Data1[B] = {
+      override def fmap[A, B](f: A ⇒ B): Data1[A] ⇒ Data1[B] = {
         case Data1(t1, t2) ⇒ Data1(f(t1), f(t2))
       }
     }
@@ -62,7 +62,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     object Data1 {
 
       implicit object CatsFunctorData1Evidence extends cats.Functor[Data1] {
-        def map[A, B](fa: Data1[A])(f: A ⇒ B): Data1[B] = Data1(f(fa.t1), f(fa.t2))
+        override def map[A, B](fa: Data1[A])(f: A ⇒ B): Data1[B] = Data1(f(fa.t1), f(fa.t2))
       }
 
     }
@@ -141,9 +141,9 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
 
     // PTTF.
     trait Monoid[T] {
-      def zero: T
+      def empty: T
 
-      def add: (T, T) ⇒ T
+      def combine: (T, T) ⇒ T
     }
 
     // Implementation of the "implicit method" syntax.
@@ -151,8 +151,8 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
 
       // This code is in the `Monoid` companion object because the code is generic, not specific to `MyLogData`.
       implicit class MonoidSyntax[M](x: M)(implicit evM: Monoid[M]) {
-        // This is an "implicit method" syntax for `add`. Let's rename it to `append`.
-        def append(y: M): M = evM.add(x, y)
+        // This is an "implicit method" syntax for `combine`. Let's rename it to `appendLog`.
+        def appendLog(y: M): M = evM.combine(x, y)
       }
 
     }
@@ -167,10 +167,10 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
 
       // Type class instance implemented as an implicit in the companion object.
       implicit val myLogDataMonoidInstance: Monoid[MyLogData] = new Monoid[MyLogData] {
-        def zero = MyLogData()
+        override def empty = MyLogData()
 
         // Add to log, with some formatting.
-        def add: (MyLogData, MyLogData) ⇒ MyLogData = (x, y) ⇒ if (x.log == emptyLog)
+        override def combine: (MyLogData, MyLogData) ⇒ MyLogData = (x, y) ⇒ if (x.log == emptyLog)
           y
         else if (y.log == emptyLog)
           x
@@ -186,7 +186,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     val logData1 = MyLogData("all is well")
     val logData2 = MyLogData("error code 12345 found")
 
-    val logResult = initialLog append logData1 append logData2
+    val logResult = initialLog appendLog logData1 appendLog logData2
 
     logResult shouldEqual MyLogData("all is well\nerror code 12345 found")
   }
