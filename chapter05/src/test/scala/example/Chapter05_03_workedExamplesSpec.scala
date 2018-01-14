@@ -140,7 +140,8 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
       // Budden's function: see F. J. Budden, A Non-Commutative, Associative Operation on the Reals.
       //   The Mathematical Gazette, Vol. 54, No. 390 (Dec., 1970), pp. 368-372
-      private def nonCommutAssoc(x: Int, y: Int): Int = if (x % 2 == 0) x + y else x - y
+      private def nonCommutAssoc(x: Int, y: Int): Int =
+        if (x % 2 == 0) x + y else x - y
     }
 
     // Multiplication for Double is not precisely associative.
@@ -184,11 +185,11 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   it should "ex07" in {
     // First, we define a type class.
     // PTTF with data.
-    trait ContraFunctor[C[_]] {
-      def contrafmap[A, B](f: B ⇒ A): C[A] ⇒ C[B]
+    trait ContraFunctor[Co[_]] {
+      def contrafmap[A, B](f: B ⇒ A): Co[A] ⇒ Co[B]
     }
     // Type domain includes C.
-    implicit object ReaderCF extends ContraFunctor[C] {
+    implicit val ReaderCF = new ContraFunctor[C] {
       override def contrafmap[A, B](f: B ⇒ A): (A ⇒ Int) ⇒ B ⇒ Int = implement
     }
 
@@ -197,7 +198,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   it should "do ex07 with Cats" in {
 
     implicit val cContraFunctorInstance = new Contravariant[C] {
-      override def contramap[A, B](fa: A ⇒ Int)(f: B ⇒ A): B ⇒ Int = implement
+      override def contramap[A, B](fa: A ⇒ Int)(f: B => A): B ⇒ Int = implement
     }
 
     def cEqual[T: Arbitrary](c1: C[T], c2: C[T]): Assertion = forAll { t: T ⇒ c1(t) shouldEqual c2(t) }
@@ -215,7 +216,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     implicit val qFunctorInstance: Functor[Q] = new Functor[Q] {
       // This function is recursive.
-      def map[A, B](fa: Q[A])(f: A ⇒ B): Q[B] = fa match {
+      override def map[A, B](qa: Q[A])(f: A ⇒ B): Q[B] = qa match {
         case C1(i) ⇒ C1(i andThen f)
         case C2(x) ⇒ C2(x)
         case C3(q) ⇒ C3(map(q)(f)) // Recursive case.

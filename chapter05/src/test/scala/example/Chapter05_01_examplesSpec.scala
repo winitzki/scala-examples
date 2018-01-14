@@ -8,10 +8,12 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
   behavior of "simple type classes"
 
   it should "implement GADT" in {
+
     sealed trait MyTC[A]
     final case class Case1(d: Double) extends MyTC[Int]
     final case class Case2() extends MyTC[String]
 
+    def g[A]: MyTC[Int] = Case1(1.0)
     "def f[A]: MyTC[A] = Case2()" shouldNot typeCheck
 
     type T1 = MyTC[Int] // PTTF applied to Int
@@ -24,14 +26,18 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
       case Case2() ⇒ 0.0
     }) shouldEqual 0.0
 
-    type T3 = MyTC[Boolean] // PTTF applied to Boolean, outside its type domain. The Scala compiler does not discover this.
+    type T3 = MyTC[Boolean] // PTTF applied to Boolean, outside its type domain. The Scala compiler does not flag this as an error.
 
     "val x3: T3 = Case2()" shouldNot typeCheck // But, we are unable to compute any values of x3.
 
-    val x3: T3 = x2.asInstanceOf[T3] // Run-time type cast kills type checking. Still, this will not help us do anything useful with `x3`.
+    val x3: T3 = x2.asInstanceOf[T3] // Run-time type cast - kills type checking. Still, this will not help us do anything useful with `x3`.
 
     "x3 match { case Case2() ⇒ 0.0 }" shouldNot typeCheck
   }
+
+
+
+
 
   it should "implement Semigroup without any data in PTTF" in {
     // PTTF without any data, defined on Int and String.
@@ -50,7 +56,7 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
     op("a", "b") shouldEqual "ab"
 
-    "add(Some(1), Some(2))" shouldNot compile
+    "op(Some(1), Some(2))" shouldNot compile
   }
 
   it should "implement Semigroup by putting unnamed evidence data into PTTF type" in {
@@ -62,12 +68,17 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     implicit val semigroupStringEvidence: Semigroup[String] = _ + _
 
     // PTVF
-    def sum[T](ts: Seq[T], default: T)(implicit ev: Semigroup[T]): T = ts.foldLeft(default)(ev)
+    def sum[T](ts: Seq[T], default: T)(implicit ev: Semigroup[T]): T =
+      ts.foldLeft(default)(ev)
 
     sum(Seq(1, 2, 3), 0) shouldEqual 6
 
     sum(Seq("a", "b", "c", "d"), "") shouldEqual "abcd"
 
+    // Another PTVF.
+    def add3[T](x: T, y: T, z: T)(implicit ev: Semigroup[T]): T = {
+      ev(x, ev(y, z))
+    }
   }
 
   it should "implement Semigroup with data in PTTF trait" in {
@@ -141,7 +152,7 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   final case class Monoid[T](empty: T, combine: (T, T) ⇒ T)
 
-  // Automatically derive class instances for Monoid for pointed semigroups.
+  // Automatically derive type class instances for Monoid for pointed semigroups.
   implicit def monoidInstance[T](implicit semigroupEv: Semigroup[T], pointedEv: Pointed[T]): Monoid[T] =
     Monoid(pointedEv.point, semigroupEv.op)
 
@@ -178,8 +189,8 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
   behavior of "law checking"
 
-  def checkSemigroupLaw[T: Arbitrary](implicit semigroupEv: Semigroup[T]): Assertion = forAll { (x: T, y: T, z: T) ⇒
-    val op = semigroupEv.op
+  def checkSemigroupLaw[T: Arbitrary : Semigroup]: Assertion = forAll { (x: T, y: T, z: T) ⇒
+    val op = implicitly[Semigroup[T]].op
 
     op(x, op(y, z)) shouldEqual op(op(x, y), z)
   }
@@ -203,7 +214,7 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     // Boolean implication (if x then y) is not associative
     implicit val badSemigroupEvidence: Semigroup[Boolean] = Semigroup((x, y) ⇒ if (x) y else true)
 
-    //    checkSemigroupLaw[Boolean] // fails and prints a counterexample (x = false, y = true, z = false)
+//        checkSemigroupLaw[Boolean] // fails and prints a counterexample (x = false, y = true, z = false)
     // So, let's run the test on this counterexample.
 
     val op = implicitly[Semigroup[Boolean]].op

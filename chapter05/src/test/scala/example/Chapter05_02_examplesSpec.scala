@@ -151,8 +151,8 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
 
       // This code is in the `Monoid` companion object because the code is generic, not specific to `MyLogData`.
       implicit class MonoidSyntax[M](x: M)(implicit evM: Monoid[M]) {
-        // This is an "implicit method" syntax for `combine`. Let's rename it to `appendLog`.
-        def appendLog(y: M): M = evM.combine(x, y)
+        // This is an "implicit method" syntax for `combine`. Let's rename it to `+++`.
+        def +++(y: M): M = evM.combine(x, y)
       }
 
     }
@@ -186,7 +186,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     val logData1 = MyLogData("all is well")
     val logData2 = MyLogData("error code 12345 found")
 
-    val logResult = initialLog appendLog logData1 appendLog logData2
+    val logResult = initialLog +++ logData1 +++ logData2
 
     logResult shouldEqual MyLogData("all is well\nerror code 12345 found")
   }
