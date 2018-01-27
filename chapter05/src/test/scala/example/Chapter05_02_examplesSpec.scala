@@ -101,13 +101,13 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     type Ap[F[_], A] = F[A]
 
     // `Ap2` is a third-order type constructor with three arguments.
-    // App: ((* → *, *) → *, * → *, *) → *
-    // More verbosely: App: (P: (* → *, *) → *, Q: * → *, R: *) → *
-    type App[P[_[_], _], Q[_], R] = P[Q, R]
+    // Ap2: ((* → *, *) → *, * → *, *) → *
+    // More verbosely: Ap2: (P: (* → *, *) → *, Q: * → *, R: *) → *
+    type Ap2[P[_[_], _], Q[_], R] = P[Q, R]
 
     // Use them all.
     // X: *  -- i.e. X is a basic type, not a type constructor
-    type X = App[Ap, G, Int] // OK; X is now Either[(Int, Int, String), Int]
+    type X = Ap2[Ap, G, Int] // OK; X is now Either[(Int, Int, String), Int]
 
     val x: X = Left((123, 456, "abc")) // OK
 
