@@ -1,8 +1,8 @@
 package example
 
 import org.scalacheck.Arbitrary
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest.{Assertion, Matchers}
+import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 trait CatsLawChecking extends Matchers with GeneratorDrivenPropertyChecks {
 
