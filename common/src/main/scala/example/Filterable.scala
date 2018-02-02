@@ -69,7 +69,7 @@ trait FilterableLawChecking extends Matchers with GeneratorDrivenPropertyChecks 
   ): Assertion = {
     import Filterable._
 
-    // Naturality law.
+    // Naturality / parametricity law.
     forAll { (f: A ⇒ B, p: B ⇒ Boolean, fa: F[A]) ⇒
       fcEqual(fa.map(f).filter(p), fa.filter(f andThen p).map(f))
     }

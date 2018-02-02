@@ -129,7 +129,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
   it should "verify laws for Orders example 1" in {
     // Declare an instance of FilterableWithFilter type class.
     // Orders with simple filtering.
-    implicit val fwfOrders: FilterableWithFilter[Orders] = new FilterableWithFilter[Orders]() {
+    implicit val fwfOrders = new FilterableWithFilter[Orders] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: Orders[A]): Orders[A] =
         Orders(fa.tue.filter(p), fa.fri.filter(p))
     }
@@ -147,7 +147,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
   it should "verify laws for Orders example 2" in {
     // Declare an instance of FilterableWithFilter type class.
     // Orders with business rule (a).
-    implicit val fwfOrders: FilterableWithFilter[Orders] = new FilterableWithFilter[Orders]() {
+    implicit val fwfOrders = new FilterableWithFilter[Orders] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: Orders[A]): Orders[A] = {
         val newTue = fa.tue.filter(p)
         val newFri = fa.fri.filter(p)
@@ -169,7 +169,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
   it should "verify laws for Orders example 3" in {
     // Declare an instance of FilterableWithFilter type class.
     // Orders with business rule (b).
-    implicit val fwfOrders: FilterableWithFilter[Orders] = new FilterableWithFilter[Orders]() {
+    implicit val fwfOrders = new FilterableWithFilter[Orders] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: Orders[A]): Orders[A] = {
         if (fa.tue.exists(p) || fa.fri.exists(p))
           fa
@@ -193,13 +193,13 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     result shouldEqual Orders(Some("Amount: 500"), Some("Amount: 2000"))
   }
 
-  it should "define withFilter for stingy product" in {
+  it should "define withFilter for collapsible product" in {
     // Type F[A] = 1 + A × A
     type F[A] = Option[(A, A)]
 
-    implicit val functorF: Functor[F] = derive.functor[F]
+    implicit val functorF = derive.functor[F]
 
-    implicit val withFilterF: FilterableWithFilter[F] = new FilterableWithFilter[F]() {
+    implicit val withFilterF = new FilterableWithFilter[F] {
       override def withFilter[A](p: A => Boolean)(fa: F[A]): F[A] = fa match {
         case Some((x, y)) if p(x) && p(y) ⇒ fa
         case _ ⇒ None
@@ -213,16 +213,87 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
   it should "show broken laws for some examples" in {
 
-    final case class A1[T](d: Option[T])
+    final case class A0[T](x: Option[T])
 
-    implicit val functorA1: Functor[A1] = derive.functor[A1]
+    implicit val functorA0 = derive.functor[A0]
 
-    implicit val filterableA1: FilterableWithFilter[A1] = new FilterableWithFilter[A1]() {
+    implicit val filterableA0 = new FilterableWithFilter[A0] {
+      override def withFilter[A](p: A => Boolean)(fa: A0[A]): A0[A] = fa.x match {
+        case Some(i: Int) ⇒
+          // This is safe since we know that A = Int here.
+          val j = i.asInstanceOf[A]
+          val k = 0.asInstanceOf[A]
+          if (p(j)) A0(Some(j)) else A0(Some(k))
+        case y ⇒ A0(y.filter(p))
+      }
+    }
+
+    // Laws hold as long as we don't use the Int type.
+    checkFilterableLawsWithFilter[A0, String, Double]()
+
+    // The naturality law is broken if we use the Int type.
+    //  checkFilterableLawsWithFilter[A0, Int, Double]() // fails
+    // Counterexample that breaks the naturality law:
+    val result1 = for {
+      x ← A0(Some(0))
+      y = x - 1
+      if y > 0
+    } yield y
+
+    result1 shouldEqual A0(None)
+
+    val result2 = for {
+      x ← A0(Some(0))
+      if x - 1 > 0
+      y = x - 1
+    } yield y
+
+    result2 shouldEqual A0(Some(-1))
+
+    result1 shouldNot equal(result2)
+
+
+    final case class A1[T](x: Option[T])
+
+    implicit val functorA1 = derive.functor[A1]
+
+    // Invalid implementation of filter for Option: filter() always returns None.
+    implicit val filterableA1 = new FilterableWithFilter[A1] {
       override def withFilter[A](p: A => Boolean)(fa: A1[A]): A1[A] = A1(None)
     }
 
     // Breaks the identity law.
     A1(Some(1)).filter(_ ⇒ true) shouldNot equal(A1(Some(1)))
+
+    // Identity functor A2[T] = T is not filterable.
+    final case class A2[T](x: T)
+
+    implicit val functorA2: Functor[A2] = derive.functor[A2]
+
+    implicit val filterableA2 = new FilterableWithFilter[A2] {
+      // Must return `fa` since we can't return anything else.
+      override def withFilter[A](p: A => Boolean)(fa: A2[A]): A2[A] = fa
+    }
+
+    // Breaks the partial function law:
+    val dataA2: A2[Double] = A2(-200.0)
+    // Square root was called on a negative number despite filtering.
+    dataA2.filter(_ > 0).map(math.sqrt).x.isNaN shouldEqual true
+
+    // Functor A3[T] = T × (1 + T) is not filterable.
+    final case class A3[T](x: T, y: Option[T])
+
+    implicit val functorA3 = derive.functor[A3]
+
+    implicit val filterableA3 = new FilterableWithFilter[A3]() {
+      // Must keep `x` since we can't replace it with anything else, even if p(x) = false.
+      override def withFilter[A](p: A => Boolean)(fa: A3[A]): A3[A] = fa.copy(y = fa.y.filter(p))
+    }
+
+    // Breaks the partial function law:
+    // Square root was called on a negative number despite filtering.
+    A3(-200.0, None).filter(_ > 0).map(math.sqrt).x.isNaN shouldEqual true
+
   }
 
 }
