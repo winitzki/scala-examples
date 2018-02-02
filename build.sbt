@@ -16,7 +16,8 @@ lazy val commonSettings = Seq(
     "org.scalatest" %% "scalatest" % "3.0.4"
     , "org.scalacheck" %% "scalacheck" % "1.13.5"
     , "org.typelevel" %% "cats-core" % "1.0.0"
-    , "org.scalaz" %% "scalaz-core" % "7.2.18"
+    , "org.typelevel" %% "kittens" % "1.0.0-RC2"
+//    , "org.scalaz" %% "scalaz-core" % "7.2.18"
     , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
     , "io.chymyst" %% "curryhoward" % "latest.integration"
   )
