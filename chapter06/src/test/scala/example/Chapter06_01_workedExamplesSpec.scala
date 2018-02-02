@@ -1,7 +1,6 @@
 package example
 
-import cats.derive
-import cats.Functor
+import cats.{Contravariant, Functor, derive}
 import cats.syntax.functor._
 import io.chymyst.ch._
 import org.scalatest.FlatSpec
@@ -42,7 +41,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
           case Jill1(c1) ⇒ if (p(c1)) Jill1(c1) else Jill0()
           case Jill2(c1, c2) ⇒ (p(c1), p(c2)) match {
             case (true, true) ⇒ Jill2(c1, c2)
-            case (true, false) => Jill1(c1)
+            case (true, false) ⇒ Jill1(c1)
             case (false, true) ⇒ Jill1(c2)
             case (false, false) ⇒ Jill0()
           }
@@ -101,7 +100,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     implicit val functorF1 = derive.functor[F1]
 
     implicit val withFilterF1 = new FilterableWithFilter[F1] {
-      override def withFilter[A](p: A => Boolean)(fa: F1[A]): F1[A] = fa match {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: F1[A]): F1[A] = fa match {
         case Some(x) if p(x) ⇒ fa
         case _ ⇒ None
       }
@@ -112,20 +111,22 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     implicit val functorF2 = derive.functor[F2]
 
     implicit val withFilterF2 = new FilterableWithFilter[F2] {
-      override def withFilter[A](p: A => Boolean)(fa: F2[A]): F2[A] = fa match {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: F2[A]): F2[A] = fa match {
         case Some((x, y)) if p(x) && p(y) ⇒ fa
         case _ ⇒ None
       }
     }
 
-    type F3[A] = (F1[A], F2[A])
+    final case class P[T](first: F1[T], second: F2[T])
 
-    implicit val functorF3 = derive.functor[F3]
+    implicit val functorF3 = derive.functor[P]
 
-    implicit val withFilterF3 = new FilterableWithFilter[F3] {
-      override def withFilter[A](p: A => Boolean)(fa: F3[A]): F3[A] =
-        (fa._1.filter(p), fa._2.filter(p))
+    implicit val withFilterF3 = new FilterableWithFilter[P] {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: P[A]): P[A] =
+        P(fa.first.filter(p), fa.second.filter(p))
     }
+
+    checkFilterableLawsWithFilter[P, String, Double]()
   }
 
   it should "ex04" in {
@@ -133,6 +134,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     // We could simply leave Int unchanged and use JohnsCoupons implementation to filter (1 + A + A × A + A × A × A)
     // Here is an interesting implementation that keeps some information about items that were filtered out.
     // The resulting transformation on integers is still consistent with the laws for filterable.
+
     sealed trait List3[A]
     final case class L0[A](n: Int) extends List3[A]
     final case class L1[A](n: Int, c1: A) extends List3[A]
@@ -175,4 +177,113 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     checkFilterableLawsWithFilter[List3, String, Double]()
   }
 
+  // The functor F[A] = A + A × F[A], is not filterable since an empty container
+  // is not represented by any part of the disjunction.
+  // In contrast, F[A] = 1 + A + A × F[A] would be filterable.
+  it should "ex05" in {
+
+    sealed trait NonEmptyList[A]
+    final case class One[A](one: A) extends NonEmptyList[A]
+    final case class WithTail[A](head: A, tail: NonEmptyList[A]) extends NonEmptyList[A]
+
+    implicit val functorNEL = derive.functor[NonEmptyList]
+
+    // We try defining a filterable instance - but will fail the laws.
+    implicit val filterableNEL = new FilterableWithFilter[NonEmptyList] {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: NonEmptyList[A]): NonEmptyList[A] = fa match {
+        case One(one) ⇒ One(one) // No way to use the filter here.
+        case WithTail(head, tail) ⇒ WithTail(head, withFilter(p)(tail)) // No way to apply the filter to `head`.
+      }
+    }
+
+    //    checkFilterableLawsWithFilter[NonEmptyList, String, Double]() // Fails the partial function law.
+
+    val data: NonEmptyList[Double] = WithTail(-200.0, One(100.0))
+
+    val result: NonEmptyList[Double] = for {
+      x ← data
+      if x > 0
+    } yield math.sqrt(x)
+
+    // math.sqrt of a negative number was called despite filtering.
+    result should matchPattern {
+      case WithTail(nan, One(10.0)) if nan.asInstanceOf[Double].isNaN ⇒
+    }
+  }
+
+  // The functor F[Z,A] = Z + Int × Z × A × A is filterable because we can reuse the value
+  // of type Z to represent an empty container.
+  // In contrast, Z + Int × A × A would not be filterable.
+  it should "ex06" in {
+    type F[Z, A] = Either[Z, (Int, Z, A, A)]
+
+    // derive.functor does not seem to work with a type lambda.
+    "implicit def functorF[Z] = derive.functor[F[Z, ?]]" shouldNot compile
+
+    // curryhoward's `implement` works here.
+    implicit def functorF[Z] = new Functor[F[Z, ?]] {
+      override def map[A, B](fa: F[Z, A])(f: A ⇒ B): F[Z, B] = implement
+    }
+
+    implicit def filterableF[Z] = new FilterableWithFilter[F[Z, ?]]() {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: F[Z, A]): F[Z, A] = fa match {
+        case Left(z) ⇒ fa
+        case Right((n, z, x, y)) ⇒ if (p(x) && p(y)) fa else Left(z)
+      }
+    }
+
+    checkFilterableLawsWithFilter[F[Boolean, ?], Int, Boolean]()
+    checkFilterableLawsWithFilter[F[Int, ?], String, Double]()
+  }
+
+  // The functor F[Z, A] = 1 + Z + Int × A × List[A].
+  // We will use the standard `filter` function for `List`.
+  it should "ex07" in {
+    sealed trait F[Z, A]
+    final case class Empty[Z, A]() extends F[Z, A]
+    final case class HaveZ[Z, A](z: Z) extends F[Z, A]
+    final case class HaveList[Z, A](n: Int, x: A, l: List[A]) extends F[Z, A]
+
+    // curryhoward's `implement` does not work here because it doesn't know about List being a functor.
+    implicit def functorF[Z] = new Functor[F[Z, ?]] {
+      override def map[A, B](fa: F[Z, A])(f: A ⇒ B): F[Z, B] = fa match {
+        case Empty() ⇒ Empty()
+        case HaveZ(z) ⇒ HaveZ(z)
+        case HaveList(n, x, l) ⇒ HaveList(n, f(x), l.map(f))
+      }
+    }
+
+    implicit def filterableF[Z] = new FilterableWithFilter[F[Z, ?]] {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: F[Z, A]): F[Z, A] = fa match {
+        case HaveList(n, x, l) ⇒
+          if (p(x))
+            HaveList(n, x, l.filter(p))
+          else
+            Empty() // No other choice - we can't keep HaveList here.
+
+        // In all other cases, the value `fa` is unchanged after the filtering operation.
+        case _ ⇒ fa
+      }
+    }
+
+    checkFilterableLawsWithFilter[F[Boolean, ?], Int, String]()
+  }
+
+  it should "ex08" in {
+    // Filterable contrafunctor C[A] = A ⇒ Int
+    type C[A] = A ⇒ Int
+
+    // No automatic derivation seems to be available in cats.derive._ for contrafunctors.
+    implicit val contraC = new Contravariant[C] {
+      override def contramap[A, B](fa: C[A])(f: B ⇒ A): C[B] = implement
+    }
+
+    // No automatic derivation in cats.derive._ for exponential types.
+    type X[A] = Int ⇒ A
+
+    // cats.derive.functor works only for polynomial types, fails for exponential types.
+    "implicit val functorX = derive.functor[X]" shouldNot compile
+
+    
+  }
 }
