@@ -38,7 +38,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
           case John3(c1, c2, c3) ⇒ if (p(c1) && p(c2) && p(c3)) John3(c1, c2, c3) else John0()
         }
         val newJills: JillsCoupons[A] = fa.jills match {
-          case Jill0() ⇒ Jill0()
+          case Jill0() ⇒ fa.jills
           case Jill1(c1) ⇒ if (p(c1)) Jill1(c1) else Jill0()
           case Jill2(c1, c2) ⇒ (p(c1), p(c2)) match {
             case (true, true) ⇒ Jill2(c1, c2)
@@ -93,9 +93,46 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
   }
 
   it should "ex03" in {
+    // The type is (1 + A) × (1 + A × A).
+    // Let us reuse the filterable instances for (1 + A) and for (1 + A × A).
+
+    type F1[A] = Option[A]
+
+    implicit val functorF1 = derive.functor[F1]
+
+    implicit val withFilterF1 = new FilterableWithFilter[F1] {
+      override def withFilter[A](p: A => Boolean)(fa: F1[A]): F1[A] = fa match {
+        case Some(x) if p(x) ⇒ fa
+        case _ ⇒ None
+      }
+    }
+
+    type F2[A] = Option[(A, A)]
+
+    implicit val functorF2 = derive.functor[F2]
+
+    implicit val withFilterF2 = new FilterableWithFilter[F2] {
+      override def withFilter[A](p: A => Boolean)(fa: F2[A]): F2[A] = fa match {
+        case Some((x, y)) if p(x) && p(y) ⇒ fa
+        case _ ⇒ None
+      }
+    }
+
+    type F3[A] = (F1[A], F2[A])
+
+    implicit val functorF3 = derive.functor[F3]
+
+    implicit val withFilterF3 = new FilterableWithFilter[F3] {
+      override def withFilter[A](p: A => Boolean)(fa: F3[A]): F3[A] =
+        (fa._1.filter(p), fa._2.filter(p))
+    }
+  }
+
+  it should "ex04" in {
     // The type is Int + Int × A + Int × A × A + Int × A × A × A = Int × (1 + A + A × A + A × A × A)
     // We could simply leave Int unchanged and use JohnsCoupons implementation to filter (1 + A + A × A + A × A × A)
     // Here is an interesting implementation that keeps some information about items that were filtered out.
+    // The resulting transformation on integers is still consistent with the laws for filterable.
     sealed trait List3[A]
     final case class L0[A](n: Int) extends List3[A]
     final case class L1[A](n: Int, c1: A) extends List3[A]
@@ -137,4 +174,5 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
 
     checkFilterableLawsWithFilter[List3, String, Double]()
   }
+
 }

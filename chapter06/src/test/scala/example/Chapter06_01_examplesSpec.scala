@@ -194,7 +194,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
   }
 
   it should "define withFilter for collapsible product" in {
-    // Type F[A] = 1 + A × A
+    // Functor F[A] = 1 + A × A
     type F[A] = Option[(A, A)]
 
     implicit val functorF = derive.functor[F]
@@ -209,7 +209,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     checkFilterableLawsWithFilter[F, Int, String]()
   }
 
-  behavior of "wrong implementations of filter"
+  behavior of "wrong or impossible implementations of filter"
 
   it should "show broken laws for some examples" in {
 
