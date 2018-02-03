@@ -1,5 +1,6 @@
 package example
 
+import io.chymyst.ch._
 import cats.Functor
 import cats.syntax.functor._
 import org.scalacheck.Arbitrary
@@ -11,8 +12,10 @@ If a PTVF p1 is defined for all the same types as p2 and also for some other typ
 we say that p2 requires p1.
 We want to express this. Also, we want to use both p1 and p2 on types for which p2 is defined,
 by just using a p2 type class constraint, without explicitly adding a p1 type class constraint.
-How to express this?
-scalaz and cats use traits that extend each other - and then you can't add syntax, and have to override the functions in the trait. This looks suspicious. Is there another way? Yes.
+
+scalaz and cats use traits that extend each other - and then you can't add syntax, and have to override the functions in the trait. This looks suspicious.
+
+There is another way: use abstract class instead of trait, and require superclass constraint.
  */
 
 abstract class FilterableWithFilter[F[_]](implicit val functor: Functor[F]) {
@@ -29,20 +32,41 @@ abstract class Filterable[F[_]](implicit val functor: Functor[F]) {
 // Syntax for PTVFs.
 object Filterable {
 
-  implicit class FilterableSyntax1[F[_], A](fa: F[Option[A]])(implicit ev: Filterable[F]) {
+  // Helper function to transform a Boolean isomorphically into 1 + 1.
+  implicit class BooleanToOptionUnit(val b: Boolean) extends AnyVal {
+    def toOptionUnit: Option[Unit] = if (b) Some(()) else None
+  }
+
+  // Transform A ⇒ Boolean isomorphically into A ⇒ 1 + A.
+  def optB[A](predicate: A ⇒ Boolean): A ⇒ Option[A] = {
+    x ⇒ predicate(x).toOptionUnit.map(_ ⇒ x)
+  }
+
+  // Flip arguments of curried functions.
+  def flip[A, B, C]: (A ⇒ B ⇒ C) ⇒ (B ⇒ A ⇒ C) = implement
+
+  implicit class CurriedFlip[A, B, C](val f: A ⇒ B ⇒ C) extends AnyVal {
+    def flip: B ⇒ A ⇒ C = ofType[B ⇒ A ⇒ C](f)
+  }
+
+  // Define `.flatten` syntax.
+  implicit class Syntax1[F[_], A](fa: F[Option[A]])(implicit ev: Filterable[F]) {
     def flatten: F[A] = ev.flatten(fa)
   }
 
-  implicit class FilterableSyntax2[F[_], A](fa: F[A])(implicit ev: Filterable[F]) {
-    def mapOption[B](f: A ⇒ Option[B]): F[B] = ev.functor.map(fa)(f).flatten
+  // Define `.mapOption`, `.filter` and `.withFilter` syntax if we already have `.flatten` syntax.
+  implicit class Syntax2[F[_], A](fa: F[A])(implicit ev: Filterable[F]) {
+    implicit val functor: Functor[F] = ev.functor
+
+    def mapOption[B](f: A ⇒ Option[B]): F[B] = fa.map(f).flatten
 
     def filter(p: A ⇒ Boolean): F[A] = mapOption(a ⇒ Some(a).filter(p))
 
     def withFilter(p: A ⇒ Boolean): F[A] = filter(p)
   }
 
-  implicit class FilterableSyntax3[F[_], A](fa: F[A])(implicit ev: FilterableWithFilter[F]) {
-
+  // Define `.mapOption`, `.withFilter`, `.filter`, and `.flatten` syntax if we already have `withFilter`.
+  implicit class Syntax3[F[_], A](fa: F[A])(implicit ev: FilterableWithFilter[F]) {
     implicit val functor: Functor[F] = ev.functor
 
     def mapOption[B](f: A ⇒ Option[B]): F[B] = fa.map(f).flatten
@@ -96,6 +120,7 @@ trait FilterableLawChecking extends Matchers with GeneratorDrivenPropertyChecks 
     bcEv: Arbitrary[B ⇒ Option[C]]
   ): Assertion = {
     import Filterable._
+
     // Identity law.
     forAll { (fc: F[C]) ⇒ fcEqual(fc.mapOption(Some.apply[C]), fc) }
 

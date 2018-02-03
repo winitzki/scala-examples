@@ -270,20 +270,22 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
   }
 
   it should "ex08" in {
-    // Filterable contrafunctor C[A] = A ⇒ Int
-    type C[A] = A ⇒ Int
+    // Filterable contrafunctor C[A, Z] = A ⇒ 1 + Z w.r.t. A.
+    type C[-A, +Z] = A ⇒ Option[Z]
 
     // No automatic derivation seems to be available in cats.derive._ for contrafunctors.
-    implicit val contraC = new Contravariant[C] {
-      override def contramap[A, B](fa: C[A])(f: B ⇒ A): C[B] = implement
+    implicit def contraC[Z] = new Contravariant[C[?, Z]] {
+      override def contramap[A, B](fa: C[A, Z])(f: B ⇒ A): C[B, Z] = implement
     }
 
-    // No automatic derivation in cats.derive._ for exponential types.
+    // No automatic derivation in cats.derive._ for exponential types either.
     type X[A] = Int ⇒ A
 
     // cats.derive.functor works only for polynomial types, fails for exponential types.
     "implicit val functorX = derive.functor[X]" shouldNot compile
 
-    
+    implicit def contrafilterC[Z] = new ContraFilterableWithFilter[C[?, Z]] {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: C[A, Z]): C[A, Z] = { (x: A) ⇒ if (p(x)) fa(x) else None }
+    }
   }
 }

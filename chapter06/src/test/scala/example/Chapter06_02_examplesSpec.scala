@@ -1,36 +1,53 @@
 package example
 
-import cats.Functor
-import org.scalatest.FlatSpec
+import cats.{Functor, derive}
 import cats.syntax.functor._
 import io.chymyst.ch._
 import org.scalatest.FlatSpec
 import org.scalacheck.ScalacheckShapeless._
 import Filterable._
 
-class Chapter06_02_examplesSpec  extends FlatSpec with FilterableLawChecking {
+class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
+  behavior of "filterable concepts"
 
-  behavior of "filterable type class"
+  final case class Orders[A](tue: Option[A], fri: Option[A])
 
-  // Type 1 + T x T
-  it should "declare a Filterable instance for stingy product" in {
-    type P[T] = Option[(T, T)]
+  // Functor instance is required for Filterable instances.
+  implicit val functorOrders: Functor[Orders] = derive.functor[Orders]
 
-    implicit val functorP: Functor[P] = new Functor[P] {
-      override def map[A, B](fa: P[A])(f: A => B): P[B] = fa.map { case (x, y) ⇒ (f(x), f(y)) }
+  val data = Orders(Some(500), Some(2000))
+
+  // Use some filterable functor as an example.
+  implicit val fwfOrders = new FilterableWithFilter[Orders] {
+    override def withFilter[A](p: A ⇒ Boolean)(fa: Orders[A]): Orders[A] = {
+      val newTue = fa.tue.filter(p)
+      val newFri = fa.fri.filter(p)
+      if (fa.tue.forall(p) && fa.fri.forall(p))
+        Orders(newTue, newFri)
+      else Orders(None, None)
+    }
+  }
+
+  it should "express filter through flatten and vice versa, check isomorphism" in {
+
+    def flattenFromFilter[F[_] : FilterableWithFilter, A]: F[Option[A]] ⇒ F[A] = {
+      foa ⇒
+        implicit val functor = implicitly[FilterableWithFilter[F]].functor
+        foa.filter(_.nonEmpty).map(_.get)
     }
 
-    implicit val filterablePStingy: Filterable[P] = new Filterable[P]() {
-      override def flatten[A](fa: P[Option[A]]): P[A] = fa.flatMap {
-        case (Some(x), Some(y)) ⇒ Some((x, y))
-        case _ ⇒ None
-      }
+    def filterFromFlatten[F[_] : Functor, A](flatten: F[Option[A]] ⇒ F[A]): (A ⇒ Boolean) ⇒ F[A] ⇒ F[A] = {
+      p ⇒
+        val fmapAOptionA = flip(implicitly[Functor[F]].map[A, Option[A]])
+        fmapAOptionA(optB(p)) andThen flatten
     }
 
-    // Check laws.
-    checkFilterableLaws[P, Int, String, Boolean]()
+    def flattenForOrders[A] = flattenFromFilter[Orders, A]
 
+    def filterFromFlattenForOrders[A] = filterFromFlatten[Orders, A](flattenForOrders)
+
+    forAll { (orders: Orders[Int], p: Int ⇒ Boolean) ⇒ orders.filter(p) shouldEqual filterFromFlattenForOrders(p)(orders) }
   }
 
 }

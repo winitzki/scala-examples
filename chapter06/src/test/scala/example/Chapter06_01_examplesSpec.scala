@@ -30,40 +30,40 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
   it should "implement additional business rule (a)" in {
     // Orders with business rule (a).
-    final case class Orders2[A](tue: Option[A], fri: Option[A]) {
-      def withFilter(p: A ⇒ Boolean): Orders2[A] = {
+    final case class Orders2a[A](tue: Option[A], fri: Option[A]) {
+      def withFilter(p: A ⇒ Boolean): Orders2a[A] = {
         val newTue = tue.filter(p)
         val newFri = fri.filter(p)
         if (tue.forall(p) && fri.forall(p))
-          Orders2(newTue, newFri)
-        else Orders2(None, None)
+          Orders2a(newTue, newFri)
+        else Orders2a(None, None)
       }
     }
 
-    Orders2(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders2(None, None)
+    Orders2a(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders2a(None, None)
 
-    Orders2(Some(500), None).withFilter(_ < 1000) shouldEqual Orders2(Some(500), None)
+    Orders2a(Some(500), None).withFilter(_ < 1000) shouldEqual Orders2a(Some(500), None)
 
-    Orders2(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders2(Some(500), Some(2000))
+    Orders2a(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders2a(Some(500), Some(2000))
   }
 
   it should "implement additional business rule (b)" in {
     // Orders with business rule (b).
-    final case class Orders3[A](tue: Option[A], fri: Option[A]) {
-      def withFilter(p: A ⇒ Boolean): Orders3[A] = {
+    final case class Orders2b[A](tue: Option[A], fri: Option[A]) {
+      def withFilter(p: A ⇒ Boolean): Orders2b[A] = {
         if (tue.exists(p) || fri.exists(p))
           this
-        else Orders3(None, None)
+        else Orders2b(None, None)
       }
     }
 
-    Orders3(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders3(Some(500), Some(2000))
+    Orders2b(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders2b(Some(500), Some(2000))
 
-    Orders3(Some(500), None).withFilter(_ < 1000) shouldEqual Orders3(Some(500), None)
+    Orders2b(Some(500), None).withFilter(_ < 1000) shouldEqual Orders2b(Some(500), None)
 
-    Orders3(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders3(Some(500), Some(2000))
+    Orders2b(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders2b(Some(500), Some(2000))
 
-    Orders3(Some(500), Some(2000)).withFilter(_ < 0) shouldEqual Orders3(None, None)
+    Orders2b(Some(500), Some(2000)).withFilter(_ < 0) shouldEqual Orders2b(None, None)
   }
 
   it should "use functor block notation" in {
@@ -144,7 +144,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     result shouldEqual Orders(Some("Amount: 500"), None)
   }
 
-  it should "verify laws for Orders example 2" in {
+  it should "verify laws for Orders example 2a" in {
     // Declare an instance of FilterableWithFilter type class.
     // Orders with business rule (a).
     implicit val fwfOrders = new FilterableWithFilter[Orders] {
@@ -166,7 +166,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     result shouldEqual Orders(None, None)
   }
 
-  it should "verify laws for Orders example 3" in {
+  it should "verify laws for Orders example 2b" in {
     // Declare an instance of FilterableWithFilter type class.
     // Orders with business rule (b).
     implicit val fwfOrders = new FilterableWithFilter[Orders] {
