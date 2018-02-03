@@ -2,6 +2,7 @@ package example
 
 import io.chymyst.ch._
 import cats.Functor
+import cats.evidence.Is
 import cats.syntax.functor._
 import org.scalacheck.Arbitrary
 import org.scalatest.{Assertion, Matchers}
@@ -75,8 +76,8 @@ object Filterable {
 
     def filter(p: A ⇒ Boolean): F[A] = withFilter(p)
 
-    def flatten[B](implicit aOpt: A =:= Option[B]): F[B] =
-      fa.map(aOpt.apply).withFilter(_.nonEmpty).map { case Some(x) ⇒ x }
+    def flatten[B](implicit aOpt: A Is Option[B]): F[B] =
+      aOpt.substitute(fa).withFilter(_.nonEmpty).map { case Some(x) ⇒ x }
   }
 
 }

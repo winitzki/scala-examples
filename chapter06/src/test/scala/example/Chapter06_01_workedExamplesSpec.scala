@@ -3,11 +3,12 @@ package example
 import cats.{Contravariant, Functor, derive}
 import cats.syntax.functor._
 import io.chymyst.ch._
-import org.scalatest.FlatSpec
+import org.scalatest.{Assertion, FlatSpec}
 import org.scalacheck.ScalacheckShapeless._
 import Filterable._
+import org.scalacheck.Arbitrary
 
-class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawChecking {
+class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawChecking with ContraFilterableLawChecking {
 
   behavior of "worked examples"
 
@@ -287,5 +288,14 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     implicit def contrafilterC[Z] = new ContraFilterableWithFilter[C[?, Z]] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: C[A, Z]): C[A, Z] = { (x: A) ⇒ if (p(x)) fa(x) else None }
     }
+
+    type Example8[A] = C[A, String]
+
+    // Now have type class instance for Example8.
+    implicitly[ContraFilterableWithFilter[Example8]]
+
+    def e8Equal[A: Arbitrary](x: Example8[A], y: Example8[A]): Assertion = forAll { a: A ⇒ x(a) shouldEqual y(a) }
+    
+    checkContraFilterableLawsWithFilter[Example8, Int, String](e8Equal)
   }
 }
