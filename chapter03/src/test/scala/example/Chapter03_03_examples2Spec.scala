@@ -41,22 +41,22 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
     def f1[A, B, C, D]: T1[A, B, C, D] ⇒ T2[A, B, C, D] = {
       case (ab, cd) ⇒
         ab match {
-          case Left(a) => cd match {
-            case Left(c) => T2AC(a, c)
-            case Right(d) => T2AD(a, d)
+          case Left(a) ⇒ cd match {
+            case Left(c) ⇒ T2AC(a, c)
+            case Right(d) ⇒ T2AD(a, d)
           }
-          case Right(b) => cd match {
-            case Left(c) => T2BC(b, c)
-            case Right(d) => T2BD(b, d)
+          case Right(b) ⇒ cd match {
+            case Left(c) ⇒ T2BC(b, c)
+            case Right(d) ⇒ T2BD(b, d)
           }
         }
     }
 
     def f2[A, B, C, D]: T2[A, B, C, D] ⇒ T1[A, B, C, D] = {
-      case T2AC(a, c) => (Left(a), Left(c))
-      case T2AD(a, d) => (Left(a), Right(d))
-      case T2BC(b, c) => (Right(b), Left(c))
-      case T2BD(b, d) => (Right(b), Right(d))
+      case T2AC(a, c) ⇒ (Left(a), Left(c))
+      case T2AD(a, d) ⇒ (Left(a), Right(d))
+      case T2BC(b, c) ⇒ (Right(b), Left(c))
+      case T2BD(b, d) ⇒ (Right(b), Right(d))
     }
 
     def check[A: Arbitrary, B: Arbitrary, C: Arbitrary, D: Arbitrary]() = {
@@ -174,8 +174,8 @@ class Chapter03_03_examples2Spec extends FlatSpec with Matchers with GeneratorDr
       case Left(l) ⇒ Left(l)
     }
 
-    // Seq(1,2,3).flatMap(x => Seq(x,x,x))
-    // (x: Seq[T]) . flatMap (T => Seq[U]) : Seq[U]
+    // Seq(1,2,3).flatMap(x ⇒ Seq(x,x,x))
+    // (x: Seq[T]) . flatMap (T ⇒ Seq[U]) : Seq[U]
 
     def flatMap[L, R, T](e: Either[L, R])(f: R ⇒ Either[L, T]): Either[L, T] = e match {
       case Right(r) ⇒ f(r)

@@ -39,7 +39,7 @@ object Filterable {
   }
 
   // Transform A ⇒ Boolean isomorphically into A ⇒ 1 + A.
-  def optB[A](predicate: A ⇒ Boolean): A ⇒ Option[A] = {
+  def bop[A](predicate: A ⇒ Boolean): A ⇒ Option[A] = {
     x ⇒ predicate(x).toOptionUnit.map(_ ⇒ x)
   }
 

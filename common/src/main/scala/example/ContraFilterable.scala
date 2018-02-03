@@ -6,7 +6,7 @@ import cats.syntax.contravariant._
 import org.scalacheck.Arbitrary
 import org.scalatest.{Assertion, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
-import Filterable.{flip, optB}
+import Filterable.{flip, bop}
 
 abstract class ContraFilterableWithFilter[F[_]](implicit val contrafunctor: Contravariant[F]) {
   // For functors that implement `withFilter` directly.
@@ -36,7 +36,7 @@ object ContraFilterable {
 
     def contramapOption[B](f: B ⇒ Option[A]): C[B] = fa.inflate.contramap(f)
 
-    def filter(p: A ⇒ Boolean): C[A] = fa.inflate.contramap[A](optB(p))
+    def filter(p: A ⇒ Boolean): C[A] = fa.inflate.contramap[A](bop(p))
 
     def withFilter(p: A ⇒ Boolean): C[A] = filter(p)
   }

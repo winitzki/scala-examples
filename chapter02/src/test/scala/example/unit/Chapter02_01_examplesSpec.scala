@@ -7,7 +7,7 @@ class Chapter02_01_examplesSpec extends FlatSpec with Matchers {
   behavior of "Examples"
 
   def ex1(a: Seq[Double]): Seq[(Double, Double)] = {
-    a.map(x => (math.cos(x), math.sin(x)))
+    a.map(x ⇒ (math.cos(x), math.sin(x)))
   }
 
   it should "run ex1" in {
@@ -19,7 +19,7 @@ class Chapter02_01_examplesSpec extends FlatSpec with Matchers {
   }
 
   def ex2(a: Seq[Double]): Int = {
-    a.count(x => math.cos(x) > math.sin(x))
+    a.count(x ⇒ math.cos(x) > math.sin(x))
 
   }
 
@@ -46,8 +46,8 @@ class Chapter02_01_examplesSpec extends FlatSpec with Matchers {
   def ex4(a: Seq[Int]): Int = {
     //    val b: Seq[Int] = a.drop(1)
     //    val c: Seq[(Int, Int)] = a.zip(b)
-    //    c.count { case (x, y) => x > y }
-    a.zip(a.drop(1)).count { case (x, y) => x > y }
+    //    c.count { case (x, y) ⇒ x > y }
+    a.zip(a.drop(1)).count { case (x, y) ⇒ x > y }
   }
 
   it should "run ex4" in {
@@ -56,7 +56,7 @@ class Chapter02_01_examplesSpec extends FlatSpec with Matchers {
 
   def ex5(k: Int, a: Seq[Int]): Seq[Int] = {
     val b = a.sliding(2 * k + 1)
-    b.map(l => l.max).toSeq
+    b.map(l ⇒ l.max).toSeq
   }
 
   it should "run ex5" in {
@@ -65,7 +65,7 @@ class Chapter02_01_examplesSpec extends FlatSpec with Matchers {
 
   def ex6(size: Int): Map[(Int, Int), Int] = {
     val a = 1 to size
-    a.flatMap(i => a.map(j =>
+    a.flatMap(i ⇒ a.map(j ⇒
       (i, j) -> i * j // a -> b  is the same as (a, b)
     )).toMap
   }
@@ -85,7 +85,7 @@ class Chapter02_01_examplesSpec extends FlatSpec with Matchers {
   }
 
   def ex7(a: Seq[Double]): Double = {
-    val b = a.flatMap(x => Seq(x, math.cos(x), math.sin(x)))
+    val b = a.flatMap(x ⇒ Seq(x, math.cos(x), math.sin(x)))
     b.max
   }
 

@@ -200,7 +200,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     implicit val functorF = derive.functor[F]
 
     implicit val withFilterF = new FilterableWithFilter[F] {
-      override def withFilter[A](p: A => Boolean)(fa: F[A]): F[A] = fa match {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: F[A]): F[A] = fa match {
         case Some((x, y)) if p(x) && p(y) ⇒ fa
         case _ ⇒ None
       }
@@ -218,7 +218,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     implicit val functorA0 = derive.functor[A0]
 
     implicit val filterableA0 = new FilterableWithFilter[A0] {
-      override def withFilter[A](p: A => Boolean)(fa: A0[A]): A0[A] = fa.x match {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: A0[A]): A0[A] = fa.x match {
         case Some(i: Int) ⇒
           // This is safe since we know that A = Int here.
           val j = i.asInstanceOf[A]
@@ -232,7 +232,9 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     checkFilterableLawsWithFilter[A0, String, Double]()
 
     // The naturality law is broken if we use the Int type.
+
     //  checkFilterableLawsWithFilter[A0, Int, Double]() // fails
+
     // Counterexample that breaks the naturality law:
     val result1 = for {
       x ← A0(Some(0))
@@ -259,11 +261,12 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     // Invalid implementation of filter for Option: filter() always returns None.
     implicit val filterableA1 = new FilterableWithFilter[A1] {
-      override def withFilter[A](p: A => Boolean)(fa: A1[A]): A1[A] = A1(None)
+      override def withFilter[A](p: A ⇒ Boolean)(fa: A1[A]): A1[A] = A1(None)
     }
 
     // Breaks the identity law.
-    A1(Some(1)).filter(_ ⇒ true) shouldNot equal(A1(Some(1)))
+    val a1data = A1(Some(1))
+    a1data.filter(_ ⇒ true) shouldNot equal(a1data)
 
     // Identity functor A2[T] = T is not filterable.
     final case class A2[T](x: T)
@@ -272,7 +275,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     implicit val filterableA2 = new FilterableWithFilter[A2] {
       // Must return `fa` since we can't return anything else.
-      override def withFilter[A](p: A => Boolean)(fa: A2[A]): A2[A] = fa
+      override def withFilter[A](p: A ⇒ Boolean)(fa: A2[A]): A2[A] = fa
     }
 
     // Breaks the partial function law:
@@ -287,13 +290,12 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     implicit val filterableA3 = new FilterableWithFilter[A3]() {
       // Must keep `x` since we can't replace it with anything else, even if p(x) = false.
-      override def withFilter[A](p: A => Boolean)(fa: A3[A]): A3[A] = fa.copy(y = fa.y.filter(p))
+      override def withFilter[A](p: A ⇒ Boolean)(fa: A3[A]): A3[A] = fa.copy(y = fa.y.filter(p))
     }
 
     // Breaks the partial function law:
     // Square root was called on a negative number despite filtering.
     A3(-200.0, None).filter(_ > 0).map(math.sqrt).x.isNaN shouldEqual true
-
   }
 
 }

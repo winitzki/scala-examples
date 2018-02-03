@@ -56,9 +56,9 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
 
     // const[C, X](id[T]): X ⇒ T ⇒ T  works when C = T ⇒ T
 
-    def ex01: Any => Nothing => Nothing = const(id)
+    def ex01: Any ⇒ Nothing ⇒ Nothing = const(id)
 
-    def ex01a[T]: Any => T => T = const(id[T])
+    def ex01a[T]: Any ⇒ T ⇒ T = const(id[T])
 
     def ex01b[X, T] = const[T ⇒ T, X](id[T])
 
@@ -192,7 +192,7 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
   // Int ⇒ A = (Int ⇒ A) ⇒ A cannot work!
 
   it should "infer missing types 1" in {
-    def p[T]: (Int => T) => T = (f: Int ⇒ T) ⇒ f(2)
+    def p[T]: (Int ⇒ T) ⇒ T = (f: Int ⇒ T) ⇒ f(2)
 
     val f: Int ⇒ Boolean = x ⇒ x % 2 == 0
 
@@ -203,7 +203,7 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
 
   it should "infer missing types 2" in {
 
-    def q1[F, T](f: F)(g: F => T): T = g(f)
+    def q1[F, T](f: F)(g: F ⇒ T): T = g(f)
 
     def q[F, T] =
       (f: F) ⇒ (g: F ⇒ T) ⇒ g(f)
@@ -235,22 +235,22 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
     // = ((C ⇒ (C ⇒ D) ⇒ D) ⇒ B) ⇒ B
     // A = C ⇒ (C ⇒ D) ⇒ D
 
-    def qq[A, B, C]: ((A => (A => B) => B) => C) => C =
+    def qq[A, B, C]: ((A ⇒ (A ⇒ B) ⇒ B) ⇒ C) ⇒ C =
       q[A ⇒ (A ⇒ B) ⇒ B, C](q[A, B])
 
     // q(q(q))
-    def qqq[A, B, C, D]: ((((A => (A => B) => B) => B) => B) => D) => D = q[((A => (A => B) => B) ⇒ B) ⇒ B, D](q[(A => (A => B) => B), B](q))
+    def qqq[A, B, C, D]: ((((A ⇒ (A ⇒ B) ⇒ B) ⇒ B) ⇒ B) ⇒ D) ⇒ D = q[((A ⇒ (A ⇒ B) ⇒ B) ⇒ B) ⇒ B, D](q[(A ⇒ (A ⇒ B) ⇒ B), B](q))
 
     // q(q)(q) does not work?
     "def qqq0[A, B] = q(q)(q[A, B])" shouldNot compile
 
     // q(q)(q) works when correct type annotations are given:
     def qqq1[A, B, C] =
-      qq[A, B, ((A => (A => B) => B) ⇒ C) ⇒ C](q[A => (A => B) => B, C])
+      qq[A, B, ((A ⇒ (A ⇒ B) ⇒ B) ⇒ C) ⇒ C](q[A ⇒ (A ⇒ B) ⇒ B, C])
 
     // qq[A, B, C](q[F, T]: F ⇒ (F ⇒ T) ⇒ T)
-    // (A => (A => B) => B) => C must equal F ⇒ ((F ⇒ T) ⇒ T)
-    // F must equal A => (A => B) => B
-    // C must equal ((A => (A => B) => B) ⇒ T) ⇒ T
+    // (A ⇒ (A ⇒ B) ⇒ B) ⇒ C must equal F ⇒ ((F ⇒ T) ⇒ T)
+    // F must equal A ⇒ (A ⇒ B) ⇒ B
+    // C must equal ((A ⇒ (A ⇒ B) ⇒ B) ⇒ T) ⇒ T
   }
 }

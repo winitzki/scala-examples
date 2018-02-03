@@ -198,7 +198,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   it should "do ex07 with Cats" in {
 
     implicit val cContraFunctorInstance = new Contravariant[C] {
-      override def contramap[A, B](fa: A ⇒ Int)(f: B => A): B ⇒ Int = implement
+      override def contramap[A, B](fa: A ⇒ Int)(f: B ⇒ A): B ⇒ Int = implement
     }
 
     def cEqual[T: Arbitrary](c1: C[T], c2: C[T]): Assertion = forAll { t: T ⇒ c1(t) shouldEqual c2(t) }

@@ -10,7 +10,7 @@ import cats.evidence.Is
 
 class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
-  behavior of "filterable concepts"
+  behavior of "filterable laws in depth"
 
   final case class Orders[A](tue: Option[A], fri: Option[A])
 
@@ -35,16 +35,16 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
   it should "express filter through flatten and vice versa, check isomorphism" in {
 
+    def filterFromFlatten[F[_] : Functor, A](flatten: F[Option[A]] ⇒ F[A]): (A ⇒ Boolean) ⇒ F[A] ⇒ F[A] = {
+      p ⇒
+        val fmapAOptionA = flip(implicitly[Functor[F]].map[A, Option[A]])
+        fmapAOptionA(bop(p)) andThen flatten
+    }
+
     def flattenFromFilter[F[_] : FilterableWithFilter, A]: F[Option[A]] ⇒ F[A] = {
       foa ⇒
         implicit val functor = implicitly[FilterableWithFilter[F]].functor
         foa.filter(_.nonEmpty).map(_.get)
-    }
-
-    def filterFromFlatten[F[_] : Functor, A](flatten: F[Option[A]] ⇒ F[A]): (A ⇒ Boolean) ⇒ F[A] ⇒ F[A] = {
-      p ⇒
-        val fmapAOptionA = flip(implicitly[Functor[F]].map[A, Option[A]])
-        fmapAOptionA(optB(p)) andThen flatten
     }
 
     // Use the filterable functor Orders[_] as an example.
@@ -86,6 +86,21 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
     def flattenFromMapOptionForOrders[B] = flattenFromMapOption[Orders, Option[B], B](mapOptionFromFlattenForOrders[Option[B], B])
 
     forAll { (orders: Orders[Option[Int]]) ⇒ flattenForOrders(orders) shouldEqual flattenFromMapOptionForOrders(orders) }
+  }
+
+  it should "demonstrate naturality law for `bop`" in {
+    // bop(p): A ⇒ 1 + A is Some.apply andThen (opt ⇒ opt.filter(p))
+    def bopAsComposition[A](p: A ⇒ Boolean): A ⇒ Option[A] = Some.apply[A] _ andThen (_.filter(p))
+
+    // Check that `bop` and `bopAsComposition` are the same function.
+    forAll { (x: Int, p: Int ⇒ Boolean) ⇒ bop(p)(x) shouldEqual bopAsComposition(p)(x) }
+
+    // Naturality law.
+    // f . bop p = bop (f . p) . fmap f
+    // (f: T ⇒ A) . (p: A ⇒ Boolean) is of type T ⇒ Boolean
+    // (f: T ⇒ A) . (bop p): A ⇒ 1 + A   should equal ((bop f . p): T ⇒ 1 + T) . (fmap f): 1 + T ⇒ 1 + A
+    // where fmap is with respect to the Option functor.
+    forAll { (x: String, p: Int ⇒ Boolean, f: String ⇒ Int) ⇒ (f andThen bop(p)) (x) shouldEqual (bop(f andThen p) andThen (_.map(f))) (x) }
   }
 
   behavior of "implementing Filterable type class"

@@ -120,7 +120,7 @@ class Chapter03_03_examples1Spec extends FlatSpec with Matchers with GeneratorDr
         case Left(a) ⇒ Left(a)
         case Right(b) ⇒ ac match {
           case Left(a) ⇒ Left(a)
-          case Right(c) => Right((b, c))
+          case Right(c) ⇒ Right((b, c))
         }
       }
     }

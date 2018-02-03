@@ -8,12 +8,12 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
 
   behavior of "Examples"
 
-  def ex01(f: Int => Int, init: Int, limit: Int): Int = {
+  def ex01(f: Int ⇒ Int, init: Int, limit: Int): Int = {
     Iterator.iterate(init)(f).takeWhile(_ <= limit).size
   }
 
   it should "run ex01" in {
-    ex01(x => 2 * x + 1, 1, 1000) shouldEqual 9
+    ex01(x ⇒ 2 * x + 1, 1, 1000) shouldEqual 9
   }
 
   def ex02(a: Seq[Int], k: Int): Int = {
@@ -27,8 +27,8 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
   }
 
   @tailrec final def ex03(a: Seq[Int]): Int = a match {
-    case Seq(x) => x
-    case _ => ex03(a.drop(1))
+    case Seq(x) ⇒ x
+    case _ ⇒ ex03(a.drop(1))
   }
 
   it should "run ex03" in {
@@ -36,7 +36,7 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
   }
 
   @tailrec final def ex04(arr: Array[Int], x: Int): Int = arr match {
-    case Array(z) => z
+    case Array(z) ⇒ z
     case _ ⇒
       val i = arr.length / 2
       val (left, right) = arr.splitAt(i)
@@ -82,7 +82,7 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
       .zip(ex06(s.toIterator)) // Iterator[(T, T)]
       .drop(1) // remove first pair, which is always (s0, s0)
       .takeWhile { case (x, y) ⇒ x != y } // cut the sequence when repetition occurs
-      .map { case (x, y) => x } // drop the second element
+      .map { case (x, y) ⇒ x } // drop the second element
       .toSeq
   }
 

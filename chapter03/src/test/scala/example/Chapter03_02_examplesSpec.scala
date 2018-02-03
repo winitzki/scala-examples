@@ -50,8 +50,8 @@ class Chapter03_02_examplesSpec extends FlatSpec with Matchers {
     println(s"a is $a, b is $b")
 
     def isThisSaturday(d: DayOfWeek): Boolean = d match {
-      case Saturday => true
-      case _ => false
+      case Saturday ⇒ true
+      case _ ⇒ false
     }
 
     isThisSaturday(a) shouldEqual false
@@ -112,9 +112,9 @@ class Chapter03_02_examplesSpec extends FlatSpec with Matchers {
   }
 
   def rootAverage(roots: RootsOfQuadratic): Option[Double] = roots match {
-    case NoRealRoots => None
-    case EqualRoots(x) => Some(x)
-    case TwoRoots(x, y) => Some((x + y) / 2)
+    case NoRealRoots ⇒ None
+    case EqualRoots(x) ⇒ Some(x)
+    case TwoRoots(x, y) ⇒ Some((x + y) / 2)
   }
 
   it should "ex04: compute rootAverage" in {
@@ -156,11 +156,11 @@ class Chapter03_02_examplesSpec extends FlatSpec with Matchers {
     def f1[A, B]: ((Option[A], Option[B])) ⇒ Option[(A, B)] = {
       case (maybeA, maybeB) ⇒
         maybeA match {
-          case Some(a) => maybeB match {
-            case Some(b) => Some((a, b))
-            case None => None
+          case Some(a) ⇒ maybeB match {
+            case Some(b) ⇒ Some((a, b))
+            case None ⇒ None
           }
-          case None => None
+          case None ⇒ None
         }
     }
 
@@ -180,7 +180,7 @@ class Chapter03_02_examplesSpec extends FlatSpec with Matchers {
     def f2[A, B]: ((Option[A], Option[B])) ⇒ Option[(A, B)] = {
       case (maybeA, maybeB) ⇒
         val result = maybeA.map(x ⇒ maybeB.map(y ⇒ (x, y)))
-        // Option[A] .map ( A => Option[(A, B)] ) : Option[Option[(A, B)]]
+        // Option[A] .map ( A ⇒ Option[(A, B)] ) : Option[Option[(A, B)]]
         result.flatten
     }
 

@@ -16,7 +16,7 @@ class Chapter04_01_workedExamplesSpec extends LawChecking {
     final case class Have3[A](x: A, y: A, z: A) extends Data[A]
 
     def fmap[A, B](f: A ⇒ B): Data[A] ⇒ Data[B] = {
-      case Message(message) => Message[B](message)
+      case Message(message) ⇒ Message[B](message)
       case Have1(x, n) ⇒ Have1(f(x), n)
       case Have3(x, y, z) ⇒ Have3(f(x), f(y), f(z))
     }

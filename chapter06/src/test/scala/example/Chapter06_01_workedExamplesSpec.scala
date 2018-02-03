@@ -27,6 +27,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
 
     final case class Coupons[A](johns: JohnsCoupons[A], jills: JillsCoupons[A])
 
+    // Use `cats.derive` to save ourselves some coding.
     implicit val functorCoupons = derive.functor[Coupons]
 
     implicit val filterableCoupons = new FilterableWithFilter[Coupons] {
