@@ -1,15 +1,16 @@
 package example
 
-import cats.{Contravariant, Functor, data, derive}
-import org.scalatest.FlatSpec
 import cats.syntax.functor._
 import cats.syntax.contravariant._
+import cats.{Contravariant, Functor, derive}
+import example.ContraFilterable._
+import example.Filterable._
 import io.chymyst.ch._
-import org.scalatest.FlatSpec
+import org.scalacheck.Arbitrary
 import org.scalacheck.ScalacheckShapeless._
-import Filterable._
+import org.scalatest.{Assertion, FlatSpec}
 
-class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawChecking {
+class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawChecking with ContraFilterableLawChecking {
 
   final case class Orders[A](tue: Option[A], fri: Option[A])
 
@@ -143,16 +144,13 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
   it should "derive filterable instance for construction 7" in {
     // Construction 7: G[A] ⇒ H[A]
 
-    import ContraFilterable._
-
     implicit def contrafunctor7[G[_] : Contravariant, H[_] : Functor] = new Functor[Lambda[X ⇒ G[X] ⇒ H[X]]] {
       override def map[A, B](fa: G[A] ⇒ H[A])(f: A ⇒ B): G[B] ⇒ H[B] = gb ⇒ fa(gb.contramap(f)).map(f)
     }
 
     implicit def contrafilterable7[G[_] : ContraFilterable : Contravariant, H[_] : Filterable : Functor] = new Filterable[Lambda[X ⇒ G[X] ⇒ H[X]]] {
       override def flatten[A](fa: G[Option[A]] ⇒ H[Option[A]]): G[A] ⇒ H[A] = { ga ⇒
-        val x = fa(ga.inflate)
-        implicitly[Filterable[H]].flatten(x)
+        fa(ga.inflate).flatten
       }
     }
 
@@ -164,15 +162,23 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
       override def contramap[A, B](fa: C3[A])(f: B ⇒ A): C3[B] = implement
     }
 
-    implicit val filterableC3 = new ContraFilterable[C3] {
+    implicit val contrafilterableC3 = new ContraFilterable[C3] {
       override def inflate[A](fa: C3[A]): C3[Option[A]] = implement
     }
+
+    def c3Equals[A: Arbitrary](x: C3[A], y: C3[A]): Assertion = forAll { oa: Option[A] ⇒ x(oa) shouldEqual y(oa) }
+
+    checkContraFilterableLaws[C3, String, Boolean, Double](c3Equals)
 
     // Check that we now have an instance of Filterable for the new types.
     type C7Orders[A] = C3[A] ⇒ Orders[A]
 
     implicitly[Filterable[C7Orders]]
 
+    def c7Equals[A: Arbitrary](x: C7Orders[A], y: C7Orders[A])(implicit fev: Arbitrary[Option[A] ⇒ Int]): Assertion =
+      forAll { (f: Option[A] ⇒ Int) ⇒ x(f) shouldEqual y(f) }
+
+    checkFilterableLaws[C7Orders, Double, String, Boolean](c7Equals[Boolean])
   }
 
 

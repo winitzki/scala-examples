@@ -22,13 +22,16 @@ abstract class ContraFilterable[F[_]](implicit val contrafunctor: Contravariant[
 // Syntax for PTVFs.
 object ContraFilterable {
 
+  // NB: The syntax must be provided by implicit classes with different names than for Filterable.
+  // Otherwise can't use both filterable and contrafilterable syntax in one scope.
+
   // Define `.inflate` syntax.
-  implicit class Syntax1[C[_], A](fa: C[A])(implicit ev: ContraFilterable[C]) {
+  implicit class SyntaxC1[C[_], A](fa: C[A])(implicit ev: ContraFilterable[C]) {
     def inflate: C[Option[A]] = ev.inflate(fa)
   }
 
   // Define `.contramapOption`, `.filter` and `.withFilter` syntax if we already have `.inflate` syntax.
-  implicit class Syntax2[C[_], A](fa: C[A])(implicit ev: ContraFilterable[C]) {
+  implicit class SyntaxC2[C[_], A](fa: C[A])(implicit ev: ContraFilterable[C]) {
     implicit val contrafunctor: Contravariant[C] = ev.contrafunctor
 
     def contramapOption[B](f: B ⇒ Option[A]): C[B] = fa.inflate.contramap(f)
@@ -39,7 +42,7 @@ object ContraFilterable {
   }
 
   // Define `.contramapOption`, `.withFilter`, `.filter`, and `.inflate` syntax if we already have `withFilter`.
-  implicit class Syntax3[C[_], A](fa: C[A])(implicit ev: ContraFilterableWithFilter[C]) {
+  implicit class SyntaxC3[C[_], A](fa: C[A])(implicit ev: ContraFilterableWithFilter[C]) {
     implicit val contrafunctor: Contravariant[C] = ev.contrafunctor
 
     def contramapOption[B](f: B ⇒ Option[A]): C[B] = fa.inflate.contramap(f)
