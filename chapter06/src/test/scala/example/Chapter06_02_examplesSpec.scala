@@ -89,18 +89,31 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
   }
 
   it should "demonstrate naturality law for `bop`" in {
-    // bop(p): A ⇒ 1 + A is Some.apply andThen (opt ⇒ opt.filter(p))
+    // bop(p): A ⇒ 1 + A is  { x: A ⇒ Some(x).filter(p) }
     def bopAsComposition[A](p: A ⇒ Boolean): A ⇒ Option[A] = Some.apply[A] _ andThen (_.filter(p))
 
     // Check that `bop` and `bopAsComposition` are the same function.
     forAll { (x: Int, p: Int ⇒ Boolean) ⇒ bop(p)(x) shouldEqual bopAsComposition(p)(x) }
 
     // Naturality law.
-    // f . bop p = bop (f . p) . fmap f
-    // (f: T ⇒ A) . (p: A ⇒ Boolean) is of type T ⇒ Boolean
-    // (f: T ⇒ A) . (bop p): A ⇒ 1 + A   should equal ((bop f . p): T ⇒ 1 + T) . (fmap f): 1 + T ⇒ 1 + A
+    // f ◦ bop p = bop (f ◦ p) ◦ fmap f
+    // (f: T ⇒ A) ◦ (p: A ⇒ Boolean) is of type T ⇒ Boolean
+    // (f: T ⇒ A) ◦ (bop p): A ⇒ 1 + A   should equal ((bop f ◦ p): T ⇒ 1 + T) ◦ (fmap f): 1 + T ⇒ 1 + A
     // where fmap is with respect to the Option functor.
     forAll { (x: String, p: Int ⇒ Boolean, f: String ⇒ Int) ⇒ (f andThen bop(p)) (x) shouldEqual (bop(f andThen p) andThen (_.map(f))) (x) }
+
+    /* Check this law symbolically:
+    (f ◦ bop p)(x) = bop(p)(f(x)) = Some(f(x)).filter(p)
+     = if (p(f(x)) Some(f(x)) else None  // expression (1)
+
+    (bop (f ◦ p) ◦ fmap f)(x) = (bop(f ◦ p)(x)).map(f)
+     = (Some(x).filter(f ◦ p)).map(f)
+     = (if (p(f(x)) Some(x) else None ).map(f)
+     = (if (p(f(x)) Some(x).map(f) else None.map(f) )
+     = if (p(f(x)) Some(f(x)) else None  // expression (2)
+
+     Expression (1) and expression (2) are identical.
+     */
   }
 
   behavior of "implementing Filterable type class"
