@@ -19,13 +19,17 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
         Orders1(tue.filter(p), fri.filter(p))
     }
 
-    Orders1(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders1(Some(500), None)
+    Orders1(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual
+      Orders1(Some(500), None)
 
-    Orders1(Some(500), None).withFilter(_ < 1000) shouldEqual Orders1(Some(500), None)
+    Orders1(Some(500), None).withFilter(_ < 1000) shouldEqual
+      Orders1(Some(500), None)
 
-    Orders1(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders1(Some(500), Some(2000))
+    Orders1(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual
+      Orders1(Some(500), Some(2000))
 
-    Orders1(Some(500), Some(2000)).withFilter(_ < 0) shouldEqual Orders1(None, None)
+    Orders1(Some(500), Some(2000)).withFilter(_ < 0) shouldEqual
+      Orders1(None, None)
   }
 
   it should "implement additional business rule (a)" in {
@@ -40,11 +44,14 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
       }
     }
 
-    Orders2a(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders2a(None, None)
+    Orders2a(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual
+      Orders2a(None, None)
 
-    Orders2a(Some(500), None).withFilter(_ < 1000) shouldEqual Orders2a(Some(500), None)
+    Orders2a(Some(500), None).withFilter(_ < 1000) shouldEqual
+      Orders2a(Some(500), None)
 
-    Orders2a(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders2a(Some(500), Some(2000))
+    Orders2a(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual
+      Orders2a(Some(500), Some(2000))
   }
 
   it should "implement additional business rule (b)" in {
@@ -57,13 +64,17 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
       }
     }
 
-    Orders2b(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual Orders2b(Some(500), Some(2000))
+    Orders2b(Some(500), Some(2000)).withFilter(_ < 1000) shouldEqual
+      Orders2b(Some(500), Some(2000))
 
-    Orders2b(Some(500), None).withFilter(_ < 1000) shouldEqual Orders2b(Some(500), None)
+    Orders2b(Some(500), None).withFilter(_ < 1000) shouldEqual
+      Orders2b(Some(500), None)
 
-    Orders2b(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual Orders2b(Some(500), Some(2000))
+    Orders2b(Some(500), Some(2000)).withFilter(_ > 0) shouldEqual
+      Orders2b(Some(500), Some(2000))
 
-    Orders2b(Some(500), Some(2000)).withFilter(_ < 0) shouldEqual Orders2b(None, None)
+    Orders2b(Some(500), Some(2000)).withFilter(_ < 0) shouldEqual
+      Orders2b(None, None)
   }
 
   it should "use functor block notation" in {
@@ -73,7 +84,6 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
       if y < 0
       z = x + y * y
       if z < 100
-      p = z - x
     } yield {
       (x, y, z - x)
     }
@@ -222,8 +232,8 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
         case Some(i: Int) ⇒
           // This is safe since we know that A = Int here.
           val j = i.asInstanceOf[A]
-          val k = 0.asInstanceOf[A]
-          if (p(j)) A0(Some(j)) else A0(Some(k))
+          val zero = 0.asInstanceOf[A]
+          if (p(j)) A0(Some(j)) else A0(Some(zero))
         case y ⇒ A0(y.filter(p))
       }
     }
@@ -269,7 +279,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     a1data.filter(_ ⇒ true) shouldNot equal(a1data)
 
     // Identity functor A2[T] = T is not filterable.
-    final case class A2[T](x: T)
+    final case class A2[A](x: A)
 
     implicit val functorA2: Functor[A2] = derive.functor[A2]
 
