@@ -88,8 +88,8 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
     forAll { (orders: Orders[Option[Int]]) ⇒ flattenForOrders(orders) shouldEqual flattenFromMapOptionForOrders(orders) }
   }
 
-  it should "demonstrate naturality law for `bop`" in {
-    // bop(p): A ⇒ 1 + A is  { x: A ⇒ Some(x).filter(p) }
+  it should "demonstrate the naturality law for `bop`" in {
+    // bop(p): A ⇒ 1 + A is  { (x: A) ⇒ Some(x).filter(p) }
     def bopAsComposition[A](p: A ⇒ Boolean): A ⇒ Option[A] = Some.apply[A] _ andThen (_.filter(p))
 
     // Check that `bop` and `bopAsComposition` are the same function.
@@ -111,6 +111,25 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
      = (if (p(f(x)) Some(x) else None ).map(f)
      = (if (p(f(x)) Some(x).map(f) else None.map(f) )
      = if (p(f(x)) Some(f(x)) else None  // expression (2)
+
+     Expression (1) and expression (2) are identical.
+     */
+  }
+
+  it should "demonstrate the conjunction property for `bop`" in {
+    // bop(x ⇒ p1(x) && p2(x))(x) = bop(p1)(x).flatMap (bop(p2))
+
+    forAll { (x: Int, p1: Int ⇒ Boolean, p2: Int ⇒ Boolean) ⇒ bop((x: Int) ⇒ p1(x) && p2(x))(x) shouldEqual bop(p1)(x).flatMap(bop(p2)) }
+
+    /* Check this property symbolically:
+    bop(x ⇒ p1(x) && p2(x))(x) = Some(x).filter(x ⇒ p1(x) && p2(x))
+     = if (p1(x) && p2(x)) Some(x) else None // expression (1)
+
+    bop(p1)(x) = Some(x).filter(p1) = if (p1(x)) Some(x) else None
+
+    bop(p1)(x).flatMap(bop(p2)) = (if (p1(x)) Some(x) else None).flatMap(x ⇒ if (p2(x)) Some(x) else None)
+     = if (p1(x)) { if (p2(x)) Some(x) else None } else None
+     = if (p1(x) && p2(x)) Some(x) else None  // expression (2)
 
      Expression (1) and expression (2) are identical.
      */
