@@ -237,6 +237,19 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     // f(z, _)
     "implicit def functorF[Z] = derive.functor[F[Z, ?]]" shouldNot compile
 
+    /* What we need to define a functor instance for F[Z, A] with respect to A:
+    implicit def functorF[Z] = new Functor[Q] { ... }
+     But we don't have the type constructor `Q`.
+     The `Functor` type class requires a type constructor with a single type argument.
+     But we have F[Z, A] with two type arguments.
+     We need to fix one of the type arguments, Z, and let the other remain free.
+     So we need something like this:
+     implicit def functorF[Z] = new Functor[  Q,  where Q is defined as `type Q[X] = F[Z, X] `   ]
+     A valid Scala syntax for this would be to define `type Q[X]` inside an object and then extract Q from the object's type:
+     implicit def functorF[Z] = new Functor[ new Functor[ ({ type Q[X] = F[Z, X] })#Q ] { ... }
+     But this is quite long and unreadable. The "kind projector" provides a shorter syntax: F[Z, ?].
+     */
+
     // curryhoward's `implement` works here.
     implicit def functorF[Z] = new Functor[F[Z, ?]] {
       override def map[A, B](fa: F[Z, A])(f: A ⇒ B): F[Z, B] = implement
