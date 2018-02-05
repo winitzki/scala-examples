@@ -22,7 +22,7 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
   implicit val functorOrders: Functor[Orders] = derive.functor[Orders]
 
   implicit val filterableOrders = new Filterable[Orders] {
-    override def flatten[A](fa: Orders[Option[A]]): Orders[A] = Orders(fa.tue.flatten, fa.fri.flatten)
+    override def deflate[A](fa: Orders[Option[A]]): Orders[A] = Orders(fa.tue.flatten, fa.fri.flatten)
   }
 
   behavior of "filterable functor constructions"
@@ -42,14 +42,14 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
 
     implicit def filterableProduct[F[_] : Filterable : Functor, G[_] : Filterable : Functor] = {
       new Filterable[Lambda[X ⇒ (F[X], G[X])]] {
-        override def flatten[A](fa: (F[Option[A]], G[Option[A]])): (F[A], G[A]) = (fa._1.flatten, fa._2.flatten)
+        override def deflate[A](fa: (F[Option[A]], G[Option[A]])): (F[A], G[A]) = (fa._1.deflate, fa._2.deflate)
       }
     }
 
     implicit def filterableSum[F[_] : Filterable : Functor, G[_] : Filterable : Functor] = new Filterable[Lambda[X ⇒ Either[F[X], G[X]]]] {
-      override def flatten[A](fa: Either[F[Option[A]], G[Option[A]]]): Either[F[A], G[A]] = fa match {
-        case Left(foa) ⇒ Left(foa.flatten)
-        case Right(goa) ⇒ Right(goa.flatten)
+      override def deflate[A](fa: Either[F[Option[A]], G[Option[A]]]): Either[F[A], G[A]] = fa match {
+        case Left(foa) ⇒ Left(foa.deflate)
+        case Right(goa) ⇒ Right(goa.deflate)
       }
     }
 
@@ -83,8 +83,8 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     }
 
     implicit def filterable5[G[_] : Filterable : Functor] = new Filterable[Lambda[X ⇒ Option[(X, G[X])]]] {
-      override def flatten[A](fa: Option[(Option[A], G[Option[A]])]): Option[(A, G[A])] =
-        fa.flatMap { case (oa, goa) ⇒ oa.map(x ⇒ (x, goa.flatten)) }
+      override def deflate[A](fa: Option[(Option[A], G[Option[A]])]): Option[(A, G[A])] =
+        fa.flatMap { case (oa, goa) ⇒ oa.map(x ⇒ (x, goa.deflate)) }
     }
 
     // Check that we now have an instance of Filterable for the new types.
@@ -119,11 +119,11 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
       }
 
       implicit def filterable6[G[_] : Filterable : Functor] = new Filterable[Lambda[X ⇒ C6[G, X]]] {
-        override def flatten[A](fa: C6[G, Option[A]]): C6[G, A] = fa match {
-          case Base(ga) ⇒ Base(ga.flatten)
+        override def deflate[A](fa: C6[G, Option[A]]): C6[G, A] = fa match {
+          case Base(ga) ⇒ Base(ga.deflate)
           case Step(ox, xfoa) ⇒ ox match {
-            case Some(x) ⇒ Step(x, flatten(xfoa))
-            case None ⇒ flatten(xfoa) // Recursive step: 0 + 1 × F[1 + A] -> F[1 + A] -> F[A]
+            case Some(x) ⇒ Step(x, deflate(xfoa))
+            case None ⇒ deflate(xfoa) // Recursive step: 0 + 1 × F[1 + A] -> F[1 + A] -> F[A]
           }
         }
       }
@@ -149,8 +149,8 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     }
 
     implicit def contrafilterable7[G[_] : ContraFilterable : Contravariant, H[_] : Filterable : Functor] = new Filterable[Lambda[X ⇒ G[X] ⇒ H[X]]] {
-      override def flatten[A](fa: G[Option[A]] ⇒ H[Option[A]]): G[A] ⇒ H[A] = { ga ⇒
-        fa(ga.inflate).flatten
+      override def deflate[A](fa: G[Option[A]] ⇒ H[Option[A]]): G[A] ⇒ H[A] = { ga ⇒
+        fa(ga.inflate).deflate
       }
     }
 

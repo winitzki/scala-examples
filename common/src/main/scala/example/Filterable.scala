@@ -26,8 +26,8 @@ abstract class FilterableWithFilter[F[_]](implicit val functor: Functor[F]) {
 
 // A `Functor` instance is required for creating a `Filterable` instance.
 abstract class Filterable[F[_]](implicit val functor: Functor[F]) {
-  // The `flatten` is the easiest type signature to implement.
-  def flatten[A](fa: F[Option[A]]): F[A]
+  // The `deflate` is the easiest type signature to implement.
+  def deflate[A](fa: F[Option[A]]): F[A]
 }
 
 // Syntax for PTVFs.
@@ -50,33 +50,33 @@ object Filterable {
     def flip: B ⇒ A ⇒ C = ofType[B ⇒ A ⇒ C](f)
   }
 
-  // Define `.flatten` syntax.
+  // Define `.deflate` syntax.
   implicit class Syntax1[F[_], A](fa: F[Option[A]])(implicit ev: Filterable[F]) {
-    def flatten: F[A] = ev.flatten(fa)
+    def deflate: F[A] = ev.deflate(fa)
   }
 
-  // Define `.mapOption`, `.filter` and `.withFilter` syntax if we already have `.flatten` syntax.
+  // Define `.mapOption`, `.filter` and `.withFilter` syntax if we already have `.deflate` syntax.
   implicit class Syntax2[F[_], A](fa: F[A])(implicit ev: Filterable[F]) {
     implicit val functor: Functor[F] = ev.functor
 
-    def mapOption[B](f: A ⇒ Option[B]): F[B] = fa.map(f).flatten
+    def mapOption[B](f: A ⇒ Option[B]): F[B] = fa.map(f).deflate
 
     def filter(p: A ⇒ Boolean): F[A] = mapOption(a ⇒ Some(a).filter(p))
 
     def withFilter(p: A ⇒ Boolean): F[A] = filter(p)
   }
 
-  // Define `.mapOption`, `.withFilter`, `.filter`, and `.flatten` syntax if we already have `withFilter`.
+  // Define `.mapOption`, `.withFilter`, `.filter`, and `.deflate` syntax if we already have `withFilter`.
   implicit class Syntax3[F[_], A](fa: F[A])(implicit ev: FilterableWithFilter[F]) {
     implicit val functor: Functor[F] = ev.functor
 
-    def mapOption[B](f: A ⇒ Option[B]): F[B] = fa.map(f).flatten
+    def mapOption[B](f: A ⇒ Option[B]): F[B] = fa.map(f).deflate
 
     def withFilter(p: A ⇒ Boolean): F[A] = ev.withFilter(p)(fa)
 
     def filter(p: A ⇒ Boolean): F[A] = withFilter(p)
 
-    def flatten[B](implicit aOpt: A Is Option[B]): F[B] =
+    def deflate[B](implicit aOpt: A Is Option[B]): F[B] =
       aOpt.substitute(fa).withFilter(_.nonEmpty).map { case Some(x) ⇒ x }
   }
 
