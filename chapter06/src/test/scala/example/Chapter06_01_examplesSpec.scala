@@ -254,6 +254,42 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     result1 shouldEqual A0(None)
 
+    // To find out what the functor block expands into:
+    val codeForFunctorBlock: String = scala.reflect.runtime.universe.show(scala.reflect.runtime.universe.reify {
+      for {
+        x ← A0(Some(0))
+        y = x - 1
+        if y > 0
+      } yield y
+    })
+
+    println(codeForFunctorBlock)
+
+    /* This prints:
+
+Expr[A0[Int]](`package`.functor.toFunctorOps(Filterable.Syntax3(`package`.functor.toFunctorOps(A0.apply(Some.apply(0)))(functorA0).map(((x) => {
+  val y = x.$minus(1);
+  Tuple2.apply(x, y)
+})))(filterableA0).withFilter(((x$39) => x$39: @unchecked match {
+  case Tuple2((x @ _), (y @ _)) => y.$greater(0)
+})))(functorA0).map(((x$40) => x$40: @unchecked match {
+  case Tuple2((x @ _), (y @ _)) => y
+})))
+
+This code is equivalent to:
+
+A0(Some(0))
+  .map(x ⇒ (x, x - 1))
+  .withFilter { case (x, y) ⇒ y > 0 }
+  .map { case (x, y) ⇒ y }
+
+So `withFilter` is called on an argument of type (Int, Int) (in lower-level Scala syntax, this is Tuple2[Int, Int] )
+representing the pair (x, y) because after the line `y = x - 1` the filtering condition _could_ involve `x` as well as `y`.
+
+Therefore, the filter code does not detect the `Int` type of its argument and filters out the value.
+In this way, the result becomes A0(None).
+     */
+
     val result2 = for {
       x ← A0(Some(0))
       if x - 1 > 0
