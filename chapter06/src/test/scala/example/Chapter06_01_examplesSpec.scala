@@ -288,6 +288,9 @@ representing the pair (x, y) because after the line `y = x - 1` the filtering co
 
 Therefore, the filter code does not detect the `Int` type of its argument and filters out the value.
 In this way, the result becomes A0(None).
+
+Generally, functor blocks will accumulate all defined variables in their `map` and `filter` calls.
+In this way, further lines in the functor block can easily use any of the previously defined variables.
      */
 
     val result2 = for {
@@ -297,6 +300,9 @@ In this way, the result becomes A0(None).
     } yield y
 
     result2 shouldEqual A0(Some(-1))
+
+    // Here, the filter condition is immediately after the first line, so the type of the argument of `withFilter` is `Int`.
+    // This triggers the special logic that causes the filter to make `x` equal `0`. So then `y` becomes `-1`.
 
     result1 shouldNot equal(result2)
 
