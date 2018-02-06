@@ -301,8 +301,8 @@ In this way, further lines in the functor block can easily use any of the previo
 
     result2 shouldEqual A0(Some(-1))
 
-    // Here, the filter condition is immediately after the first line, so the type of the argument of `withFilter` is `Int`.
-    // This triggers the special logic that causes the filter to make `x` equal `0`. So then `y` becomes `-1`.
+    // Here, the filter condition is set immediately after the first line, so the type of the argument of `withFilter` is `Int`.
+    // This triggers the Int-type-specific logic that causes the filter to make `x` equal `0`. So then `y` becomes `-1`.
 
     result1 shouldNot equal(result2)
 
