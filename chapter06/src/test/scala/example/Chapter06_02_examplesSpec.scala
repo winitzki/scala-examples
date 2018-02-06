@@ -3,10 +3,11 @@ package example
 import cats.{Functor, derive}
 import cats.syntax.functor._
 import io.chymyst.ch._
-import org.scalatest.FlatSpec
+import org.scalatest.{Assertion, FlatSpec}
 import org.scalacheck.ScalacheckShapeless._
 import Filterable._
 import cats.evidence.Is
+import org.scalacheck.Arbitrary
 
 class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
@@ -133,6 +134,74 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
      Expression (1) and expression (2) are identical.
      */
+  }
+
+  it should "demonstrate properties of Kleisli-Opt category" in {
+    // Kleisli-Opt composition:
+    def kleisliOptCompose[A, B, C](f: A ⇒ Option[B], g: B ⇒ Option[C]): A ⇒ Option[C] = implement
+
+    // Syntax extension for brevity.
+    implicit class KleisliOptSyntax[A, B](f: A ⇒ Option[B]) {
+      def >=>[C](g: B ⇒ Option[C]): A ⇒ Option[C] = kleisliOptCompose(f, g)
+    }
+
+    // Kleisli-Opt identity:
+    def idOpt[A]: A ⇒ Option[A] = implement
+
+    def checkKleisliOpt[A: Arbitrary, B, C, D]()(
+      implicit evAB: Arbitrary[A ⇒ Option[B]], evBC: Arbitrary[B ⇒ Option[C]], evCD: Arbitrary[C ⇒ Option[D]]
+    ) = {
+      // Associativity of Kleisli-Opt composition: f >=> (g >=> h)  is the same as   (f >=> g) >=> h.
+      forAll { (f: A ⇒ Option[B], g: B ⇒ Option[C], h: C ⇒ Option[D]) ⇒ Utils.funcEq(f >=> (g >=> h), (f >=> g) >=> h)() }
+
+      // Composition with identity on the left:
+      forAll { (x: A, f: A ⇒ Option[B]) ⇒ Utils.funcEq(idOpt[A] >=> f, f)() }
+
+      // Composition with identity on the right:
+      forAll { (x: A, f: A ⇒ Option[B]) ⇒ Utils.funcEq(f, f >=> idOpt[B])() }
+    }
+
+    checkKleisliOpt[Double, Int, String, Boolean]()
+
+    /*
+    Derive these laws symbolically:
+
+    First, decompose any Kleisli-Opt function `f: A ⇒ Option[B]` isomorphically into a pair of functions (p: A ⇒ Boolean, q: PartialFunction[A, B])
+     f(x) = if (p(x)) Some(q(x)) else None
+     p(x) = f(x).nonEmpty
+     q(x) if p(x) = f(x).get
+
+    Second, we note that Kleisli-Opt composition is related to Boolean conjunction:
+
+    f1 >=> f2 = (x ⇒ f1(x).flatMap(f2))
+     = x ⇒ (if (p1(x)) Some(q1(x)) else None).flatMap(y ⇒ if (p2(y)) Some(q2(y)) else None)
+     = x ⇒ if (p1(x) && p2(q1(x))) Some(q2(q1(x))) else None
+
+    Decompose this function into a (p, q) pair:
+
+    p12 = x ⇒ p1(x) && p2(q1(x))
+    q12 = q1 ◦ q2
+
+    Now we can check the laws by checking them for the (p, q) pairs.
+
+    Associativity clearly holds for q.
+
+    Associativity for p:
+
+      The p for f1 >=> (f2 >=> f3) is p1(x) && (p2(y) && p3(q2(y))) where y = q1(x)
+      The p for (f1 >=> f2) >=> f3 is (p1(x) && p2(q1(x))) && p3(q2(q1(x)))
+
+    These expressions are identical.
+
+    Identity law:
+
+    The (p,q) pair for the identity function is (_ ⇒ true, x ⇒ x)
+
+    Left identity: p12(x) = true && p2(x) = p2(x); q12(x) = identity ◦ q2(x) = q2(x)
+
+    Right identity: p12(x) = p1(x) && true = p1(x); q12(x) = q1(x) ◦ identity = q1(x)
+     */
+
   }
 
   behavior of "implementing Filterable type class"
