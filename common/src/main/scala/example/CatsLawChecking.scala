@@ -19,6 +19,13 @@ trait CatsLawChecking extends Matchers with GeneratorDrivenPropertyChecks {
     }
   }
 
+  def checkCatsSemigroupLaws[M: Arbitrary](dataIsEqual: (M, M) ⇒ Assertion = (x: M, y: M) ⇒ x shouldEqual y)(implicit mm: cats.Semigroup[M]): Assertion = {
+    // Associativity law.
+    forAll { (a: M, b: M, c: M) ⇒
+      dataIsEqual(mm.combine(a, mm.combine(b, c)), mm.combine(mm.combine(a, b), c))
+    }
+  }
+
   // A function that can check functor laws for *any* type constructor F[_].
   def checkCatsFunctorLaws[F[_], A, B, C](fcEqual: (F[C], F[C]) ⇒ Assertion = (x: F[C], y: F[C]) ⇒ x shouldEqual y)(implicit
     ff: cats.Functor[F],

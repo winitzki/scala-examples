@@ -205,6 +205,7 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
 
   it should "define withFilter for collapsible product" in {
     // Functor F[A] = 1 + A × A
+    // When only one of the data items fails the filter predicate, the other item is removed as well.
     type F[A] = Option[(A, A)]
 
     implicit val functorF = derive.functor[F]
@@ -212,6 +213,25 @@ class Chapter06_01_examplesSpec extends FlatSpec with FilterableLawChecking {
     implicit val withFilterF = new FilterableWithFilter[F] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: F[A]): F[A] = fa match {
         case Some((x, y)) if p(x) && p(y) ⇒ fa
+        case _ ⇒ None
+      }
+    }
+    checkFilterableLawsWithFilter[F, Boolean, Boolean]()
+    checkFilterableLawsWithFilter[F, Int, String]()
+  }
+
+  it should "define withFilter for duplicating product" in {
+    // Functor F[A] = 1 + A × A
+    // When only one of the data items fails the filter predicate, the other item is duplicated.
+    type F[A] = Option[(A, A)]
+
+    implicit val functorF = derive.functor[F]
+
+    implicit val withFilterF = new FilterableWithFilter[F] {
+      override def withFilter[A](p: A ⇒ Boolean)(fa: F[A]): F[A] = fa match {
+        case Some((x, y)) if p(x) && p(y) ⇒ fa
+        case Some((x, y)) if p(x) ⇒ Some((x, x))
+        case Some((x, y)) if p(y) ⇒ Some((y, y))
         case _ ⇒ None
       }
     }
