@@ -76,7 +76,7 @@ class Chapter06_02_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
   behavior of "filterable functor construction 5 and 6"
 
   it should "derive filterable instance for construction 5" in {
-    // Construction 5: 1 + A × G[A]
+    // Construction 5: F[A] = 1 + A × G[A]
 
     implicit def functor5[G[_] : Functor] = new Functor[Lambda[X ⇒ Option[(X, G[X])]]] {
       override def map[A, B](fa: Option[(A, G[A])])(f: A ⇒ B): Option[(B, G[B])] = fa.map { case (x, gx) ⇒ (f(x), gx.map(f)) }

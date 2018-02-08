@@ -36,7 +36,7 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
   it should "express filter through deflate and vice versa, check isomorphism" in {
 
-    def filterFromdeflate[F[_] : Functor, A](deflate: F[Option[A]] ⇒ F[A]): (A ⇒ Boolean) ⇒ F[A] ⇒ F[A] = {
+    def filterFromDeflate[F[_] : Functor, A](deflate: F[Option[A]] ⇒ F[A]): (A ⇒ Boolean) ⇒ F[A] ⇒ F[A] = {
       p ⇒
         val fmapAOptionA = flip(implicitly[Functor[F]].map[A, Option[A]])
         fmapAOptionA(bop(p)) andThen deflate
@@ -53,9 +53,9 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     def deflateForOrders[A] = deflateFromFilter[Orders, A]
 
-    def filterFromdeflateForOrders[A] = filterFromdeflate[Orders, A](deflateForOrders)
+    def filterFromDeflateForOrders[A] = filterFromDeflate[Orders, A](deflateForOrders)
 
-    forAll { (orders: Orders[Int], p: Int ⇒ Boolean) ⇒ orders.filter(p) shouldEqual filterFromdeflateForOrders(p)(orders) }
+    forAll { (orders: Orders[Int], p: Int ⇒ Boolean) ⇒ orders.filter(p) shouldEqual filterFromDeflateForOrders(p)(orders) }
   }
 
   it should "express mapOption through deflate and vice versa, check isomorphism" in {
@@ -70,7 +70,7 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
         }(fa)
     }
 
-    def mapOptionFromdeflate[F[_] : Functor, A, B](deflate: F[Option[B]] ⇒ F[B]): (A ⇒ Option[B]) ⇒ F[A] ⇒ F[B] = {
+    def mapOptionFromDeflate[F[_] : Functor, A, B](deflate: F[Option[B]] ⇒ F[B]): (A ⇒ Option[B]) ⇒ F[A] ⇒ F[B] = {
       f ⇒
         val fmapAOptionB = flip(implicitly[Functor[F]].map[A, Option[B]])
         fmapAOptionB(f) andThen deflate
@@ -82,9 +82,9 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     def deflateForOrders[B]: Orders[Option[B]] ⇒ Orders[B] = fob ⇒ fob.filter(_.nonEmpty).map(_.get)
 
-    def mapOptionFromdeflateForOrders[A, B] = mapOptionFromdeflate[Orders, A, B](deflateForOrders)
+    def mapOptionFromDeflateForOrders[A, B] = mapOptionFromDeflate[Orders, A, B](deflateForOrders)
 
-    def deflateFromMapOptionForOrders[B] = deflateFromMapOption[Orders, Option[B], B](mapOptionFromdeflateForOrders[Option[B], B])
+    def deflateFromMapOptionForOrders[B] = deflateFromMapOption[Orders, Option[B], B](mapOptionFromDeflateForOrders[Option[B], B])
 
     forAll { (orders: Orders[Option[Int]]) ⇒ deflateForOrders(orders) shouldEqual deflateFromMapOptionForOrders(orders) }
   }
@@ -101,7 +101,8 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
     // (f: T ⇒ A) ◦ (p: A ⇒ Boolean) is of type T ⇒ Boolean
     // (f: T ⇒ A) ◦ (bop p): A ⇒ 1 + A   should equal ((bop f ◦ p): T ⇒ 1 + T) ◦ (fmap f): 1 + T ⇒ 1 + A
     // where fmap is with respect to the Option functor.
-    forAll { (x: String, p: Int ⇒ Boolean, f: String ⇒ Int) ⇒ (f andThen bop(p)) (x) shouldEqual (bop(f andThen p) andThen (_.map(f))) (x) }
+    forAll { (x: String, p: Int ⇒ Boolean, f: String ⇒ Int) ⇒
+      (f andThen bop(p)) (x) shouldEqual (bop(f andThen p) andThen (_.map(f))) (x) }
 
     /* Check this law symbolically:
     (f ◦ bop p)(x) = bop(p)(f(x)) = Some(f(x)).filter(p)
@@ -109,18 +110,28 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
 
     (bop (f ◦ p) ◦ fmap f)(x) = (bop(f ◦ p)(x)).map(f)
      = (Some(x).filter(f ◦ p)).map(f)
-     = (if (p(f(x)) Some(x) else None ).map(f)
-     = (if (p(f(x)) Some(x).map(f) else None.map(f) )
+     = (if (p(f(x)) Some(x) else None).map(f)
+     = (if (p(f(x)) Some(x).map(f) else None.map(f))
      = if (p(f(x)) Some(f(x)) else None  // expression (2)
 
      Expression (1) and expression (2) are identical.
      */
   }
 
+  /*
+  Law 4 holds for Option.
+  Some(x).filter(p).map { case x if p(x) ⇒ f(x) }
+   = (if (p(x)) Some(x).map { case x if p(x) ⇒ f(x) } else None)
+   = (if (p(x)) Some( f(x)  ) else None)
+   = Some(f(x)).filter(p) = Some(x).filter(p).map(f)
+   */
+
   it should "demonstrate the conjunction property for `bop`" in {
     // bop(x ⇒ p1(x) && p2(x))(x) = bop(p1)(x).flatMap (bop(p2))
 
-    forAll { (x: Int, p1: Int ⇒ Boolean, p2: Int ⇒ Boolean) ⇒ bop((x: Int) ⇒ p1(x) && p2(x))(x) shouldEqual bop(p1)(x).flatMap(bop(p2)) }
+    forAll { (x: Int, p1: Int ⇒ Boolean, p2: Int ⇒ Boolean) ⇒
+      bop((x: Int) ⇒ p1(x) && p2(x))(x) shouldEqual bop(p1)(x).flatMap(bop(p2))
+    }
 
     /* Check this property symbolically:
     bop(x ⇒ p1(x) && p2(x))(x) = Some(x).filter(x ⇒ p1(x) && p2(x))
@@ -146,13 +157,16 @@ class Chapter06_02_examplesSpec extends FlatSpec with FilterableLawChecking {
     }
 
     // Kleisli-Opt identity:
-    def idOpt[A]: A ⇒ Option[A] = implement
+    def idOpt[A]: A ⇒ Option[A] = implement // { (x: A) ⇒ Some(x) }
 
     def checkKleisliOpt[A: Arbitrary, B, C, D]()(
       implicit evAB: Arbitrary[A ⇒ Option[B]], evBC: Arbitrary[B ⇒ Option[C]], evCD: Arbitrary[C ⇒ Option[D]]
     ) = {
-      // Associativity of Kleisli-Opt composition: f >=> (g >=> h)  is the same as   (f >=> g) >=> h.
-      forAll { (f: A ⇒ Option[B], g: B ⇒ Option[C], h: C ⇒ Option[D]) ⇒ Utils.funcEq(f >=> (g >=> h), (f >=> g) >=> h)() }
+      // Associativity of Kleisli-Opt composition:
+      // f >=> (g >=> h)  is the same as   (f >=> g) >=> h.
+      forAll { (f: A ⇒ Option[B], g: B ⇒ Option[C], h: C ⇒ Option[D]) ⇒
+        Utils.funcEq(f >=> (g >=> h), (f >=> g) >=> h)()
+      }
 
       // Composition with identity on the left:
       forAll { (x: A, f: A ⇒ Option[B]) ⇒ Utils.funcEq(idOpt[A] >=> f, f)() }
