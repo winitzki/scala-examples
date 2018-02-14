@@ -61,4 +61,4 @@ lazy val chapter07 = (project in file("chapter07"))
 
 lazy val exercises_solutions = (project in file("exercises-solutions"))
   .settings(commonSettings)
-  .dependsOn(common)
+  .dependsOn(common % "compile->compile;test->compile")
