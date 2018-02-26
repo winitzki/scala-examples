@@ -34,7 +34,9 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     type F[A] = Either[A, (A, A)]
 
     implicit val functorF: Functor[F] = derive.functor[F]
-
+//    implicit val functorF: Functor[F] = new Functor[F] {
+//      override def map[A, B](fa: F[A])(f: A => B): F[B] = implement
+//    }
     implicit val flattenableF: Flattenable[F] = new Flattenable[F] {
 
       private def extractLeft[A](fa: F[A]): A = fa match {
@@ -55,7 +57,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 //      }
     }
 
-    checkFlattenLaws[F, Boolean, Boolean]()
+    checkFlattenLaws[F, Int, String]()
   }
 
 }
