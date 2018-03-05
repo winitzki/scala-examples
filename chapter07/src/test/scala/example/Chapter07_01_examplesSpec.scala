@@ -200,6 +200,17 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
     def dnfFalse[A] = DNF[A](Set())
 
+    /*
+    Before writing a full implementation, let us try implementing the dnf2cnf conversion on an example.
+    (a && b) || (c && d)  ---->   (a || c) && (a || d) && (b || c) && (b || d)
+
+    The code would be like this:
+    for {
+       x ← Set('a, 'b) // first clause
+       y ← Set('c, 'd) // second clause
+    } yield Set(x) ++ Set(y)
+     */
+
     def dnf2cnf[A](dnf: DNF[A]): CNF[A] = dnf.v.headOption match {
       case None ⇒ CNF(Set(Set())) // False
       case Some(firstClause) ⇒ // firstClause is a && b
