@@ -21,7 +21,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
       val product = i * j
       s"$i * $j = $product"
     }
-    
+
     result shouldEqual Seq(
       "1 * 1 = 1", "1 * 2 = 2", "1 * 3 = 3", "1 * 4 = 4", "1 * 5 = 5",
       "2 * 2 = 4", "2 * 3 = 6", "2 * 4 = 8", "2 * 5 = 10",
@@ -119,7 +119,6 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
   it should "4b. Generalize example 2" in {
 
-    // Organize the selection by hand.
     def subsets[A](xs: Set[A]): Set[Set[A]] = xs.headOption match {
       case None ⇒ Set(Set())
       case Some(x) ⇒ for {
@@ -140,13 +139,13 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
     def subsequences[A](xs: Seq[A], n: Int): Seq[Seq[A]] = {
       if (n == 0)
-        Seq(Seq())
+        Seq(Seq()) // Check this first.
       else if (xs.isEmpty)
         Seq()
       else
         (for {
           xs ← xs.tails // 1 to n, 2 to n, etc.
-          if xs.nonEmpty
+          if xs.nonEmpty // The last element of `.tails` is an empty list.
           x = xs.head // xs is non-empty here
           remain = xs.tail
           yys ← subsequences(remain, n - 1)
@@ -161,7 +160,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
   }
 
   // Helper function for the n-queens problem.
-  def noThreat(prev: Int*): Int ⇒ Boolean = { otherX ⇒
+  def noThreat(prev: Int*)(otherX: Int): Boolean = {
     val otherY = prev.length
     prev.zipWithIndex.forall { case (x, y) ⇒
       x != otherX && x - y != otherX - otherY && x + y != otherX + otherY
@@ -173,14 +172,22 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
     val solutions: Seq[Seq[Int]] = for {
       x1 ← row
-      x2 ← row.filter(noThreat(x1))
-      x3 ← row.filter(noThreat(x1, x2))
-      x4 ← row.filter(noThreat(x1, x2, x3))
-      x5 ← row.filter(noThreat(x1, x2, x3, x4))
-      x6 ← row.filter(noThreat(x1, x2, x3, x4, x5))
-      x7 ← row.filter(noThreat(x1, x2, x3, x4, x5, x6))
-      x8 ← row.filter(noThreat(x1, x2, x3, x4, x5, x6, x7))
-    } yield Seq(x1, x2, x3, x4, x5, x6, x7, x8)
+      x2 ← row
+      if noThreat(x1)(x2) // queen 2 does not threaten queen 1
+      x3 ← row
+      if noThreat(x1, x2)(x3) // queen 3 does not threaten previous queens
+      x4 ← row
+      if noThreat(x1, x2, x3)(x4)
+      x5 ← row
+      if noThreat(x1, x2, x3, x4)(x5)
+      x6 ← row
+      if noThreat(x1, x2, x3, x4, x5)(x6)
+      x7 ← row
+      if noThreat(x1, x2, x3, x4, x5, x6)(x7)
+      x8 ← row
+      if noThreat(x1, x2, x3, x4, x5, x6, x7)(x8)
+    } yield
+      Seq(x1, x2, x3, x4, x5, x6, x7, x8)
 
     solutions.length shouldEqual 92
   }
@@ -191,7 +198,8 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
       val row = 0 until n
 
       def nQueensPartial(m: Int, prev: Seq[Int]): Seq[Seq[Int]] = if (m == 0) Seq(Seq()) else for {
-        x ← row.filter(noThreat(prev: _*))
+        x ← row
+        if noThreat(prev: _*)(x)
         newQueens = prev :+ x
         rest ← nQueensPartial(m - 1, newQueens)
       } yield Seq(x) ++ rest
