@@ -9,9 +9,44 @@ import org.scalatest.FlatSpec
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
 
-import scala.collection.immutable
-
 class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
+
+  behavior of "initial examples"
+
+  it should "compute some sequences with functor block" in {
+    val result = for {
+      i ← 1 to 5
+      j ← i to 5
+    } yield {
+      val product = i * j
+      s"$i * $j = $product"
+    }
+    
+    result shouldEqual Seq(
+      "1 * 1 = 1", "1 * 2 = 2", "1 * 3 = 3", "1 * 4 = 4", "1 * 5 = 5",
+      "2 * 2 = 4", "2 * 3 = 6", "2 * 4 = 8", "2 * 5 = 10",
+      "3 * 3 = 9", "3 * 4 = 12", "3 * 5 = 15",
+      "4 * 4 = 16", "4 * 5 = 20",
+      "5 * 5 = 25"
+    )
+  }
+
+  it should "compute sequences with functor block using filter" in {
+    val result = for {
+      i ← 1 to 5
+      j ← 1 to 5
+      if j >= i
+      product = i * j
+    } yield s"$i * $j = $product"
+
+    result shouldEqual Seq(
+      "1 * 1 = 1", "1 * 2 = 2", "1 * 3 = 3", "1 * 4 = 4", "1 * 5 = 5",
+      "2 * 2 = 4", "2 * 3 = 6", "2 * 4 = 8", "2 * 5 = 10",
+      "3 * 3 = 9", "3 * 4 = 12", "3 * 5 = 15",
+      "4 * 4 = 16", "4 * 5 = 20",
+      "5 * 5 = 25"
+    )
+  }
 
   behavior of "worked examples: list-like monads"
 
