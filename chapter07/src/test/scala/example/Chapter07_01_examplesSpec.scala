@@ -9,12 +9,14 @@ import org.scalatest.FlatSpec
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
 
+import scala.collection.immutable
+
 class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
 
   behavior of "initial examples"
 
   it should "compute some sequences with functor block" in {
-    val result = for {
+    val result: Seq[String] = for {
       i ← 1 to 5
       j ← i to 5
     } yield {
@@ -22,30 +24,35 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
       s"$i * $j = $product"
     }
 
-    result shouldEqual Seq(
-      "1 * 1 = 1", "1 * 2 = 2", "1 * 3 = 3", "1 * 4 = 4", "1 * 5 = 5",
-      "2 * 2 = 4", "2 * 3 = 6", "2 * 4 = 8", "2 * 5 = 10",
-      "3 * 3 = 9", "3 * 4 = 12", "3 * 5 = 15",
-      "4 * 4 = 16", "4 * 5 = 20",
-      "5 * 5 = 25"
-    )
+    result shouldEqual multTable
   }
 
+  lazy val multTable = Seq(
+    "1 * 1 = 1", "1 * 2 = 2", "1 * 3 = 3", "1 * 4 = 4", "1 * 5 = 5",
+    "2 * 2 = 4", "2 * 3 = 6", "2 * 4 = 8", "2 * 5 = 10",
+    "3 * 3 = 9", "3 * 4 = 12", "3 * 5 = 15",
+    "4 * 4 = 16", "4 * 5 = 20",
+    "5 * 5 = 25"
+  )
+
   it should "compute sequences with functor block using filter" in {
-    val result = for {
+    val result: Seq[String] = for {
       i ← 1 to 5
       j ← 1 to 5
       if j >= i
       product = i * j
     } yield s"$i * $j = $product"
 
-    result shouldEqual Seq(
-      "1 * 1 = 1", "1 * 2 = 2", "1 * 3 = 3", "1 * 4 = 4", "1 * 5 = 5",
-      "2 * 2 = 4", "2 * 3 = 6", "2 * 4 = 8", "2 * 5 = 10",
-      "3 * 3 = 9", "3 * 4 = 12", "3 * 5 = 15",
-      "4 * 4 = 16", "4 * 5 = 20",
-      "5 * 5 = 25"
-    )
+    result shouldEqual multTable
+  }
+
+  it should "generate empty sequence when one of the containers is empty" in {
+    val result: Seq[Int] = for {
+      x ← 1 to 100
+      y ← Seq()
+    } yield x
+
+    result shouldEqual Seq()
   }
 
   behavior of "worked examples: list-like monads"
@@ -61,13 +68,12 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     } yield {
       Seq(x, y, z)
     }
-    val expected = xs.permutations.toSeq
+
+    val expected = xs.permutations.toSeq // Standard library function.
     permutations shouldEqual expected
   }
 
   it should "2. Compute all subsets of a set of 3" in {
-    val xs = Set("a", "b", "c")
-    val expected = xs.subsets.toSet
 
     // Organize the selection by hand.
     val subsets: Set[Set[String]] = for {
@@ -77,12 +83,14 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     } yield {
       xa ++ xb ++ xc
     }
+
+    val xs = Set("a", "b", "c")
+    val expected = xs.subsets.toSet // Standard library function.
     subsets shouldEqual expected
   }
 
   it should "3. Compute all subsequences of length 3 out of given sequence" in {
     val givenSequence = 1 to 5
-    val expected = Seq(Seq(1, 2, 3), Seq(1, 2, 4), Seq(1, 2, 5), Seq(1, 3, 4), Seq(1, 3, 5), Seq(1, 4, 5), Seq(2, 3, 4), Seq(2, 3, 5), Seq(2, 4, 5), Seq(3, 4, 5))
 
     val subsequences = for {
       xs ← givenSequence.tails // 1 to 5, 2 to 5, 3 to 5, 4 to 5, 5 to 5, Nil
@@ -99,16 +107,23 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     } yield {
       Seq(x, y, z)
     }
+
+    val expected = Seq(Seq(1, 2, 3), Seq(1, 2, 4), Seq(1, 2, 5), Seq(1, 3, 4), Seq(1, 3, 5), Seq(1, 4, 5), Seq(2, 3, 4), Seq(2, 3, 5), Seq(2, 4, 5), Seq(3, 4, 5))
     subsequences.toSeq shouldEqual expected
   }
 
   it should "4a. Generalize example 1" in {
-    def permutations[A](xs: Seq[A]): Seq[Seq[A]] = if (xs.isEmpty) Seq(Seq()) else for {
-      x ← xs
-      remain1 = xs diff Seq(x)
-      ys ← permutations(remain1)
-    } yield {
-      Seq(x) ++ ys
+
+    def permutations[A](xs: Seq[A]): Seq[Seq[A]] = {
+      if (xs.isEmpty)
+        Seq(Seq())
+      else for {
+        x ← xs
+        remain1 = xs diff Seq(x)
+        ys ← permutations(remain1) // Recursive call.
+      } yield {
+        Seq(x) ++ ys
+      }
     }
 
     val xs = Seq("a", "b", "c", "d", "e")
@@ -119,12 +134,13 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
   it should "4b. Generalize example 2" in {
 
+    // Choose some element x from the set. Compute all subsets that contain x, and then compute all subsets that do not.
     def subsets[A](xs: Set[A]): Set[Set[A]] = xs.headOption match {
       case None ⇒ Set(Set())
       case Some(x) ⇒ for {
         xa ← Set(Set[A](), Set(x))
         remain = xs - x
-        yas ← subsets(remain)
+        yas ← subsets(remain) // Recursive call.
       } yield {
         xa ++ yas
       }
@@ -148,7 +164,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
           if xs.nonEmpty // The last element of `.tails` is an empty list.
           x = xs.head // xs is non-empty here
           remain = xs.tail
-          yys ← subsequences(remain, n - 1)
+          yys ← subsequences(remain, n - 1) // Recursive call.
         } yield {
           Seq(x) ++ yys
         }).toSeq
@@ -201,7 +217,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
         x ← row
         if noThreat(prev: _*)(x)
         newQueens = prev :+ x
-        rest ← nQueensPartial(m - 1, newQueens)
+        rest ← nQueensPartial(m - 1, newQueens) // Recursive call.
       } yield Seq(x) ++ rest
 
       nQueensPartial(n, Seq())
