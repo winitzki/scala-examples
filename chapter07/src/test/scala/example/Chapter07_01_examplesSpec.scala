@@ -5,13 +5,13 @@ import cats.{Functor, Monoid, derive}
 import cats.syntax.functor._
 import cats.syntax.semigroup._
 import io.chymyst.ch._
-import org.scalatest.FlatSpec
+import org.scalatest.{FlatSpec, Matchers}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
 
 import scala.collection.immutable
 
-class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
+class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
 
   behavior of "initial examples"
 
@@ -155,7 +155,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
     def subsequences[A](xs: Seq[A], n: Int): Seq[Seq[A]] = {
       if (n == 0)
-        Seq(Seq()) // Check this first.
+        Seq(Seq()) // Check this first because n == 0 means "we are done" even if xs is empty.
       else if (xs.isEmpty)
         Seq()
       else
@@ -260,7 +260,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     def dnfFalse[A] = DNF[A](Set())
 
     /*
-    Before writing a full implementation, let us try implementing the dnf2cnf conversion on an example.
+    Before writing a full implementation, let us try implementing the dnf2cnf conversion for an example.
     (a && b) || (c && d)  ---->   (a || c) && (a || d) && (b || c) && (b || d)
 
     The code would be like this:
@@ -302,6 +302,49 @@ class Chapter07_01_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     // dnf2cnf is equal to its own inverse.
     dnf2cnf(DNF(cnf1.v)) shouldEqual CNF(dnf1.v)
   }
+
+  it should "demonstrate linear algebra manipulations" in {
+
+    // Compute matrix transpose.
+    def transpose[A](xss: Seq[Seq[A]]): Seq[Seq[A]] = for {
+      i ← xss.head.indices
+    } yield {
+      for {
+        xs ← xss
+      } yield xs(i)
+    }
+
+    transpose(Seq(
+      Seq(1, 2),
+      Seq(3, 4),
+      Seq(5, 6)
+    )) shouldEqual Seq(
+      Seq(1, 3, 5),
+      Seq(2, 4, 6)
+    )
+
+    import scala.math.Numeric.Implicits._
+
+    // Compute scalar product of two vectors.
+    def scalprod[N: Numeric](xs: Seq[N], ys: Seq[N]) = (for {
+      (x, y) ← xs zip ys
+    } yield x * y
+      ).sum
+
+    scalprod(Seq(1, 2, 3), Seq(3, 2, 1)) shouldEqual 10
+
+    // Compute matrix product.
+    def matmul[N: Numeric](xss: Seq[Seq[N]], yss: Seq[Seq[N]]) = {
+      for (xs ← xss) yield
+        for (yst ← transpose(yss)) yield
+          scalprod(xs, yst)
+    }
+
+    val mat = Seq(Seq(1, 1), Seq(-1, 1))
+    matmul(mat, mat) shouldEqual Seq(Seq(0, 2), Seq(-2, 0))
+  }
+
+  behavior of "worked examples: pass/fail monads"
 
   /*
     behavior of "misc. examples"
