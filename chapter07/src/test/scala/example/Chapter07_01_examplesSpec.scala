@@ -1,15 +1,20 @@
 package example
 
 import cats.kernel.Semigroup
-import cats.{Functor, Monoid, derive}
+import cats.{FlatMap, Functor, Monoid, derive}
 import cats.syntax.functor._
 import cats.syntax.semigroup._
 import io.chymyst.ch._
 import org.scalatest.{FlatSpec, Matchers}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
+import Utils.time
+import cats.syntax.flatMap
 
 import scala.collection.immutable
+import scala.concurrent.duration.{Duration, DurationConversions}
+import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Try}
 
 class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
 
@@ -326,10 +331,12 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
     import scala.math.Numeric.Implicits._
 
     // Compute scalar product of two vectors.
-    def scalprod[N: Numeric](xs: Seq[N], ys: Seq[N]) = (for {
-      (x, y) ← xs zip ys
-    } yield x * y
-      ).sum
+    def scalprod[N: Numeric](xs: Seq[N], ys: Seq[N]) = {
+      (for {
+        (x, y) ← xs zip ys
+      } yield x * y
+        ).sum
+    }
 
     scalprod(Seq(1, 2, 3), Seq(3, 2, 1)) shouldEqual 10
 
@@ -340,11 +347,213 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
           scalprod(xs, yst)
     }
 
-    val mat = Seq(Seq(1, 1), Seq(-1, 1))
-    matmul(mat, mat) shouldEqual Seq(Seq(0, 2), Seq(-2, 0))
+    val mat = Seq(
+      Seq(1, 1),
+      Seq(-1, 1)
+    )
+    matmul(mat, mat) shouldEqual Seq(
+      Seq(0, 2),
+      Seq(-2, 0)
+    )
   }
 
   behavior of "worked examples: pass/fail monads"
+
+  it should "1. Read values of Java properties, checking that they all exist" in {
+    System.setProperty("client 1", "corporation 1")
+    System.setProperty("client 2", "corporation 2")
+    System.setProperty("corporation 1", "orders 1")
+    System.setProperty("corporation 2", "orders 2")
+    System.setProperty("orders 1", "123")
+    System.setProperty("orders 2", "456")
+
+    def getOrders(client: String): Option[Int] = for {
+      corporation ← Option(System.getProperty(client))
+      orders ← Option(System.getProperty(corporation))
+      stringValue ← Option(System.getProperty(orders))
+      intValue ← Try(stringValue.toInt).toOption
+    } yield intValue
+
+    getOrders("client 1") shouldEqual Some(123)
+    getOrders("client 2") shouldEqual Some(456)
+    getOrders("client 3") shouldEqual None
+  }
+
+  it should "2. Obtain values from Future computations in sequence" in {
+
+    val n = 2000
+    import scala.concurrent.ExecutionContext.Implicits.global
+
+    def longComputation(c: Double): Future[Double] = Future {
+      (for {
+        i ← 1 to n
+        j ← 1 to n
+        x = math.cos(i * math.cos(i + math.cos(j * math.cos(j + c)))) // whatever
+      } yield x).sum
+    }
+
+    // Compute several of these in sequence.
+    val (r1, t1) = time {
+      val result1 = for {
+        x ← longComputation(1.0)
+        y ← longComputation(x)
+        z ← longComputation(y)
+      } yield y
+      Await.result(result1, Duration.Inf)
+    }
+
+    println(s"Computing $n iterations with sequential futures yields $r1 in $t1 seconds")
+
+    // Similar computation where we can start all the futures in parallel.
+    val (r2, t2) = time {
+      val c1 = longComputation(1.0)
+      val c2 = longComputation(2.0)
+      val c3 = longComputation(3.0)
+
+      val result2 = for {
+        x ← c1
+        y ← c2
+        z ← c3
+      } yield y
+      Await.result(result2, Duration.Inf)
+    }
+
+    println(s"Computing $n iterations with parallel futures yields $r2 in $t2 seconds")
+
+    /*
+Computing 2000 iterations with sequential futures yields 1483.4944693546663 in 6.207532281 seconds
+Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.774459626 seconds
+     */
+  }
+
+  it should "3. Make arithmetic safe by returning error messages in Either" in {
+    type SafeDouble = Either[String, Double]
+
+    implicit def safeOp(x: Double): SafeDouble = Right(x)
+
+    def safeDivide(x: Double, y: Double): SafeDouble = if (y == 0.0) Left(s"Error: dividing $x by 0") else Right(x / y)
+
+    safeDivide(1.0, 0.0) shouldEqual Left(s"Error: dividing 1.0 by 0")
+
+    val result: SafeDouble = for {
+      x ← 1.0 // automatic conversion
+      y ← safeDivide(x, 1.0)
+      z ← x + y // automatic conversion
+    } yield z
+
+    result shouldEqual Right(2.0)
+
+    val badResult: SafeDouble = for {
+      x ← 1.0
+      y ← safeDivide(x, 0.0)
+      z ← x + y // automatic conversion
+    } yield z
+
+    badResult shouldEqual Left(s"Error: dividing 1.0 by 0")
+  }
+
+  it should "4. Fail less: chain computations that may throw an exception" in {
+    // Computations f1, f2, ... may throw exceptions.
+    def f1(x: Int): Int = 2 / x
+
+    def f2(x: Int): Int = 2 - x
+
+    def f3(x: Int): Int = 1 / x
+
+    // The ordinary for/yield chain will require all of them to pass.
+    val result = for {
+      x ← Try(f1(1))
+      y ← Try(f2(x))
+      z ← Try(f3(y))
+    } yield z
+
+    result match {
+      case Failure(t) ⇒ t should have message "/ by zero"
+    }
+  }
+
+  behavior of "worked examples: tree-like monads"
+
+  it should "1. Implement a tree of String properties with arbitrary branching" in {
+    // Need to introduce a type parameter.
+
+    sealed trait PropTree[A] {
+      // For simplicity, implement map and flatMap directly in the trait.
+      def map[B](f: A ⇒ B): PropTree[B]
+
+      def flatMap[B](f: A ⇒ PropTree[B]): PropTree[B]
+    }
+
+    final case class Leaf[A](value: A) extends PropTree[A] {
+      override def map[B](f: A ⇒ B): PropTree[B] = Leaf(f(value))
+
+      override def flatMap[B](f: A ⇒ PropTree[B]): PropTree[B] = f(value)
+    }
+
+    final case class Fork[A](name: String, trees: Seq[PropTree[A]]) extends PropTree[A] {
+      override def map[B](f: A ⇒ B): PropTree[B] = Fork(name, trees.map(_.map(f)))
+
+      override def flatMap[B](f: A ⇒ PropTree[B]): PropTree[B] = Fork(name, trees.map(_.flatMap(f)))
+    }
+
+    val tree: PropTree[Int] = Fork("a1", Seq(Leaf(1), Leaf(2), Fork("a2", Seq(Leaf(3)))))
+
+    tree.map(_ + 10) shouldEqual Fork("a1", Seq(
+      Leaf(11), Leaf(12), Fork("a2", Seq(
+        Leaf(13)
+      ))
+    ))
+
+    tree.flatMap { x ⇒ if (x > 1) Leaf(x) else Fork("small", Seq(Leaf(x))) } shouldEqual Fork("a1", Seq(
+      Fork("small", Seq(
+        Leaf(1)
+      )), Leaf(2), Fork("a2", Seq(
+        Leaf(3)
+      ))
+    ))
+  }
+
+  // Language supports constants, variables, and multiplication.
+  // The type parameter A describes variables (values are `Int`), so flatMap performs variable substitution.
+  // Known scalac issue: Cannot define trait/case class hierarchy within a function scope. See https://issues.scala-lang.org/browse/SI-5252
+  sealed trait Term[A] {
+    def map[B](f: A ⇒ B): Term[B]
+
+    def flatMap[B](f: A ⇒ Term[B]): Term[B]
+
+    def *(y: Term[A]): Term[A] = Mult(this, y)
+  }
+
+  final case class Const[A](value: Int) extends Term[A] {
+    override def map[B](f: A ⇒ B): Term[B] = Const(value)
+
+    override def flatMap[B](f: A ⇒ Term[B]): Term[B] = Const(value)
+  }
+
+  final case class Var[A](name: A) extends Term[A] {
+    override def map[B](f: A ⇒ B): Term[B] = Var(f(name))
+
+    override def flatMap[B](f: A ⇒ Term[B]): Term[B] = f(name)
+  }
+
+  final case class Mult[A](x: Term[A], y: Term[A]) extends Term[A] {
+    override def map[B](f: A ⇒ B): Term[B] = Mult(x map f, y map f)
+
+    override def flatMap[B](f: A ⇒ Term[B]): Term[B] = Mult(x flatMap f, y flatMap f)
+  }
+
+  it should "2. Implement variable substitution for a simple arithmetic language" in {
+
+    val expr: Term[String] = Const(123) * Var("a") * Const(456) * Var("b")
+
+    // Modify variable names.
+    expr.map(_ + "x") shouldEqual Const(123) * Var("ax") * Const(456) * Var("bx")
+
+    // Substitute variables.
+    val aSubst: Term[String] = Const(10)
+    val bSubst: Term[String] = Const(20) * Var("c")
+    expr.flatMap { x ⇒ if (x == "a") aSubst else bSubst } shouldEqual Const(123) * aSubst * Const(456) * bSubst
+  }
 
   /*
     behavior of "misc. examples"
