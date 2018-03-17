@@ -552,7 +552,16 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     // Substitute variables.
     val aSubst: Term[String] = Const(10)
     val bSubst: Term[String] = Const(20) * Var("c")
-    expr.flatMap { x ⇒ if (x == "a") aSubst else bSubst } shouldEqual Const(123) * aSubst * Const(456) * bSubst
+
+    val result = for {
+      x ← expr // `x` goes over variable names in the expression
+      y ← if (x == "a") aSubst else if (x == "b") bSubst else throw new Exception(s"invalid variable name $x")
+    } yield y
+
+    result shouldEqual Const(123) * aSubst * Const(456) * bSubst
+
+    // Same computation.
+    expr.flatMap { x ⇒ if (x == "a") aSubst else bSubst } shouldEqual result
   }
 
   /*
