@@ -504,13 +504,23 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
       ))
     ))
 
-    tree.flatMap { x ⇒ if (x > 1) Leaf(x) else Fork("small", Seq(Leaf(x))) } shouldEqual Fork("a1", Seq(
+    val result = for {
+      x ← tree // `x` goes over leaf values
+      y ← if (x > 1) Leaf(x) else Fork("small", Seq(Leaf(x)))
+    } yield y
+
+    val expectedResult = Fork("a1", Seq(
       Fork("small", Seq(
         Leaf(1)
       )), Leaf(2), Fork("a2", Seq(
         Leaf(3)
       ))
     ))
+
+    result shouldEqual expectedResult
+
+    // Same computation using `flatMap` explicitly.
+    tree.flatMap { x ⇒ if (x > 1) Leaf(x) else Fork("small", Seq(Leaf(x))) } shouldEqual expectedResult
   }
 
   // Language supports constants, variables, and multiplication.
@@ -560,7 +570,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
     result shouldEqual Const(123) * aSubst * Const(456) * bSubst
 
-    // Same computation.
+    // Same computation using `flatMap` explicitly.
     expr.flatMap { x ⇒ if (x == "a") aSubst else bSubst } shouldEqual result
   }
 
