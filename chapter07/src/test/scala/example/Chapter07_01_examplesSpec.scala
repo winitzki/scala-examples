@@ -9,7 +9,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
 import Utils.time
-import cats.syntax.flatMap
+import cats.syntax.{flatMap, monad}
 
 import scala.collection.immutable
 import scala.concurrent.duration.{Duration, DurationConversions}
@@ -574,6 +574,28 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     expr.flatMap { x ⇒ if (x == "a") aSubst else bSubst } shouldEqual result
   }
 
+  behavior of "worked examples: single-value monads"
+
+  it should "1. Perform computations and log information about each step" in {
+
+  }
+
+  it should "2. Dependency injection with the Reader monad" in {
+
+  }
+
+  it should "3. Perform lazy or memoized computations in a sequence" in {
+
+  }
+
+  it should "4. A chain of asynchronous operations" in {
+
+  }
+
+  it should "5. A sequence of steps that update state while returning results" in {
+
+  }
+  
   /*
     behavior of "misc. examples"
 
