@@ -1,5 +1,8 @@
 package example
 
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+
 import cats.kernel.Semigroup
 import cats.{FlatMap, Functor, Monoid, derive}
 import cats.syntax.functor._
@@ -578,6 +581,59 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
   it should "1. Perform computations and log information about each step" in {
 
+    // Hold a value of type A together with an accumulated "log" value of type S.
+    final case class Writer[A, S: Semigroup](x: A, log: S)
+
+    implicit def functorLogged[S: Semigroup]: Functor[Writer[?, S]] = new Functor[Writer[?, S]] {
+      override def map[A, B](fa: Writer[A, S])(f: A ⇒ B): Writer[B, S] = Writer(f(fa.x), fa.log)
+    }
+
+    // Writer semimonad requires that S be a `Semigroup`.
+
+    implicit def semimonadLogged[S: Semigroup]: Semimonad[Writer[?, S]] = new Semimonad[Writer[?, S]] {
+      override def flatMap[A, B](fa: Writer[A, S])(f: A ⇒ Writer[B, S]): Writer[B, S] = {
+        val fb: Writer[B, S] = f(fa.x)
+        Writer(fb.x, fa.log combine fb.log) // "Log" values are combined using the semigroup operation.
+      }
+    }
+
+    // Example: log comments and begin / end wall clock timestamps.
+
+    // Semigroup.
+    final case class Logs(begin: LocalDateTime, end: LocalDateTime, message: String)
+
+    implicit val semigroupLog: Semigroup[Logs] = new Semigroup[Logs] {
+      override def combine(x: Logs, y: Logs): Logs = Logs(x.begin, y.end, x.message + "\n" + y.message)
+    }
+
+    type Logged[A] = Writer[A, Logs]
+
+    // Define a PTVF for inserting timestamps and log messages.
+    def log[A](message: String)(x: A): Logged[A] = {
+      val timestamp = LocalDateTime.now
+      new Logged(x, Logs(timestamp, timestamp, message))
+    }
+
+    // Helper function to simulate a computation that takes time.
+    def compute[A](delay: Long)(x: ⇒ A): A = {
+      Thread.sleep(delay)
+      x
+    }
+
+    import Semimonad.SemimonadSyntax
+
+    // Perform some logged computations using the functor block syntax.
+    val result = for {
+      x ← log("begin with 3.0")(compute(20L)(3.0))
+      y ← log("add 1.0")(compute(50L)(x + 1.0))
+      z ← log("multiply by 2.0")(compute(100L)(y * 2.0))
+    } yield z
+
+    result.x shouldEqual 8.0
+    result.log.message shouldEqual """begin with 3.0
+                                     |add 1.0
+                                     |multiply by 2.0""".stripMargin
+    ChronoUnit.MILLIS.between(result.log.begin, result.log.end) shouldEqual (170L +- 20L)
   }
 
   it should "2. Dependency injection with the Reader monad" in {
@@ -595,7 +651,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
   it should "5. A sequence of steps that update state while returning results" in {
 
   }
-  
+
   /*
     behavior of "misc. examples"
 
