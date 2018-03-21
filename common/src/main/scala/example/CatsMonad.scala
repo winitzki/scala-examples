@@ -1,6 +1,6 @@
 package example
 
-import cats.{FlatMap, Functor, Monad}
+import cats.Monad
 
 // Adapter for cats.Monad that automatically defines tailRecM in a non-stack-safe manner.
 // Use only as tutorial illustration or for testing purposes.
