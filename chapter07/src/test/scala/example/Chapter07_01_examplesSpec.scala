@@ -12,7 +12,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
 import Utils.time
-import cats.data.Reader
+import cats.data.{Reader, State}
 import cats.syntax.{flatMap, monad}
 
 import scala.collection.immutable
@@ -632,8 +632,8 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
     result.x shouldEqual 8.0
     result.log.message shouldEqual
-      """begin with 3.0
-        |add 1.0
+      """begin with 3
+        |add 1
         |multiply by 2.0""".stripMargin
     ChronoUnit.MILLIS.between(result.log.begin, result.log.end) shouldEqual (170L +- 20L)
   }
@@ -647,9 +647,6 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
     // The Reader monad for this example.
     type Logged[A] = Reader[LogDuration, A]
-
-    import cats.syntax.functor._
-    import cats.syntax.flatMap._
 
     // Perform computations using the functor block syntax.
 
@@ -665,6 +662,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     }
 
     // Define a constructor that returns the injected dependency.
+    // Using cats.data.Reader here.
     val tell: Logged[LogDuration] = Reader(identity)
 
     // Perform some logged computations using the functor block syntax.
@@ -732,7 +730,7 @@ multiply by 2.0: took 104.00 ms
     val result: Eval[Int] = for {
       x ← later(compute(100L)(123))
       _ = println(s"Elapsed time after x: $elapsed ms")
-      y ← now(x * 2)
+      y ← now(x * 2) // This computation is "eager" (not lazy).
       z ← later(compute(50L)(y + 10))
       _ = println(s"Elapsed time after z: $elapsed ms")
     } yield z
@@ -754,7 +752,19 @@ Elapsed time after z: 168 ms
   }
 
   it should "5. A sequence of steps that update state while returning results" in {
+    // Using cats.data.State here.
+    type St[A] = State[Int, A]
 
+    val resultState: St[String] = for {
+      x ← State.get
+      _ ← State.set(123)
+      _ ← State.modify[Int](_ * 2 + 10)
+      y ← State.get[Int]
+      z = s"Initial state was $x, final state is $y"
+    } yield z
+
+    // Need to "run" the `resultState` value on some initial `Int` value.
+    resultState.run(0).value shouldEqual (256, "Initial state was 0, final state is 256")
   }
 
   /*
