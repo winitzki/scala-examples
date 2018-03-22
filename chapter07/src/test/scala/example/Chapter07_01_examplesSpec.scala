@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
 import cats.kernel.Semigroup
-import cats.{FlatMap, Functor, Monoid, derive}
+import cats.{Eval, FlatMap, Functor, Monoid, derive}
 import cats.syntax.functor._
 import cats.syntax.semigroup._
 import io.chymyst.ch._
@@ -12,6 +12,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import org.scalacheck.ScalacheckShapeless._
 import org.scalactic.Equality
 import Utils.time
+import cats.data.Reader
 import cats.syntax.{flatMap, monad}
 
 import scala.collection.immutable
@@ -579,6 +580,12 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
   behavior of "worked examples: single-value monads"
 
+  // Helper function to simulate a computation that takes time.
+  def compute[A](delay: Long)(x: ⇒ A): A = {
+    Thread.sleep(delay)
+    x
+  }
+
   it should "1. Perform computations and log information about each step" in {
 
     // Hold a value of type A together with an accumulated "log" value of type S.
@@ -608,40 +615,138 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
     type Logged[A] = Writer[A, Logs]
 
-    // Define a PTVF for inserting timestamps and log messages.
+    // Define a constructor for inserting timestamps and log messages.
     def log[A](message: String)(x: A): Logged[A] = {
       val timestamp = LocalDateTime.now
       new Logged(x, Logs(timestamp, timestamp, message))
-    }
-
-    // Helper function to simulate a computation that takes time.
-    def compute[A](delay: Long)(x: ⇒ A): A = {
-      Thread.sleep(delay)
-      x
     }
 
     import Semimonad.SemimonadSyntax
 
     // Perform some logged computations using the functor block syntax.
     val result = for {
-      x ← log("begin with 3.0")(compute(20L)(3.0))
-      y ← log("add 1.0")(compute(50L)(x + 1.0))
-      z ← log("multiply by 2.0")(compute(100L)(y * 2.0))
+      x ← log("begin with 3")(compute(20L)(3)) // The container's type is `Logged[Int]`.
+      y ← log("add 1")(compute(50L)(x + 1))
+      z ← log("multiply by 2.0")(compute(100L)(y * 2.0)) // The type becomes `Logged[Double]`.
     } yield z
 
     result.x shouldEqual 8.0
-    result.log.message shouldEqual """begin with 3.0
-                                     |add 1.0
-                                     |multiply by 2.0""".stripMargin
+    result.log.message shouldEqual
+      """begin with 3.0
+        |add 1.0
+        |multiply by 2.0""".stripMargin
     ChronoUnit.MILLIS.between(result.log.begin, result.log.end) shouldEqual (170L +- 20L)
   }
 
   it should "2. Dependency injection with the Reader monad" in {
+    // Logged computations that depend on the injected logger.
 
+    // The "injected dependency" is a value of this type.
+    // It will log a message and a duration in nanoseconds.
+    type LogDuration = (String, Long) ⇒ Unit
+
+    // The Reader monad for this example.
+    type Logged[A] = Reader[LogDuration, A]
+
+    import cats.syntax.functor._
+    import cats.syntax.flatMap._
+
+    // Perform computations using the functor block syntax.
+
+    // Define a constructor that logs a message with timing and returns result.
+    def log[A](message: String)(x: ⇒ A): Logged[A] = Reader {
+      val initTime = System.nanoTime()
+      val result = x
+      val elapsed = System.nanoTime() - initTime
+
+      logDuration ⇒
+        logDuration(message, elapsed)
+        result
+    }
+
+    // Define a constructor that returns the injected dependency.
+    val tell: Logged[LogDuration] = Reader(identity)
+
+    // Perform some logged computations using the functor block syntax.
+    val resultReader: Reader[LogDuration, Double] = for {
+      x ← log("begin with 3")(compute(20L)(3))
+      y ← log("add 1")(compute(50L)(x + 1))
+      logDuration ← tell // Extract the injected dependency as an explicit value.
+      _ = logDuration("We are almost done", 0) // Ad hoc usage of the dependency.
+      z ← log("multiply by 2.0")(compute(100L)(y * 2.0))
+    } yield z
+
+    // Now need to supply a logger function and "run" the reader.
+    val sampleLogger: LogDuration = (message, duration) ⇒ println(f"$message: took ${duration / 1000000.0}%.2f ms")
+
+    val result: Double = resultReader.run(sampleLogger)
+    /* This will print something like:
+begin with 3: took 25.00 ms
+add 1: took 52.00 ms
+We are almost done: took 0.00 ms
+multiply by 2.0: took 104.00 ms
+     */
+
+    result shouldEqual 8.0
   }
 
-  it should "3. Perform lazy or memoized computations in a sequence" in {
+  it should "3. Perform a sequence of lazy or memoized computations" in {
 
+    sealed trait Eval[A] {
+      def get: A
+
+      def map[B](f: A ⇒ B): Eval[B]
+
+      def flatMap[B](f: A ⇒ Eval[B]): Eval[B]
+    }
+
+    // Construct a value that is already evaluated now.
+    final case class EvalNow[A](x: A) extends Eval[A] {
+      override def get: A = x
+
+      override def map[B](f: A ⇒ B): Eval[B] = EvalNow(f(x))
+
+      override def flatMap[B](f: A ⇒ Eval[B]): Eval[B] = f(x)
+    }
+
+    // Construct a value that will be evaluated later.
+    final case class EvalLater[A](x: Unit ⇒ A) extends Eval[A] {
+      override def get: A = x(())
+
+      override def map[B](f: A ⇒ B): Eval[B] = EvalLater(x andThen f)
+
+      override def flatMap[B](f: A ⇒ Eval[B]): Eval[B] = EvalLater(_ ⇒ f(x(())).get)
+    }
+
+    // Convenience constructors.
+    def now[A](x: A): Eval[A] = EvalNow(x)
+
+    def later[A](x: ⇒ A): Eval[A] = EvalLater(_ ⇒ x)
+
+    // Helper functions for timing.
+    val initTime = System.currentTimeMillis()
+
+    def elapsed: Long = System.currentTimeMillis() - initTime
+
+    // Perform computations.
+    val result: Eval[Int] = for {
+      x ← later(compute(100L)(123))
+      _ = println(s"Elapsed time after x: $elapsed ms")
+      y ← now(x * 2)
+      z ← later(compute(50L)(y + 10))
+      _ = println(s"Elapsed time after z: $elapsed ms")
+    } yield z
+
+    println(s"Elapsed time after functor block: $elapsed ms")
+
+    // Get the result value.
+    result.get shouldEqual 256
+
+    /* Prints something like:
+Elapsed time after functor block: 4 ms
+Elapsed time after x: 110 ms
+Elapsed time after z: 168 ms
+     */
   }
 
   it should "4. A chain of asynchronous operations" in {
