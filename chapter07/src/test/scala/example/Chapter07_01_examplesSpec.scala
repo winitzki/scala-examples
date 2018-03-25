@@ -487,7 +487,12 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     final case class Branch[A](bx: BTBL[A], by: BTBL[A]) extends BTBL[A]
 
     // Implement functor.
-    implicit val functorBTBL: Functor[BTBL] = derive.functor[BTBL]
+    implicit val functorBTBL: Functor[BTBL] = new Functor[BTBL] {
+      override def map[A, B](fa: BTBL[A])(f: A ⇒ B): BTBL[B] = fa match {
+        case BLeaf(x, y) ⇒ BLeaf(f(x), f(y))
+        case Branch(bx, by) ⇒ Branch(map(bx)(f), map(by)(f))
+      }
+    }
 
     // Implement flatMap.
     implicit val semimonadBTBL: Semimonad[BTBL] = new Semimonad[BTBL] {
@@ -496,7 +501,9 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
         case Branch(bx, by) ⇒ Branch(flatMap(bx)(f), flatMap(by)(f))
       }
     }
+  }
 
+  it should "implement flatMap for an S-shaped tree" in {
     // S-shaped tree.
     // Assuming S is a functor.
     sealed abstract class STree[S[_] : Functor, A]
