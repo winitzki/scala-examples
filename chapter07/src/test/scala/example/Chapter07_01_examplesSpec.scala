@@ -1,5 +1,8 @@
 package example
 
+import java.nio.ByteBuffer
+import java.nio.channels.{AsynchronousFileChannel, CompletionHandler}
+import java.nio.file.{Paths, StandardOpenOption}
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
@@ -18,7 +21,7 @@ import cats.syntax.{flatMap, monad}
 import scala.collection.immutable
 import scala.concurrent.duration.{Duration, DurationConversions}
 import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
 
@@ -747,8 +750,100 @@ Elapsed time after z: 168 ms
      */
   }
 
-  it should "4. A chain of asynchronous operations" in {
+  it should "4. A chain of asynchronous operations using nested callbacks" in {
+    // Use Java NIO2 file operations.
+    // Read a file and copy its contents to another file.
+    val fileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/src/test/resources/sample.txt"), StandardOpenOption.READ)
 
+    // In this simple example, the file is shorter than 256 bytes.
+    val buffer1 = ByteBuffer.allocate(256)
+    fileChannel.read(buffer1, 0, null, new CompletionHandler[Integer, Object] {
+      override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to read file: $exc")
+
+      override def completed(result1: Integer, attachment: Object): Unit = {
+        println(s"Read $result1 bytes")
+        fileChannel.close()
+        buffer1.rewind()
+        buffer1.limit(result1)
+        // Copy to another file.
+        val outputFileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy1.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+        outputFileChannel.write(buffer1, 0, null, new CompletionHandler[Integer, Object] {
+          override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to write file: $exc")
+
+          override def completed(result2: Integer, attachment: Object): Unit = {
+            println(s"Wrote $result2 bytes")
+            outputFileChannel.close()
+            // Now read from the file and check that we copied the contents correctly.
+            val inputChannel = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy1.txt"), StandardOpenOption.READ)
+            val buffer2 = ByteBuffer.allocate(256)
+            inputChannel.read(buffer2, 0, null, new CompletionHandler[Integer, Object] {
+              override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to read new file: $exc")
+
+              override def completed(result3: Integer, attachment: Object): Unit = {
+                buffer2.rewind()
+                buffer2.limit(result3)
+                val isIdentical = new String(buffer2.array()) == new String(buffer1.array())
+                println(s"Read $result3 bytes, contents is identical: $isIdentical")
+                // We need to return this result, but it's not easy since we are in a deeply nested function.
+              }
+            })
+          }
+        })
+      }
+    })
+  }
+
+  it should "4. A chain of asynchronous operations using the Cont monad" in {
+    // Now rewrite this code using the continuation monad.
+    // The type is (A ⇒ Unit) ⇒ Unit. Define this type constructor for convenience:
+    type NioMonad[A] = Cont[Unit, A]
+
+    import Semimonad.SemimonadSyntax
+
+    // Monadic representation for NIO channel .read() method.
+    def nioRead(channel: AsynchronousFileChannel): NioMonad[(ByteBuffer, Integer)] = Cont { handler ⇒
+      val buffer = ByteBuffer.allocate(256)
+      channel.read(buffer, 0, null, new CompletionHandler[Integer, Object] {
+        override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to read file: $exc")
+
+        override def completed(result: Integer, attachment: Object): Unit = {
+          println(s"Cont: Read $result bytes")
+          buffer.rewind()
+          buffer.limit(result)
+          channel.close()
+          handler((buffer, result))
+        }
+      })
+    }
+
+    // Monadic representation for NIO channel .write() method.
+    def nioWrite(buffer: ByteBuffer, channel: AsynchronousFileChannel): NioMonad[Integer] = Cont { handler ⇒
+      channel.write(buffer, 0, null, new CompletionHandler[Integer, Object] {
+        override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to write file: $exc")
+
+        override def completed(result: Integer, attachment: Object): Unit = {
+          println(s"Cont: Wrote $result bytes")
+          channel.close()
+          handler(result)
+        }
+      })
+    }
+
+    val channel1 = AsynchronousFileChannel.open(Paths.get("chapter07/src/test/resources/sample.txt"), StandardOpenOption.READ)
+
+    val statusMonad: NioMonad[Boolean] = for {
+      (buffer1a, result1a) ← nioRead(channel1)
+      channel2 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+      result2a ← nioWrite(buffer1a, channel2)
+      channel3 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.READ)
+      (buffer2a, result3a) ← nioRead(channel3)
+    } yield {
+      val isIdentical = result1a == result3a && new String(buffer2a.array()) == new String(buffer1a.array())
+      isIdentical
+    }
+
+    // Now run the monad and provide a continuation for the result value - the `status`.
+    statusMonad.run { status ⇒ println(s"After running the monad: Status is $status") }
   }
 
   it should "5. A sequence of steps that update state while returning results" in {
@@ -766,7 +861,9 @@ Elapsed time after z: 168 ms
 
      */
 
-    def getInt32: Rnd[Int] = State { PCGRandom.int32 }
+    def getInt32: Rnd[Int] = State {
+      PCGRandom.int32
+    }
 
     val resultState: Rnd[String] = for {
       _ ← State.set(PCGRandom.initialDefault)
