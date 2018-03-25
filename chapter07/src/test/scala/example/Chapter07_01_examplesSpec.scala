@@ -753,69 +753,32 @@ Elapsed time after z: 168 ms
 
   it should "5. A sequence of steps that update state while returning results" in {
     // Using cats.data.State here.
-    type St[A] = State[Int, A]
+    type Rnd[A] = State[PCGRandom.InternalState, A] // S ⇒ (S, A)
 
-    val resultState: St[String] = for {
-      x ← State.get
-      _ ← State.set(123)
-      _ ← State.modify[Int](_ * 2 + 10)
-      y ← State.get[Int]
-      z = s"Initial state was $x, final state is $y"
-    } yield z
+    // Random number generator.
+    /*
+    Without using the state monad, the code would be:
+    val s0 = PCGRandom.initialDefault
+    val (x, s1) = PCGRandom.int32(s0)
+    val (y, s2) = PCGRandom.int32(s1)
+    val (z, s3) = PCGRandom.int32(s2)
+    ... and so on
 
-    // Need to "run" the `resultState` value on some initial `Int` value.
-    resultState.run(0).value shouldEqual (256, "Initial state was 0, final state is 256")
+     */
+
+    def getInt32: Rnd[Int] = State { PCGRandom.int32 }
+
+    val resultState: Rnd[String] = for {
+      _ ← State.set(PCGRandom.initialDefault)
+      x ← getInt32
+      y ← getInt32
+      z ← getInt32
+      ave = (x.toDouble + y + z) / 3.0
+      message = s"Average is $ave"
+    } yield message
+
+    // Need to "run" the `resultState` value on some initial state value.
+    // The `.run().value` returns a tuple: (state, result)
+    resultState.run(PCGRandom.initialDefault).value._2 shouldEqual "Average is 4.485299616666667E8"
   }
-
-  /*
-    behavior of "misc. examples"
-
-    it should "check semigroup laws for a non-monoid type" in {
-
-      type TripleM[T] = (T, T, T)
-
-      // If P is a monoid type then we can define P × P × P as a semigroup in a special way.
-      implicit def tripleMonoid[P: Monoid]: Semigroup[TripleM[P]] = { (x: TripleM[P], y: TripleM[P]) ⇒ (x._1, x._2 combine y._2, y._3) }
-
-      // Use the Int monoid as an example.
-
-      implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
-        override def empty: Int = 0
-
-        override def combine(x: Int, y: Int): Int = x + y
-      }
-
-      checkCatsSemigroupLaws[TripleM[Int]]()
-    }
-
-    it should "check associativity for a semimonad" in {
-      type F[A] = Either[A, (A, A)]
-
-      implicit val functorF: Functor[F] = derive.functor[F]
-      //    implicit val functorF: Functor[F] = new Functor[F] {
-      //      override def map[A, B](fa: F[A])(f: A => B): F[B] = implement
-      //    }
-      implicit val flattenableF: Flattenable[F] = new Flattenable[F] {
-
-        private def extractLeft[A](fa: F[A]): A = fa match {
-          case Left(x) ⇒ x
-          case Right((x, _)) ⇒ x
-        }
-
-        private def extractRight[A](fa: F[A]): A = fa match {
-          case Left(x) ⇒ x
-          case Right((_, x)) ⇒ x
-        }
-
-        override def flatten[A](ffa: F[F[A]]): F[A] = extractLeft(ffa)
-
-        //      override def flatten[A](ffa: F[F[A]]): F[A] = ffa match {
-        //        case Left(fa) ⇒ fa
-        //        case Right((fa1, fa2)) ⇒ Right(extractLeft(fa1), extractRight(fa2))
-        //      }
-      }
-
-      checkFlattenLaws[F, Int, String]()
-    }
-  */
 }
