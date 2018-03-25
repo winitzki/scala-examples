@@ -378,7 +378,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
       corporation ← Option(System.getProperty(client))
       orders ← Option(System.getProperty(corporation))
       stringValue ← Option(System.getProperty(orders))
-      intValue ← Try(stringValue.toInt).toOption
+      intValue ← Try(stringValue.toInt).toOption // Invalid non-integer values will be ignored.
     } yield intValue
 
     getOrders("client 1") shouldEqual Some(123)
@@ -427,7 +427,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
 
     println(s"Computing $n iterations with parallel futures yields $r2 in $t2 seconds")
 
-    /*
+    /* Typical output:
 Computing 2000 iterations with sequential futures yields 1483.4944693546663 in 6.207532281 seconds
 Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.774459626 seconds
      */
@@ -459,7 +459,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     badResult shouldEqual Left(s"Error: dividing 1.0 by 0")
   }
 
-  it should "4. Fail less: chain computations that may throw an exception" in {
+  it should "4. Pass/fail chain: sequencing computations that may throw an exception" in {
     // Computations f1, f2, ... may throw exceptions.
     def f1(x: Int): Int = 2 / x
 
