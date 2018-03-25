@@ -196,23 +196,23 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
   }
 
   it should "5. Find all solutions to the 8 queens problem" in {
-    val row = 0 until 8
+    val column = 0 until 8
 
     val solutions: Seq[Seq[Int]] = for {
-      x1 ← row
-      x2 ← row
+      x1 ← column
+      x2 ← column
       if noThreat(x1)(x2) // queen 2 does not threaten queen 1
-      x3 ← row
+      x3 ← column
       if noThreat(x1, x2)(x3) // queen 3 does not threaten previous queens
-      x4 ← row
+      x4 ← column
       if noThreat(x1, x2, x3)(x4)
-      x5 ← row
+      x5 ← column
       if noThreat(x1, x2, x3, x4)(x5)
-      x6 ← row
+      x6 ← column
       if noThreat(x1, x2, x3, x4, x5)(x6)
-      x7 ← row
+      x7 ← column
       if noThreat(x1, x2, x3, x4, x5, x6)(x7)
-      x8 ← row
+      x8 ← column
       if noThreat(x1, x2, x3, x4, x5, x6, x7)(x8)
     } yield
       Seq(x1, x2, x3, x4, x5, x6, x7, x8)
@@ -223,10 +223,10 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
   it should "6. Find all solutions to the n-queens problem" in {
 
     def nQueens(n: Int): Seq[Seq[Int]] = {
-      val row = 0 until n
+      val column = 0 until n
 
       def nQueensPartial(m: Int, prev: Seq[Int]): Seq[Seq[Int]] = if (m == 0) Seq(Seq()) else for {
-        x ← row
+        x ← column
         if noThreat(prev: _*)(x)
         newQueens = prev :+ x
         rest ← nQueensPartial(m - 1, newQueens) // Recursive call.
@@ -242,6 +242,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
   it should "7. Transform Boolean formulas between CNF and DNF" in {
     /**
       * A Boolean formula in CNF is represented by a set of sets of an arbitrary type `T`.
+      *
       * Values of `T` represent elementary Boolean variables or terms.
       * For instance, the CNF Boolean formula (a || b) && (c || d || e) is represented by
       * {{{ Set( Set(a, b), Set(c, d, e) ) }}}
@@ -283,7 +284,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
      */
 
     def dnf2cnf[A](dnf: DNF[A]): CNF[A] = dnf.v.headOption match {
-      case None ⇒ CNF(Set(Set())) // False
+      case None ⇒ cnfFalse[A]
       case Some(firstClause) ⇒ // firstClause is a && b
         cnfSimplify(CNF(
           for {
@@ -374,16 +375,16 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
     System.setProperty("orders 1", "123")
     System.setProperty("orders 2", "456")
 
-    def getOrders(client: String): Option[Int] = for {
+    def getOrderAmount(client: String): Option[Int] = for {
       corporation ← Option(System.getProperty(client))
       orders ← Option(System.getProperty(corporation))
       stringValue ← Option(System.getProperty(orders))
       intValue ← Try(stringValue.toInt).toOption // Invalid non-integer values will be ignored.
     } yield intValue
 
-    getOrders("client 1") shouldEqual Some(123)
-    getOrders("client 2") shouldEqual Some(456)
-    getOrders("client 3") shouldEqual None
+    getOrderAmount("client 1") shouldEqual Some(123)
+    getOrderAmount("client 2") shouldEqual Some(456)
+    getOrderAmount("client 3") shouldEqual None
   }
 
   it should "2. Obtain values from Future computations in sequence" in {
@@ -405,7 +406,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
         x ← longComputation(1.0)
         y ← longComputation(x)
         z ← longComputation(y)
-      } yield y
+      } yield z
       Await.result(result1, Duration.Inf)
     }
 
@@ -421,7 +422,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
         x ← c1
         y ← c2
         z ← c3
-      } yield y
+      } yield z
       Await.result(result2, Duration.Inf)
     }
 
@@ -438,7 +439,9 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
     implicit def safeOp(x: Double): SafeDouble = Right(x)
 
-    def safeDivide(x: Double, y: Double): SafeDouble = if (y == 0.0) Left(s"Error: dividing $x by 0") else Right(x / y)
+    def safeDivide(x: Double, y: Double): SafeDouble = if (y == 0.0)
+      Left(s"Error: dividing $x by 0")
+    else Right(x / y)
 
     safeDivide(1.0, 0.0) shouldEqual Left(s"Error: dividing 1.0 by 0")
 
@@ -468,7 +471,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     def f3(x: Int): Int = 1 / x
 
     // The ordinary for/yield chain will require all of them to pass.
-    val result = for {
+    val result: Try[Int] = for {
       x ← Try(f1(1))
       y ← Try(f2(x))
       z ← Try(f3(y))
@@ -549,7 +552,11 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
       override def flatMap[B](f: A ⇒ PropTree[B]): PropTree[B] = Fork(name, trees.map(_.flatMap(f)))
     }
 
-    val tree: PropTree[Int] = Fork("a1", Seq(Leaf(1), Leaf(2), Fork("a2", Seq(Leaf(3)))))
+    val tree: PropTree[Int] = Fork("a1", Seq(
+      Leaf(1), Leaf(2), Fork("a2", Seq(
+        Leaf(3)
+      ))
+    ))
 
     tree.map(_ + 10) shouldEqual Fork("a1", Seq(
       Leaf(11), Leaf(12), Fork("a2", Seq(
@@ -579,6 +586,8 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
   // Language supports constants, variables, and multiplication.
   // The type parameter A describes variables (values are `Int`), so flatMap performs variable substitution.
   // Known scalac issue: Cannot define trait/case class hierarchy within a function scope. See https://issues.scala-lang.org/browse/SI-5252
+
+  // Term[A] = Int + A + Term[A] x Term[A]
   sealed trait Term[A] {
     def map[B](f: A ⇒ B): Term[B]
 
@@ -637,18 +646,19 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
   it should "1. Perform computations and log information about each step" in {
 
-    // Hold a value of type A together with an accumulated "log" value of type S.
-    final case class Writer[A, S: Semigroup](x: A, log: S)
+    // Hold a value of type A together with an accumulated "log" value of type W.
+    final case class Writer[A, W: Semigroup](x: A, log: W)
 
-    implicit def functorLogged[S: Semigroup]: Functor[Writer[?, S]] = new Functor[Writer[?, S]] {
-      override def map[A, B](fa: Writer[A, S])(f: A ⇒ B): Writer[B, S] = Writer(f(fa.x), fa.log)
+    implicit def functorLogged[W: Semigroup]: Functor[Writer[?, W]] = new Functor[Writer[?, W]] {
+      override def map[A, B](fa: Writer[A, W])(f: A ⇒ B): Writer[B, W] =
+        Writer(f(fa.x), fa.log)
     }
 
-    // Writer semimonad requires that S be a `Semigroup`.
+    // Writer semimonad requires that W be a `Semigroup`.
 
-    implicit def semimonadLogged[S: Semigroup]: Semimonad[Writer[?, S]] = new Semimonad[Writer[?, S]] {
-      override def flatMap[A, B](fa: Writer[A, S])(f: A ⇒ Writer[B, S]): Writer[B, S] = {
-        val fb: Writer[B, S] = f(fa.x)
+    implicit def semimonadLogged[W: Semigroup]: Semimonad[Writer[?, W]] = new Semimonad[Writer[?, W]] {
+      override def flatMap[A, B](fa: Writer[A, W])(f: A ⇒ Writer[B, W]): Writer[B, W] = {
+        val fb: Writer[B, W] = f(fa.x)
         Writer(fb.x, fa.log combine fb.log) // "Log" values are combined using the semigroup operation.
       }
     }
@@ -673,7 +683,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     import Semimonad.SemimonadSyntax
 
     // Perform some logged computations using the functor block syntax.
-    val result = for {
+    val result: Logged[Double] = for {
       x ← log("begin with 3")(compute(20L)(3)) // The container's type is `Logged[Int]`.
       y ← log("add 1")(compute(50L)(x + 1))
       z ← log("multiply by 2.0")(compute(100L)(y * 2.0)) // The type becomes `Logged[Double]`.
@@ -831,6 +841,8 @@ Elapsed time after z: 168 ms
                 val isIdentical = new String(buffer2.array()) == new String(buffer1.array())
                 println(s"Read $result3 bytes, contents is identical: $isIdentical")
                 // We need to return this result, but it's not easy since we are in a deeply nested function.
+                // Or, use another callback!
+                // reportResult(isIdentical)
               }
             })
           }
@@ -847,7 +859,7 @@ Elapsed time after z: 168 ms
     import Semimonad.SemimonadSyntax
 
     // Monadic representation for NIO channel .read() method.
-    def nioRead(channel: AsynchronousFileChannel): NioMonad[(ByteBuffer, Integer)] = Cont { handler ⇒
+    def nioRead(channel: AsynchronousFileChannel): NioMonad[(ByteBuffer, Integer)] = Cont { callback ⇒
       val buffer = ByteBuffer.allocate(256)
       channel.read(buffer, 0, null, new CompletionHandler[Integer, Object] {
         override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to read file: $exc")
@@ -857,20 +869,20 @@ Elapsed time after z: 168 ms
           buffer.rewind()
           buffer.limit(result)
           channel.close()
-          handler((buffer, result))
+          callback((buffer, result))
         }
       })
     }
 
     // Monadic representation for NIO channel .write() method.
-    def nioWrite(buffer: ByteBuffer, channel: AsynchronousFileChannel): NioMonad[Integer] = Cont { handler ⇒
+    def nioWrite(buffer: ByteBuffer, channel: AsynchronousFileChannel): NioMonad[Integer] = Cont { callback ⇒
       channel.write(buffer, 0, null, new CompletionHandler[Integer, Object] {
         override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to write file: $exc")
 
         override def completed(result: Integer, attachment: Object): Unit = {
           println(s"Cont: Wrote $result bytes")
           channel.close()
-          handler(result)
+          callback(result)
         }
       })
     }
@@ -879,9 +891,13 @@ Elapsed time after z: 168 ms
 
     val statusMonad: NioMonad[Boolean] = for {
       (buffer1a, result1a) ← nioRead(channel1)
+
       channel2 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
-      result2a ← nioWrite(buffer1a, channel2)
+
+      _ ← nioWrite(buffer1a, channel2)
+
       channel3 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.READ)
+
       (buffer2a, result3a) ← nioRead(channel3)
     } yield {
       val isIdentical = result1a == result3a && new String(buffer2a.array()) == new String(buffer1a.array())
@@ -900,9 +916,9 @@ Elapsed time after z: 168 ms
     /*
     Without using the state monad, the code would be:
     val s0 = PCGRandom.initialDefault
-    val (x, s1) = PCGRandom.int32(s0)
-    val (y, s2) = PCGRandom.int32(s1)
-    val (z, s3) = PCGRandom.int32(s2)
+    val (s1, x) = PCGRandom.int32(s0)
+    val (s2, y) = PCGRandom.int32(s1)
+    val (s3, z) = PCGRandom.int32(s2)
     ... and so on
 
      */
