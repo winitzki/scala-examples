@@ -481,6 +481,45 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
 
   behavior of "worked examples: tree-like monads"
 
+  it should "implement flatMap for a binary tree with binary leaves" in {
+    sealed trait BTBL[A]
+    final case class BLeaf[A](x: A, y: A) extends BTBL[A]
+    final case class Branch[A](bx: BTBL[A], by: BTBL[A]) extends BTBL[A]
+
+    // Implement functor.
+    implicit val functorBTBL: Functor[BTBL] = derive.functor[BTBL]
+
+    // Implement flatMap.
+    implicit val semimonadBTBL: Semimonad[BTBL] = new Semimonad[BTBL] {
+      override def flatMap[A, B](fa: BTBL[A])(f: A ⇒ BTBL[B]): BTBL[B] = fa match {
+        case BLeaf(x, y) ⇒ Branch(f(x), f(y)) // Graft both branches here.
+        case Branch(bx, by) ⇒ Branch(flatMap(bx)(f), flatMap(by)(f))
+      }
+    }
+
+    // S-shaped tree.
+    // Assuming S is a functor.
+    sealed abstract class STree[S[_] : Functor, A]
+    final case class Leaf[S[_] : Functor, A](x: A) extends STree[S, A]
+    final case class SBranch[S[_] : Functor, A](sb: S[STree[S, A]]) extends STree[S, A]
+
+    // Implement functor.
+    implicit def functorSTree[S[_] : Functor]: Functor[STree[S, ?]] = new Functor[STree[S, ?]] {
+      override def map[A, B](fa: STree[S, A])(f: A ⇒ B): STree[S, B] = fa match {
+        case Leaf(x) ⇒ Leaf(f(x))
+        case SBranch(sb) ⇒ SBranch(sb.map(stree ⇒ map(stree)(f))) // recursive use of `map`
+      }
+    }
+
+    // Implement flatMap.
+    implicit def semimonadSTree[S[_] : Functor]: Semimonad[STree[S, ?]] = new Semimonad[STree[S, ?]] {
+      override def flatMap[A, B](fa: STree[S, A])(f: A ⇒ STree[S, B]): STree[S, B] = fa match {
+        case Leaf(x) ⇒ f(x) // Graft the subtree here.
+        case SBranch(sbr) ⇒ SBranch(sbr.map(stree ⇒ flatMap(stree)(f))) // recursive use of `flatMap`
+      }
+    }
+  }
+
   it should "1. Implement a tree of String properties with arbitrary branching" in {
     // Need to introduce a type parameter.
 
