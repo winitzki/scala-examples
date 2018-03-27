@@ -6,7 +6,7 @@ import cats.syntax.semigroup._ // for |+|
 
 class MonoidsAndSemigroupsSpec extends FlatSpec with Matchers {
 
-  behavior of "examples"
+  behavior of "extra examples for the Monoids chapter of the Cats book"
 
   def makeExampleString(implicit monoidString: Monoid[String]) = "Hi " |+| "there" |+| Monoid[String].empty
 
@@ -84,4 +84,42 @@ class MonoidsAndSemigroupsSpec extends FlatSpec with Matchers {
 
   }
 
+  behavior of "nonstandard semimonads and monads"
+
+  it should "check associativity for the nonstandard Pair semimonads" in {
+    import io.chymyst.ch._
+    type Pair[A] = (A, A)
+
+    def fmap[A, B] = ofType[(A => B) => Pair[A] => Pair[B]]
+
+    def flatten[A] = anyOfType[Pair[Pair[A]] ⇒ Pair[A]]()
+
+    val terms = flatten
+
+    terms.length shouldEqual 18 // This should be 16, but we fail to simplify 2 of the terms.
+
+    // Let's see which of these implementations are associative.
+
+    def tA[A] = freshVar[A]
+
+    def tC[C] = freshVar[C]
+
+    def tCC[C] = freshVar[(C, C)]
+
+    def associativeTerms[A] = flatten[A].filter { ftn ⇒
+      val term = ftn.lambdaTerm
+      // ftnC: Pair[Pair[C]] ⇒ Pair[C]
+      val ftnC = term.substTypeVar(tA, tC)
+
+      val ftnCftnC = (term.substTypeVar(tA, tCC) andThen ftnC).simplify
+      // ftnLC: Pair[Pair[Pair[C]]] ⇒ Pair[Pair[C]]
+      val ftnLC = (fmap.lambdaTerm :@ ftnC).simplify
+
+      val ftnLCftn = (ftnLC andThen ftnC).simplify
+      ftnLCftn.prettyRename equiv ftnCftnC.prettyRename
+    }
+
+    associativeTerms[Int].map(_.lambdaTerm.prettyPrint).foreach(println)
+    associativeTerms[Int].length shouldEqual 9 // One standard and six non-standard semimonads. Two spurious non-equal terms.
+  }
 }
