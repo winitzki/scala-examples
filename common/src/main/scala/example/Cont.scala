@@ -6,7 +6,7 @@ import io.chymyst.ch.implement
 final case class Cont[R, A](run: (A ⇒ R) ⇒ R) {
   def withFilter(p: A ⇒ Boolean): Cont[R, A] = this
 }
-
+// A simple implementation of the Continuation monad.
 object Cont {
 
   implicit def functorCont[R]: Functor[Cont[R, ?]] = new Functor[Cont[R, ?]] {
