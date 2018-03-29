@@ -96,22 +96,25 @@ class MonoidsAndSemigroupsSpec extends FlatSpec with Matchers {
 
     val terms = flatten
 
-    terms.length shouldEqual 18 // This should be 16, but we fail to simplify 2 of the terms.
+    terms.length shouldEqual 16
 
-    // Let's see which of these implementations are associative.
+    // Select the implementations that satisfy rigorously the associativity law.
+    // fmap ftn . ftn = ftn . ftn
 
     def tA[A] = freshVar[A]
 
     def tC[C] = freshVar[C]
 
-    def tCC[C] = freshVar[(C, C)]
+    def tCC[C] = freshVar[Pair[C]]
 
     def associativeTerms[A] = flatten[A].filter { ftn ⇒
-      val term = ftn.lambdaTerm
-      // ftnC: Pair[Pair[C]] ⇒ Pair[C]
-      val ftnC = term.substTypeVar(tA, tC)
+      val ftnA = ftn.lambdaTerm
 
-      val ftnCftnC = (term.substTypeVar(tA, tCC) andThen ftnC).simplify
+      // ftnC: Pair[Pair[C]] ⇒ Pair[C]
+      val ftnC = ftnA.substTypeVar(tA, tC)
+
+      val ftnCftnC = (ftnA.substTypeVar(tA, tCC) andThen ftnC).simplify
+
       // ftnLC: Pair[Pair[Pair[C]]] ⇒ Pair[Pair[C]]
       val ftnLC = (fmap.lambdaTerm :@ ftnC).simplify
 
@@ -119,7 +122,49 @@ class MonoidsAndSemigroupsSpec extends FlatSpec with Matchers {
       ftnLCftn.prettyRename equiv ftnCftnC.prettyRename
     }
 
+    println("Semimonads:")
     associativeTerms[Int].map(_.lambdaTerm.prettyPrint).foreach(println)
-    associativeTerms[Int].length shouldEqual 9 // One standard and six non-standard semimonads. Two spurious non-equal terms.
+    associativeTerms[Int].length shouldEqual 7 // One standard and six non-standard semimonads.
+    /*
+a ⇒ a._2 // Choose second outer tuple.
+a ⇒ a._1 // Choose first outer tuple.
+a ⇒ Tuple2(a._1._1, a._1._2) // Same as a ⇒ a._1
+a ⇒ Tuple2(a._2._1, a._2._2) // Same as a ⇒ a._2
+a ⇒ Tuple2(a._1._1, a._2._2) // The standard monad.
+a ⇒ Tuple2(a._1._2, a._2._2) // Choose second inner tuple.
+a ⇒ Tuple2(a._1._1, a._2._1) // Choose first inner tuple.
+a ⇒ Tuple2(a._1._1, a._1._1) // Choose first element of first inner tuple.
+a ⇒ Tuple2(a._2._2, a._2._2) // Choose second element of second inner tuple.
+     */
+
+    // Of these, select the implementations that satisfy rigorously the two identity laws.
+    // pure . ftn = id
+    // fmap pure . ftn = id
+
+    def pure[A] = ofType[A ⇒ Pair[A]]
+
+    val pureA = pure[Int].lambdaTerm
+    val pureC = pureA.substTypeVar(tA, tC) // pure: C ⇒ Pair[C]
+    val pureCC = pureA.substTypeVar(tA, tCC) // pure: Pair[C] ⇒ Pair[Pair[C]]
+    val pureLC = fmap.lambdaTerm :@ pureC // fmap pure: Pair[C] ⇒ Pair[Pair[C]]
+
+    def idA[A] = ofType[A ⇒ A]
+
+    val idCC = idA.lambdaTerm.substTypeVar(tA, tCC)
+
+    def monadTerms[A] = associativeTerms[A].filter { ftn ⇒
+      val ftnA = ftn.lambdaTerm
+
+      val ftnC = ftnA.substTypeVar(tA, tC)
+      val law1 = (pureCC andThen ftnC).simplify.prettyRename
+      val law2 = (pureLC andThen ftnC).simplify.prettyRename
+      println(s"Checking laws for ${ftnA.prettyPrint}: ${law1.prettyPrint}, ${law2.prettyPrint}")
+      (law1 equiv idCC.prettyRename) && (law2 equiv idCC.prettyRename)
+    }
+    println("Monads:")
+    monadTerms[Int].map(_.lambdaTerm.prettyPrint).foreach(println)
+    monadTerms.length shouldEqual 1
   }
+
+
 }
