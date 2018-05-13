@@ -19,7 +19,7 @@ lazy val commonSettings = Seq(
     , "org.typelevel" %% "kittens" % "1.0.0-RC2" // 1.0.0-RC3 has an API change for derive.functor
 //    , "org.scalaz" %% "scalaz-core" % "7.2.18"
     , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
-    , "io.chymyst" %% "curryhoward" % "0.3.5"
+    , "io.chymyst" %% "curryhoward" % "0.3.7"
   )
 )
 

@@ -182,7 +182,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     checkFilterableLawsWithFilter[List3, String, Double]()
   }
 
-  // The functor F[A] = A + A × F[A], is not filterable since an empty container
+  // The functor F[A] = A + A × F[A] is not filterable since an empty container
   // is not represented by any part of the disjunction.
   // A + A × A + A × A × A + ...
   // In contrast, F[A] = 1 + A + A × F[A] would be filterable.
