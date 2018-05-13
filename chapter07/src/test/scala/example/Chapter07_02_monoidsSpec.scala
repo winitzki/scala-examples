@@ -1,9 +1,10 @@
 package example
 
-
+import cats.syntax.functor._
 import cats.syntax.monoid._
 import cats.{Functor, Monad, Monoid, Semigroup, derive}
 import org.scalatest.FlatSpec
+import Semimonad.SemimonadSyntax
 
 class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
 
@@ -69,6 +70,26 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
     // Therefore, the entire tuple will also satisfy the laws.
   }
 
+  it should "check semigroup laws for M[S]" in {
+    implicit def semigroupMS[M[_] : Semimonad : Functor, S: Semigroup]: Semigroup[M[S]] = new Semigroup[M[S]] {
+      override def combine(x: M[S], y: M[S]): M[S] = for {
+        s ← x
+        t ← y
+      } yield s |+| t
+    }
+    
+    /* Associativity: ms1 |+| ms2 |+| ms3 is computed as 
+      for {
+        s1 ← ms1 
+        s2 ← ms2 
+        s3 ← ms3 
+      } yield s1 |+| s2 |+| s3
+      So, associativity of M[S] follows directly from the semimonad's associativity law and the semigroup's associativity law.    
+     */
+  }
+
+  // When M is a full monad, we can use a monoid for S. As an example, consider the Reader monad as M.
+  
   it should "check monoid laws for reader monoid" in {
     implicit def monoidReader[Z, S: Monoid]: Monoid[Z ⇒ S] = new Monoid[Z ⇒ S] {
       override def empty: Z ⇒ S = { _ ⇒ Monoid.empty[S] }
