@@ -1,6 +1,7 @@
 package example
 
-import cats.Monad
+import cats.syntax.functor._
+import cats.{Functor, Monad}
 import org.scalatest.FlatSpec
 
 class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
@@ -24,8 +25,32 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
   }
   
   it should "verify semimonad construction 2" in {
-    implicit def semimonadAG[G[_], A]: Semimonad[Lambda[X ⇒ (X, G[X])]] = new Semimonad[Lambda[X ⇒ (X, G[X])]] {
-      override def flatMap[A, B](fa: (A, G[A]))(f: A ⇒ (B, G[B])): (B, G[B]) = f(fa._1) // Discarding the first effect!
+    // The functor F[A] is defined as (A, G[A]).
+    // In the syntax of the "kind projector", it is Lambda[X ⇒ (X, G[X])].
+    implicit def semimonadAG[G[_]: Functor]: Semimonad[Lambda[X ⇒ (X, G[X])]] = new Semimonad[Lambda[X ⇒ (X, G[X])]] {
+      override def flatMap[A, B](fa: (A, G[A]))(f: A ⇒ (B, G[B])): (B, G[B]) = {
+        // The first effect is in `fa`, the second effect is in the result of applying `f`.
+        // We discard the second effect.
+        val f1: A ⇒ B = f andThen (_._1)
+        val (a, ga) = fa
+        (f1(a), ga.map(f1))
+      }
     }
+    
+    // Derive flatten from flatMap as flatten(ffa) = ffa.flatMap(id), where id is of type F[F[A]] ⇒ F[F[A]].
+    
+    def ftn[G[_]: Functor, A](ffa: ((A, G[A]), G[(A, G[A])])): (A, G[A]) = {
+      /*
+        val f1 = identity andThen (_._1) = _._1
+        val (a, ga) = ffa
+        (f1(a), ga.map(f1))
+       */
+      val (a, ga) = ffa
+      (a._1, ga.map(_._1))
+    }
+    
+    // If G = 1, we have F[A] = A; this is the Identity monad. flatmap = id, fmap = id, flatten = id, pure = id.
+    // All monad laws hold trivially.
   }
+  
 }
