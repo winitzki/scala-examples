@@ -88,7 +88,8 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
      */
   }
 
-  // When M is a full monad, we can use a monoid for S. As an example, consider the Reader monad as M.
+  // When M is a full monad, we can use a monoid for S. Proof of identity laws is in Exercise 1.
+  // As an example, consider the Reader monad as M.
   
   it should "check monoid laws for reader monoid" in {
     implicit def monoidReader[Z, S: Monoid]: Monoid[Z ⇒ S] = new Monoid[Z ⇒ S] {
@@ -162,6 +163,7 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
     // The second part of the tuple for (s1, p1) |+| ((s2, p2) |+| (s3, p3)) is a(s1)(a(s2)(p3)).
     // They are the same as long as a(s2) andThen a(s1) is the same as a(s1 |+| s2). 
 
+    // However, a monoid is impossible since we are losing information about `x._2` in `combine`.
 
     // Example: S = Boolean, P = Option[A].
     implicit val monoidBoolean: Monoid[Boolean] = new Monoid[Boolean] {
