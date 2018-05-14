@@ -19,11 +19,15 @@ class Chapter07_02_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     // Functor instance.
     def fmap[A, B](f: A ⇒ B): Option[A] ⇒ Option[B] = {
       case None ⇒ None
-      case Some(oa) ⇒ Some(f(oa))
+      case Some(a) ⇒ Some(f(a))
     }
 
     // Compute fmap(ftn) symbolically.
     def fmapFtn[A]: Option[Option[Option[A]]] ⇒ Option[Option[A]] = {
+      /*
+      case None ⇒ None
+      case Some(a) ⇒ Some(ftn(a))
+       */
       case None ⇒ None
       case Some(x) ⇒ Some(x match {
         case None ⇒ None
@@ -33,6 +37,10 @@ class Chapter07_02_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
     // Compute ftn[F[A]] ◦ ftn[A] symbolically.
     def ftnFtn[A]: Option[Option[Option[A]]] ⇒ Option[A] = {
+      /*
+      case None ⇒ ftn(None)
+      case Some(x) ⇒ ftn(x)
+       */
       case None ⇒ None
       case Some(x) ⇒ x match {
         case None ⇒ None
@@ -54,7 +62,7 @@ class Chapter07_02_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
   it should "check associativity law for Either monad" in {
     // The Either monad `Z + A` allows us to check associativity with very little work: 
-    // - Notice that the type signature of `fmap(ftn) ◦ ftn` and of `ftn[F[A]] ◦ ftn[A]` is `Z + Z + A ⇒ Z + A`.
+    // - Notice that the type signature of `fmap(ftn) ◦ ftn` and of `ftn[F[A]] ◦ ftn[A]` is `Z + (Z + (Z + A)) ⇒ Z + A`.
     // - Using the Curry-Howard correspondence, show that there is _only one_ implementation of this type signature,
     //    namely, each Z goes to Z and A goes to A.
     // - Therefore, the code for fmap(ftn) ◦ ftn has to be exactly the same as the code for ftn[F[A]] ◦ ftn[A].
@@ -185,7 +193,8 @@ class Chapter07_02_examplesSpec extends FlatSpec with FlattenableLawChecking wit
 
     // Compute ftn[F[A]] ◦ ftn symbolically.
     def ftnFtn[R, A](rrra: R ⇒ (R ⇒ (R ⇒ A))): R ⇒ A = {
-      // ftn(r ⇒ rrra(r)(r)) 
+      // ftn(r ⇒ rrra(r)(r))
+      // r ⇒ (r ⇒ rrra(r)(r))(r)(r)
       r ⇒ rrra(r)(r)(r)
     }
 
@@ -312,9 +321,10 @@ class Chapter07_02_examplesSpec extends FlatSpec with FlattenableLawChecking wit
     fff.length shouldEqual 56
 
     // Verify associativity directly.
-
+    // ((((A ⇒ R) ⇒ R) ⇒ R) ⇒ R) ⇒ (A ⇒ R) ⇒ R
     def ftn[R, A](cca: Cont[R, Cont[R, A]]): Cont[R, A] = { ar ⇒ cca(ca ⇒ ca(ar)) }
 
+    // ((A ⇒ R) ⇒ R) ⇒ (B ⇒ R) ⇒ R
     def fmap[R, A, B](f: A ⇒ B)(ca: Cont[R, A]): Cont[R, B] = { br ⇒ ca(a ⇒ br(f(a))) }
 
     // Compute ftn[F[A]] ◦ ftn symbolically.

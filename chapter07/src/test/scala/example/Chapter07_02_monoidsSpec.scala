@@ -31,7 +31,7 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
 
     1 |+| 2 shouldEqual 2
     "abc" |+| "def" shouldEqual "def"
-    // The operation always returns the left-most value. Thus, associativity is assured.
+    // The operation always returns the right-most value. Thus, associativity is assured.
     ('a |+| 'b) |+| 'c shouldEqual 'c
     'a |+| ('b |+| 'c) shouldEqual 'c
   }
@@ -80,9 +80,9 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
     
     /* Associativity: ms1 |+| ms2 |+| ms3 is computed as 
       for {
-        s1 ← ms1 
-        s2 ← ms2 
-        s3 ← ms3 
+        s1 ← ms1
+        s2 ← ms2
+        s3 ← ms3
       } yield s1 |+| s2 |+| s3
       So, associativity of M[S] follows directly from the semimonad's associativity law and the semigroup's associativity law.    
      */
@@ -105,8 +105,8 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
 
   it should "verify that right-biased Either of monoids is a monoid" in {
     // The monoid operation on `Either[A, B]` works by the following rules:
-    // - If all operands are `Left()`, combine their values into another `Left()`.
-    // - If even one operand is a `Right()`, discard all `Left()` operands and combine all remaining `Right()` operands.
+    // - If all operands are `Left(A)`, combine their values into another `Left(A)`.
+    // - If even one operand is a `Right(B)`, discard all `Left()` operands and combine all remaining `Right(B)` operands into one `Right(B)`.
 
     // This is associative, and respects identity laws if the `empty` element is a `Left()`.
 
@@ -152,7 +152,7 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
   }
 
   it should "check semigroup laws for a right-twisted product" in {
-    def monoidRightTwisted[S: Semigroup, P](action: S ⇒ P ⇒ P, defaultP: P): Semigroup[(S, P)] = new Semigroup[(S, P)] {
+    def semigroupRightTwisted[S: Semigroup, P](action: S ⇒ P ⇒ P): Semigroup[(S, P)] = new Semigroup[(S, P)] {
       override def combine(x: (S, P), y: (S, P)): (S, P) = (x._1 |+| y._1, action(x._1)(y._2))
     }
 
@@ -166,15 +166,13 @@ class Chapter07_02_monoidsSpec extends FlatSpec with FlattenableLawChecking with
     // However, a monoid is impossible since we are losing information about `x._2` in `combine`.
 
     // Example: S = Boolean, P = Option[A].
-    implicit val monoidBoolean: Monoid[Boolean] = new Monoid[Boolean] {
-      override def empty: Boolean = true
-
+    implicit val semigroupBoolean: Semigroup[Boolean] = new Semigroup[Boolean] {
       override def combine(x: Boolean, y: Boolean): Boolean = x && y
     }
 
     type Q = (Boolean, Option[Int])
 
-    implicit val monoidQ = monoidRightTwisted[Boolean, Option[Int]](b ⇒ oi ⇒ oi.filter(_ ⇒ b), None)
+    implicit val semigroupQ = semigroupRightTwisted[Boolean, Option[Int]](b ⇒ oi ⇒ oi.filter(_ ⇒ b))
 
     val q1: Q = (true, Some(1))
     val q2: Q = (false, Some(2))
