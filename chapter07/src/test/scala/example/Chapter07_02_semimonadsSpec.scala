@@ -5,6 +5,7 @@ import cats.syntax.monad._
 import cats.syntax.flatMap._
 import cats.{Functor, Monad}
 import org.scalatest.FlatSpec
+import Semimonad._
 
 class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
 
@@ -134,7 +135,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
     def pure[G[_] : Monad, H[_] : Monad, A](a: A): (G[A], H[A]) = (Monad[G].pure(a), Monad[H].pure(a))
 
-    // fmap is defined as before, for the product of functors.
+    // The definition of `fmap` is standard for the product of two functors.
     def fmap[G[_] : Functor, H[_] : Functor, A, B](f: A ⇒ B)(fa: F[G, H, A]): F[G, H, B] = (fa._1.map(f), fa._2.map(f))
 
     // Verify the identity laws.
@@ -185,8 +186,179 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // Use the associativity law for the monads G and H to simplify `.flatMap(x andThen flatMap(y))` to `.flatMap(x).flatMap(y)`.
       (fffa._1.flatMap(_._1).flatMap(_._1), fffa._2.flatMap(_._2).flatMap(_._2))
     }
-    
+
     // Observe now that ftn[F[A]] ◦ ftn[A] is the same expression as fmap(ftn) ◦ ftn.
   }
 
+  it should "verify monad construction 5" in {
+    type F[G[_], A] = Either[A, G[A]]
+    type FF[G[_], A] = F[G, F[G, A]]
+    type FFF[G[_], A] = F[G, FF[G, A]]
+
+    // Auxiliary function that encapsulates an important computation:
+    def merge[G[_] : Monad, A]: F[G, A] ⇒ G[A] = {
+      case Left(a) ⇒ Monad[G].pure(a)
+      case Right(ga) ⇒ ga
+    }
+
+    // The definition of flatten uses G's `pure` and `flatten`.
+    def ftn[G[_] : Monad, A](ffa: FF[G, A]): F[G, A] = ffa match {
+      // ffa has type (A + G[A]) + G[A + G[A]], and we need to return A + G[A].
+      case Left(fa) ⇒ fa
+      // A nontrivial computation here: 
+      // First, use `.map(merge)` to transform G[A + G[A]] into G[G[A]].
+      // This gives us a G[G[A]]. Then we use G's `flatten` on that and obtain G[A].
+      // Finally, we put that G[A] into the `Right` of A + G[A].
+      case Right(gfa) ⇒ // Right(gfa.map(merge).flatten)
+        // Use G's flatMap for brevity:
+        Right(gfa.flatMap(merge))
+    }
+
+    // The definition of `pure` does not use any properties of `G`, but the laws won't hold unless G is a monad.
+    def pure[G[_], A](a: A): F[G, A] = Left(a)
+
+    // The definition of `fmap` is standard for the disjunction of two functors.
+    def fmap[G[_] : Functor, A, B](f: A ⇒ B)(fa: F[G, A]): F[G, B] = fa match {
+      case Left(a) ⇒ Left(f(a))
+      case Right(ga) ⇒ Right(ga.map(f))
+    }
+
+    // Verify the identity laws.
+    // pure ◦ ftn = id
+    def pureFtn[G[_] : Monad, A](fa: F[G, A]): F[G, A] = {
+      // ftn(pure(fa)) = ftn { Left(fa) }
+      // Substitute the definition of ftn:
+      fa
+      // This is the identity function as required.
+    }
+
+    // fmap(pure) ◦ ftn = id
+    def fmapPureFtn[G[_] : Monad, A](ffa: FF[G, A]): FF[G, A] = {
+      // Compute ftn(fmap(pure)(ffa)).
+      // ftn { ffa match {
+      //        case Left(fa) ⇒ Left(pure(fa))
+      //        case Right(gfa) ⇒ Right(gfa.map(pure))
+      //     }
+      // } 
+      /* Substitute the definition of `ftn`:
+      ffa match {
+        case Left(fa) ⇒ pure(fa)
+        case Right(gfa) ⇒ Right(gfa.map(pure).flatMap(merge))
+      }
+      */
+      // Use the naturality law to simplify `.map(f).flatMap(g) = .flatMap(f andThen g)` where f = pure. 
+      /* Substitute the definition of `pure` and observe that `pure andThen merge` is the same as Monad[G].pure:
+      ffa match {
+        case Left(fa) ⇒ Left(fa)
+        case Right(gfa) ⇒ Right(gfa.flatMap(Monad[G].pure))
+      }
+      */
+      // Now use the identity law for the monad G, that is, ga.flatMap(Monad[G].pure) = ga.
+      ffa match {
+        case Left(fa) ⇒ Left(fa)
+        case Right(gfa) ⇒ Right(gfa)
+      }
+      // This is identical to just `ffa`.
+    }
+
+    // Verify the associativity law for `ftn`.
+
+    // Compute ftn[F[A]] ◦ ftn[A] symbolically.
+    def ftnFtn[G[_] : Monad, A](fffa: FFF[G, A]): F[G, A] = {
+      // ftn { fffa match {
+      //      case Left(ffa) ⇒ ffa
+      //      case Right(gffa) ⇒ Right(gffa.flatMap(merge))
+      //    }
+      // }
+      // Substitute the definition of ftn and simplify:
+      fffa match {
+        case Left(ffa) ⇒ ftn[G, A](ffa)
+        case Right(gffa) ⇒ Right(gffa.flatMap(merge).flatMap(merge))
+      }
+    }
+
+    // Compute fmap(ftn) ◦ ftn symbolically.
+    def fmapFtnFtn[G[_] : Monad, A](fffa: FFF[G, A]): F[G, A] = {
+      /*      ftn(fmap(ftn)(fffa)) = 
+      ftn {
+        fffa match {
+          case Left(ffa) ⇒ Left(ftn(ffa))
+          case Right(gffa) ⇒ Right(gffa.map(ftn))
+        }
+      }
+      */
+      /* Substitute the definition of outer ftn and simplify:
+      fffa match {
+        case Left(ffa) ⇒ ftn(ffa)
+        case Right(gffa) ⇒ Right(gffa.map(ftn[G, A]).flatMap(merge))
+      }
+      */
+      /* The `Left` case is already the same as in ftn[F[A]] ◦ ftn[A]. It remains to prove the `Right` case.
+      We need to show that the following two expressions are the same,
+      
+      gffa.flatMap(merge).flatMap(merge)
+      
+      and
+      
+      gffa.map(ftn[G, A]).flatMap(merge)
+      
+      In the last expression, the `map` and `flatMap` are from G, so we can use naturality:
+        .map(x).flatMap(merge) = .flatMap(x andThen merge)
+      This gives
+      
+      gffa.flatMap { ftn[G, A] andThen merge }
+      
+      Substitute the definition of ftn:
+      
+      gffa.flatMap { ffa ⇒ ffa match {
+              case Left(fa) ⇒ merge(fa)
+              case Right(gfa) ⇒ merge(Right(gfa.flatMap(merge)))
+           }
+      }
+      
+      Substitute the definition of merge:
+      
+      gffa.flatMap { ffa ⇒ ffa match {
+              case Left(fa) ⇒ merge(fa)
+              case Right(gfa) ⇒ gfa.flatMap(merge))
+           }
+      }
+      
+      We need to compare gffa.flatMap(...) with gffa.flatMap(merge).flatMap(merge).
+      
+      To make this comparison more direct, let us combine the two flatMap's by using G's associativity law:
+        .flatMap(f).flatMap(y) = .flatMap(x ⇒ f(x).flatMap(y)).
+
+      This gives, instead of gffa.flatMap(merge).flatMap(merge),
+      
+      gffa.flatMap { ffa ⇒ merge(ffa).flatMap(merge) }.
+      
+      It remains to compare two functions inside `flatMap`:
+      
+      The first function is
+      
+      ffa ⇒ ffa match {
+              case Left(fa) ⇒ merge(fa)
+              case Right(gfa) ⇒ gfa.flatMap(merge))
+           }
+      
+      The second function is
+      
+      ffa ⇒ merge(ffa).flatMap(merge).
+      
+      Substitute the definition of merge:
+      
+      ffa ⇒ ffa match {
+        case Left(fa) ⇒ Monad[G].pure(fa).flatMap(merge)
+        case Right(gfa) ⇒ gfa.flatMap(merge)
+      }
+      
+      The `Right` cases are identical. The `Left` cases become identical once we use G's identity law,
+      Monad[G].pure(x).flatMap(f) = f(x).
+      
+      Q.E.D.
+     */
+
+    }
+  }
 }
