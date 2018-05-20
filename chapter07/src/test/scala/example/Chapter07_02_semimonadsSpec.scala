@@ -219,7 +219,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     def ftn[G[_] : Monad, A](ffa: FF[G, A]): F[G, A] = ffa match {
       // ffa has type (A + G[A]) + G[A + G[A]], and we need to return A + G[A].
       case Left(fa) ⇒ fa
-      // A nontrivial computation here: 
+      // We will use `merge`: (A + G[A]) ⇒ G[A] (this function is defined above). 
       // First, use `.map(merge)` to transform G[A + G[A]] into G[G[A]].
       // This gives us a G[G[A]]. Then we use G's `flatten` on that and obtain G[A].
       // Finally, we put that G[A] into the `Right` of A + G[A].
@@ -372,7 +372,6 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       
       Q.E.D.
      */
-
     }
   }
 
@@ -384,7 +383,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       type F[A] = G[P[A]]
 
-      // P[A] is a monad; exercise 8 will be to show that its laws hold.
+      // P[A] is a monad; exercise 8 is to show that its laws hold.
 
       def fmapP[A, B](f: A ⇒ B)(fa: P[A]): P[B] = fa match {
         case Left(z) ⇒ Left(z)
@@ -412,9 +411,19 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       def pure[A](a: A): F[A] = Monad[G].pure(Right((Monoid[W].empty, a)))
 
-      def ftn[A](ffa: F[F[A]]): F[A] = Monad[G].flatMap(ffa) { // The type of the inner function is P[F[A]] ⇒ F[A]
+      // flatten for F transforms `G[P[G[P[A]]]]` first into `G[G[P[P[A]]]]` by 
+      // using the "sequencing" function `seq: P[G[C]] ⇒ G[P[C]]`, which
+      // we are able to define using some internal details of this _specific_ functor P:
+      
+      def seq[C](pgc: P[G[C]]): G[P[C]] = pgc match {
         case Left(z) ⇒ Monad[G].pure(Left(z))
-        case Right((w, fa)) ⇒ Monad[G].map(fa)(pa ⇒ Monad[P].flatten(Right((w, pa))))
+        case Right((w, gc)) ⇒ gc.map(c ⇒ Right((w, c)))
+      }
+      
+      def ftn[A](ffa: F[F[A]]): F[A] = Monad[G].flatMap(ffa) {
+        // The type of this inner function is P[F[A]] ⇒ F[A].
+        // P[G[P[A]]] ... `seq` ...> G[P[P[A]]] ... fmap(flatten) ...> G[P[A]]  
+        seq[P[A]] andThen (_.map(Monad[P].flatten))
       }
 
     }
