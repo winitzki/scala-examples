@@ -287,12 +287,12 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         }
       }
       */
-      /* Substitute the definition of outer ftn and simplify:
+      // Substitute the definition of outer ftn and simplify:
       fffa match {
         case Left(ffa) ⇒ ftn(ffa)
         case Right(gffa) ⇒ Right(gffa.map(ftn[G, A]).flatMap(merge))
       }
-      */
+      
       /* The `Left` case is already the same as in ftn[F[A]] ◦ ftn[A]. It remains to prove the `Right` case.
       We need to show that the following two expressions are the same,
       
@@ -360,5 +360,9 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
      */
 
     }
+  }
+
+  it should "verify monad construction 6" in {
+    
   }
 }
