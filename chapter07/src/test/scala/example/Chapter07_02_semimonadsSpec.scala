@@ -1,11 +1,13 @@
 package example
 
 import cats.syntax.functor._
+import cats.syntax.monoid._
 import cats.syntax.monad._
 import cats.syntax.flatMap._
-import cats.{Functor, Monad}
+import cats.{Functor, Monad, Monoid}
 import org.scalatest.FlatSpec
 import Semimonad._
+import CatsMonad.toCatsMonad
 
 class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
 
@@ -15,6 +17,11 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     type C[Z, A] = Z
 
     // The functor is going to be C[Z, ?], for a fixed Z.
+
+    implicit def functorC[Z]: Functor[C[Z, ?]] = new Functor[C[Z, ?]] {
+      override def map[A, B](fa: C[Z, A])(f: A ⇒ B): C[Z, B] = fa
+    }
+
     implicit def semimonadC[Z]: Semimonad[C[Z, ?]] = new Semimonad[C[Z, ?]] {
       override def flatMap[A, B](fa: C[Z, A])(f: A ⇒ C[Z, B]): C[Z, B] = fa
     }
@@ -31,6 +38,13 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
   it should "verify semimonad construction 2" in {
     // The functor F[A] is defined as (A, G[A]).
     // In the syntax of the "kind projector", it is Lambda[X ⇒ (X, G[X])].
+
+    implicit def functorAG[G[_] : Functor]: Functor[Lambda[X ⇒ (X, G[X])]] = new Functor[Lambda[X ⇒ (X, G[X])]] {
+      override def map[A, B](fa: (A, G[A]))(f: A ⇒ B): (B, G[B]) = fa match {
+        case (a, ga) ⇒ (f(a), ga.map(f))
+      }
+    }
+
     implicit def semimonadAG[G[_] : Functor]: Semimonad[Lambda[X ⇒ (X, G[X])]] = new Semimonad[Lambda[X ⇒ (X, G[X])]] {
       override def flatMap[A, B](fa: (A, G[A]))(f: A ⇒ (B, G[B])): (B, G[B]) = {
         // The first effect is in `fa`, the second effect is in the result of applying `f`.
@@ -289,10 +303,10 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       */
       // Substitute the definition of outer ftn and simplify:
       fffa match {
-        case Left(ffa) ⇒ ftn(ffa)
+        case Left(ffa) ⇒ ftn[G, A](ffa)
         case Right(gffa) ⇒ Right(gffa.map(ftn[G, A]).flatMap(merge))
       }
-      
+
       /* The `Left` case is already the same as in ftn[F[A]] ◦ ftn[A]. It remains to prove the `Right` case.
       We need to show that the following two expressions are the same,
       
@@ -363,6 +377,46 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
   }
 
   it should "verify monad construction 6" in {
-    
+    // Cut down the number of type parameters to be written each time.
+    def construction6[G[_] : Monad, W: Monoid, Z](): Unit = {
+
+      type P[A] = Either[Z, (W, A)]
+
+      type F[A] = G[P[A]]
+
+      // P[A] is a monad; exercise 8 will be to show that its laws hold.
+
+      def fmapP[A, B](f: A ⇒ B)(fa: P[A]): P[B] = fa match {
+        case Left(z) ⇒ Left(z)
+        case Right((w, a)) ⇒ Right((w, f(a)))
+      }
+
+      implicit val catsMonad: CatsMonad[P] = new CatsMonad[P] {
+        override def flatMap[A, B](fa: P[A])(f: A ⇒ P[B]): P[B] = fa match {
+          case Left(z1) ⇒ Left(z1)
+          case Right((w1, a1)) ⇒ f(a1) match {
+            case Left(z2) ⇒ Left(z2)
+            case Right((w2, a2)) ⇒ Right((w1 |+| w2, a2))
+          }
+        }
+
+        override def pure[A](a: A): P[A] = Right((Monoid[W].empty, a))
+      }
+
+      def fmapF[A, B](f: A ⇒ B)(fa: F[A]): F[B] = Functor[G].map(fa)(pa ⇒ Functor[P].map(pa)(f))
+
+      implicit val functorF: Functor[F] = new Functor[F] {
+        // Use the Functor instances for G and P, to define the standard Functor instance for the composition of functors.
+        override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = fmapF(f)(fa)
+      }
+
+      def pure[A](a: A): F[A] = Monad[G].pure(Right((Monoid[W].empty, a)))
+
+      def ftn[A](ffa: F[F[A]]): F[A] = Monad[G].flatMap(ffa) { // The type of the inner function is P[F[A]] ⇒ F[A]
+        case Left(z) ⇒ Monad[G].pure(Left(z))
+        case Right((w, fa)) ⇒ Monad[G].map(fa)(pa ⇒ Monad[P].flatten(Right((w, pa))))
+      }
+
+    }
   }
 }
