@@ -471,6 +471,9 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       def f2[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = fmapP(flmG(seq[A])) _ andThen seq andThen fmapG(ftnP)
 
+      // In the short notation, it is not necessary to write out the types -- or to check them.
+      // This is so because the laws hold for the most general inferred type of both sides.
+
       // It remains to evaluate f1 and f2 symbolically and to show that their expressions are equivalent.
       // Since the argument is a P[...], there are two cases: Left(z) and Right((W, G[P[G[A]]])).
       // We will now symbolically evaluate f1() and f2() in each of these two cases and show that the results are equal.
@@ -510,7 +513,8 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
     def construction7[G[_] : Functor](): Unit = {
 
-      case class F[A](eag: Either[A, G[F[A]]])
+      // Can't define a `type` because this is a recursive type constructor.
+      case class F[A](value: Either[A, G[F[A]]])
 
       def fmap[A, B](f: A ⇒ B): F[A] ⇒ F[B] = {
         case F(Left(a)) ⇒ F(Left(f(a)))
@@ -518,14 +522,92 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       }
 
       def ftn[A]: F[F[A]] ⇒ F[A] = {
-        case F(Left(fa)) ⇒ F(fa.eag)
+        case F(Left(fa)) ⇒ fa
         case F(Right(gffa)) ⇒ F(Right(gffa.map(ftn[A])))
       }
-      
+
       def pure[A]: A ⇒ F[A] = a ⇒ F(Left(a))
-      
+
       // Identity laws.
+      // pure ◦ ftn = id
+
+      def pureFtn[A](fa: F[A]): F[A] = {
+        //        ftn(pure(fa))
+        //        ftn(F(Left(fa)))
+        // Substitute the definition of ftn:
+        fa
+        // This is the identity function.
+      }
+
+      // fmap(pure) ◦ ftn = id
+
+      // Let us first compute fmap(f) ◦ ftn = flm(f) for an arbitrary f.
+      def flm[C, D](f: C ⇒ F[D])(fc: F[C]): F[D] = {
+        //        ftn(fmap(f)(fc))
+        // Substitute the definition of fmap:
+        //        ftn {
+        //          fc match {
+        //            case F(Left(c)) ⇒ F(Left(f(c)))
+        //            case F(Right(gfc)) ⇒ F(Right(gfc.map(fmap(f))))
+        //          }
+        //        }
+        // Substitute the definition of ftn:
+        //        fc match {
+        //          case F(Left(c)) ⇒ f(c)
+        //          case F(Right(gfc)) ⇒ F(Right(gfc.map(fmap(f)).map(ftn[D])))
+        //        }
+        // Replace fmap(f) ◦ ftn in the recursive case by flm(f):
+        fc match {
+          case F(Left(c)) ⇒ f(c)
+          case F(Right(gfc)) ⇒ F(Right(gfc.map(flm(f))))
+        }
+      }
+
+      def flmPure[A](fa: F[A]): F[A] = {
+        //        flm(pure[A])(fa)
+        // Substitute the definition of flm:
+        fa match {
+          case F(Left(c)) ⇒ pure(c) // = F(Left(c)), so this is the identity function.
+          case F(Right(gfc)) ⇒ F(Right(gfc.map(flmPure[A]))) // Recursive case: flmPure = id by induction.
+        }
+      }
+
+      // Associativity law.
+      // ftn ◦ ftn = fmap(ftn) ◦ ftn = flm(ftn)
+      def ftnFtn[A](fffa: F[F[F[A]]]): F[A] = {
+        //        ftn(ftn(fffa))
+        // Substitute the definition of ftn:
+        //        fffa match {
+        //          case F(Left(ffa)) ⇒ ftn(ffa)
+        //          case F(Right(gfffa)) ⇒ F(Right(gfffa.map(ftn[F[A]]).map(ftn[A])))
+        //        }
+        // Simplify the recursive case to `.map(ftn[F[A]] andThen ftn[A])`,
+        // which is equivalent to `.map(ftnFtn)`.
+        fffa match {
+          case F(Left(ffa)) ⇒ ftn(ffa)
+          case F(Right(gfffa)) ⇒ F(Right(gfffa.map(ftnFtn[A])))
+        }
+      }
+
+      def flmFtn[A](fffa: F[F[F[A]]]): F[A] = {
+        //        flm(ftn[A])(fffa)
+        // Substitute the definition of flm:
+        //        fffa match {
+        //          case F(Left(c)) ⇒ ftn(c) // Here `c` is of type `F[F[A]]`.
+        //          case F(Right(gfc)) ⇒ F(Right(gfc.map(flm(ftn[A]))))
+        //        }
+        // Rename c to ffa for clarity, and substitute flmFtn into the recursive case.
+        fffa match {
+          case F(Left(ffa)) ⇒ ftn(ffa)
+          case F(Right(gfc)) ⇒ F(Right(gfc.map(flmFtn[A])))
+        }
+      }
       
+      // Observe that the (recursive) definitions of ftnFtn and flmFtn are identical.
     }
+  }
+  
+  it should "verify monad construction 8" in {
+    
   }
 }
