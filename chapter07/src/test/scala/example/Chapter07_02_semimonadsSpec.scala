@@ -2,8 +2,9 @@ package example
 
 import cats.syntax.flatMap._
 import cats.syntax.functor._
+import cats.syntax.contravariant._
 import cats.syntax.monoid._
-import cats.{Functor, Monad, Monoid}
+import cats.{Contravariant, Functor, Monad, Monoid}
 import example.CatsMonad.toCatsMonad
 import org.scalatest.FlatSpec
 
@@ -650,12 +651,12 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       def pureG[A]: A ⇒ G[A] = ???
 
-      // The usual way of defining `pure` is to generate G-leaves:
+      // A straightforward way of defining `pure` is to generate G-leaves and not G-branches:
       def pure[A]: A ⇒ F[A] = a ⇒ F(Left(pureG(a)))
 
       // Another way of defining `pure` is to generate G-branches, but that would lead to an unterminated recursion:
       def badPure[A]: A ⇒ F[A] = a ⇒ F(Right(pureG(badPure(a))))
-      
+
       // We could terminate that recursion at some point, e.g.:
       def doubtfulPure[A]: A ⇒ F[A] = a ⇒ F(Right(pureG(pure(a))))
       // But we will shortly see that this doesn't help.
@@ -667,9 +668,35 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         F(Right(pureG(fa)))
       }
       // This is not always equal to fa. For example, take fa = F(Left(x)) for some x.
-      // The result of ftn() is always some F(Right(...)), so ftn(...) can never yield an F(Left(...)).
-      // So the left identity law does not hold for `pure` and `ftn`, no matter how we implement `pure`.
+      // The result of ftn() is always some F(Right(...)), so ftn(...) can never return an F(Left(...)).
+      // So the left identity law cannot hold for `pure` and `ftn`, no matter how we implement `pure`.
     }
   }
 
+  it should "verify that construction 9 is a semimonad" in {
+    def construction9[G[_] : Functor, H[_] : Contravariant](): Unit = {
+      type F[A] = H[A] ⇒ (A, G[A])
+
+      def fmap[A, B](f: A ⇒ B)(fa: F[A]): F[B] = hb ⇒ fa(hb.contramap(f)) match {
+        case (a, ga) ⇒ (f(a), ga.map(f))
+      }
+
+      def ftn[A](ffa: F[F[A]]): F[A] = { ha ⇒
+        // We have an ffa: H[F[A]] ⇒ (F[A], G[F[A]]), and we need to return (A, G[A]).
+        // We need to call ffa on an argument of type H[F[A]] = H[H[A] ⇒ (A, G[A])].
+        // Then we will get (F[A], G[F[A]]]), we can discard G[] and return F[A] as required.
+        val hfa: H[F[A]] =
+        // To get H[F[A]], we use the contramap on ha: H[A] applied to a g: F[A] ⇒ A.
+        // To get such a g, we write fa ⇒ ??? where we need to produce an A out of fa: F[A].
+          ha.contramap(fa ⇒ fa(ha)._1)
+        
+        ffa(hfa)._1(ha)
+      }
+      
+      // Simplify: ftn(ffa) = { ha ⇒ ffa(ha.contramap(fa ⇒ fa(ha)._1))._1(ha) }
+      
+      // Verify the associativity law.
+      // Compute ftn(ftn(fffa)) = 
+    }
+  }
 }
