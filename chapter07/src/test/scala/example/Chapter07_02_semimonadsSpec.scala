@@ -1,13 +1,11 @@
 package example
 
+import cats.syntax.flatMap._
 import cats.syntax.functor._
 import cats.syntax.monoid._
-import cats.syntax.monad._
-import cats.syntax.flatMap._
 import cats.{Functor, Monad, Monoid}
+import example.CatsMonad.toCatsMonad
 import org.scalatest.FlatSpec
-import Semimonad._
-import CatsMonad.toCatsMonad
 
 class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking with CatsLawChecking {
 
@@ -444,7 +442,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         // P[G[P[A]]] ... `seq` ...> G[P[P[A]]] ... fmapG(ftnP) ...> G[P[A]]  
         // The type of this inner function is P[G[P[A]]] ⇒ G[P[A]],
         // so G.flatMap of it will be G[P[G[P[A]]]] ⇒ G[P[A]].
-        seq[P[A]] andThen fmapG(ftnP)
+        seq[P[A]] _ andThen fmapG(ftnP)
       }
 
       // Short notation: ftnF = flmG(seq ◦ fmapG(ftnP))
@@ -469,41 +467,65 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       // The difference is in the functions under flmG { }. The type of these functions is P[G[P[G[A]]]] ⇒ G[P[A]].
       // Checking that the types compile:
-      def f1[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = seq[P[G[A]]] andThen fmapG(ftnP) andThen flmG(seq[A])
+      def f1[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = seq[P[G[A]]] _ andThen fmapG(ftnP) andThen flmG(seq[A])
 
-      def f2[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = fmapP(flmG(seq[A])) andThen seq andThen fmapG(ftnP)
-      
+      def f2[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = fmapP(flmG(seq[A])) _ andThen seq andThen fmapG(ftnP)
+
       // It remains to evaluate f1 and f2 symbolically and to show that their expressions are equivalent.
       // Since the argument is a P[...], there are two cases: Left(z) and Right((W, G[P[G[A]]])).
       // We will now symbolically evaluate f1() and f2() in each of these two cases and show that the results are equal.
-      
+
       // Case 1: x = Left(z). Note that seq(Left(z)) = Monad[G].pure(Left(z)), while ftnP(Left(z)) = Left(z).
       // Also, Monad[G].pure(Left(z)).flatMap(seq) = Monad[G].pure(Left(z)) because of G's identity law.
       // So we get f1(x) = Monad[G].pure(Left(z))
       // and f2(x) = Monad[G].pure(Left(z)) because fmapP on a Left() is id.
-      
+
       // Case 2: x = Right((w, gpga)). Compute seq(Right((w, gpga))) = gpga.map(pga ⇒ Right((w, pga)))
       // So (seq andThen fmapG(ftnP)) (x) = gpgaa.map(pga ⇒ Right((w, pga))).map(ftnP) = gpga.map(pga ⇒ ftnP(Right((w, pga))))
       // f1(x) = gpga.map(pga ⇒ ftnP(Right((w, pga)))).flatMap(seq)
       // = gpga.flatMap(pga ⇒ seq(ftnP(Right((w, pga)))))
-      
+
       // For f2(x), first compute fmapP(flmG(seq))(x) = Right((w, gpga.flatMap(seq)))
       // Then apply seq to that, obtain gpga.flatMap(seq).map(pa ⇒ Right((w, pa)))
       // Finally apply fmapG(ftnP) to that, obtain gpga.flatMap(seq).map(pa ⇒ Right((w, pa))).map(ftnP)
       // We would like to pull everything under gpga.flatMap, so we using a naturality law for flatMap:
       // f2(x) = gpga.flatMap(pga ⇒ seq(pga).map(pa ⇒ ftnP(Right((w, pa)))))
-      
+
       // It remains to compare `seq(ftnP(Right((w, pga))))` and `seq(pga).map(pa ⇒ ftnP(Right((w, pa))))`.
       // Consider two cases for `pga: P[G[A]]`, Left(z) and Right((w2, ga)).
-     
+
       // Case 1: pga = Left(z). For f1, we have ftnP(Right((w, Left(z)))) = Left(z), then seq(Left(z)) = pureG(Left(z)) as before.
       // For f2, we have pureG(Left(z)).map(...) = pureG( Left(z) ).
-      
+
       // Case 2: pga = Right((w2, ga)). For f1, we have ftnP(Right((w, Right((w2, ga)))) = Right((w |+| w2, ga)).
       // Then we compute seq of that and get ga.map( a ⇒ Right((w |+| w2, a))).
       // For f2, we have seq(Right((w2, ga))) = ga.map(a ⇒ Right((w2, a))).
       // Then we compute `.map(pa ⇒ ftnP(Right((w, pa))))` of that and obtain
       // ga.map(a ⇒ Right((w |+| w2, a))).
+    }
+  }
+
+  it should "verify monad construction 7" in {
+    // Free monad over the functor G.
+
+    def construction7[G[_] : Functor](): Unit = {
+
+      case class F[A](eag: Either[A, G[F[A]]])
+
+      def fmap[A, B](f: A ⇒ B): F[A] ⇒ F[B] = {
+        case F(Left(a)) ⇒ F(Left(f(a)))
+        case F(Right(gfa)) ⇒ F(Right(gfa.map(fmap(f))))
+      }
+
+      def ftn[A]: F[F[A]] ⇒ F[A] = {
+        case F(Left(fa)) ⇒ F(fa.eag)
+        case F(Right(gffa)) ⇒ F(Right(gffa.map(ftn[A])))
+      }
+      
+      def pure[A]: A ⇒ F[A] = a ⇒ F(Left(a))
+      
+      // Identity laws.
+      
     }
   }
 }
