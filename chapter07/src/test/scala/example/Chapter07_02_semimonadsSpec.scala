@@ -338,7 +338,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
            }
       }
       
-      We need to compare gffa.flatMap(...) with gffa.flatMap(merge).flatMap(merge).
+      We now need to compare gffa.flatMap(...) with gffa.flatMap(merge).flatMap(merge).
       
       To make this comparison more direct, let us combine the two flatMap's by using G's associativity law:
         .flatMap(f).flatMap(y) = .flatMap(x ⇒ f(x).flatMap(y)).
@@ -402,7 +402,21 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         override def pure[A](a: A): P[A] = Right((Monoid[W].empty, a))
       }
 
+      // We need this code explicitly. Convert Z + W × (Z + W × A) ⇒ Z + W × A.
+      def ftnP[A](ppa: P[P[A]]): P[A] = ppa match {
+        case Left(z1) ⇒ Left(z1)
+        case Right((w1, pa)) ⇒ pa match {
+          case Left(z2) ⇒ Left(z2)
+          case Right((w2, a)) ⇒ Right((w1 |+| w2, a))
+        }
+      }
+
+      def fmapG[A, B](f: A ⇒ B)(fa: G[A]): G[B] = Functor[G].fmap(fa)(f)
+
+      def flmG[A, B](f: A ⇒ G[B])(fa: G[A]): G[B] = Monad[G].flatMap(fa)(f)
+
       def fmapF[A, B](f: A ⇒ B)(fa: F[A]): F[B] = Functor[G].map(fa)(pa ⇒ Functor[P].map(pa)(f))
+      // Short notation: fmapF(f) = fmapG(fmapP(f)), or `fmapF = fmapP ◦ fmapG`
 
       implicit val functorF: Functor[F] = new Functor[F] {
         // Use the Functor instances for G and P, to define the standard Functor instance for the composition of functors.
@@ -414,18 +428,82 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // flatten for F transforms `G[P[G[P[A]]]]` first into `G[G[P[P[A]]]]` by 
       // using the "sequencing" function `seq: P[G[C]] ⇒ G[P[C]]`, which
       // we are able to define using some internal details of this _specific_ functor P:
-      
+
       def seq[C](pgc: P[G[C]]): G[P[C]] = pgc match {
         case Left(z) ⇒ Monad[G].pure(Left(z))
         case Right((w, gc)) ⇒ gc.map(c ⇒ Right((w, c)))
       }
-      
+      // Since the code of `seq` only uses natural transformations and is fully generic,
+      // `seq` is also a natural transformation -- between functors P[G[?]] and G[P[?]].
+      // So `seq` automatically satisfies the naturality law:
+      // `fmapP (fmapG f) ◦ seq = seq ◦ fmapG (fmapP f)`
+
+      // Define `flatten` for F.
       def ftn[A](ffa: F[F[A]]): F[A] = Monad[G].flatMap(ffa) {
-        // The type of this inner function is P[F[A]] ⇒ F[A].
-        // P[G[P[A]]] ... `seq` ...> G[P[P[A]]] ... fmap(flatten) ...> G[P[A]]  
-        seq[P[A]] andThen (_.map(Monad[P].flatten))
+        // This inner function works like this:
+        // P[G[P[A]]] ... `seq` ...> G[P[P[A]]] ... fmapG(ftnP) ...> G[P[A]]  
+        // The type of this inner function is P[G[P[A]]] ⇒ G[P[A]],
+        // so G.flatMap of it will be G[P[G[P[A]]]] ⇒ G[P[A]].
+        seq[P[A]] andThen fmapG(ftnP)
       }
 
+      // Short notation: ftnF = flmG(seq ◦ fmapG(ftnP))
+      // = flmG(seq) ◦ fmapG(ftnP) -- using naturality for flmG.
+
+      // Let us keep writing in the short notation and use the laws until we can't simplify any more.
+      // This will minimize the amount of computation that needs to be done in explicit code.
+
+      // Compute fmapF(ftnF) ◦ ftnF = fmapG(fmapP(ftnF)) ◦ ftnF  -- now substitute the definition of ftnF:
+      // = fmapG(fmapP(flmG(seq) ◦ fmapG(ftnP)) ◦ flmG(seq ◦ fmapG(ftnP)) 
+      // We want to pull fmapP(FmapG(...)) ◦ seq together. Use naturality fmapG(x) ◦ flmG(y) = flmG(x ◦ y):
+      // = flmG { fmapP(flmG(seq) ◦ fmapG(ftnP)) ◦ seq ◦ fmapG(ftnP) }  -- now split off fmapP(x ◦ y) = fmapP(x) ◦ fmapP(y):
+      // = flmG { fmapP(flmG(seq)) ◦ fmapP(fmapG(ftnP)) ◦ seq ◦ fmapG(ftnP) } -- now use naturality of seq:
+      // = flmG { fmapP(flmG(seq)) ◦ seq ◦ fmapG(fmapP(ftnP)) ◦ fmapG(ftnP) } -- now pull fmapG() together:
+      // = flmG { fmapP(flmG(seq)) ◦ seq ◦ fmapG(fmapP(ftnP) ◦ ftnP) } -- now we can use the associativity law for P:
+      // = flmG { fmapP(flmG(seq)) ◦ seq ◦ fmapG(ftnP ◦ ftnP) } -- pull fmapG() apart and pull fmapG(ftnP) out of flmG():
+      // = flmG { fmapP(flmG(seq)) ◦ seq ◦ fmapG(ftnP) } ◦ fmapG(ftnP) -- nothing else to simplify.
+
+      // Compute ftnF ◦ ftnF = flmG(seq) ◦ fmapG(ftnP) ◦ flmG(seq) ◦ fmapG(ftnP)
+      // -- let's try to make it similar to the code above, using associativity and naturality of flmG:
+      // ftnF ◦ ftnF = flmG { seq ◦ fmapG(ftnP) ◦ flmG(seq) } ◦ fmapG(ftnP)
+
+      // The difference is in the functions under flmG { }. The type of these functions is P[G[P[G[A]]]] ⇒ G[P[A]].
+      // Checking that the types compile:
+      def f1[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = seq[P[G[A]]] andThen fmapG(ftnP) andThen flmG(seq[A])
+
+      def f2[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = fmapP(flmG(seq[A])) andThen seq andThen fmapG(ftnP)
+      
+      // It remains to evaluate f1 and f2 symbolically and to show that their expressions are equivalent.
+      // Since the argument is a P[...], there are two cases: Left(z) and Right((W, G[P[G[A]]])).
+      // We will now symbolically evaluate f1() and f2() in each of these two cases and show that the results are equal.
+      
+      // Case 1: x = Left(z). Note that seq(Left(z)) = Monad[G].pure(Left(z)), while ftnP(Left(z)) = Left(z).
+      // Also, Monad[G].pure(Left(z)).flatMap(seq) = Monad[G].pure(Left(z)) because of G's identity law.
+      // So we get f1(x) = Monad[G].pure(Left(z))
+      // and f2(x) = Monad[G].pure(Left(z)) because fmapP on a Left() is id.
+      
+      // Case 2: x = Right((w, gpga)). Compute seq(Right((w, gpga))) = gpga.map(pga ⇒ Right((w, pga)))
+      // So (seq andThen fmapG(ftnP)) (x) = gpgaa.map(pga ⇒ Right((w, pga))).map(ftnP) = gpga.map(pga ⇒ ftnP(Right((w, pga))))
+      // f1(x) = gpga.map(pga ⇒ ftnP(Right((w, pga)))).flatMap(seq)
+      // = gpga.flatMap(pga ⇒ seq(ftnP(Right((w, pga)))))
+      
+      // For f2(x), first compute fmapP(flmG(seq))(x) = Right((w, gpga.flatMap(seq)))
+      // Then apply seq to that, obtain gpga.flatMap(seq).map(pa ⇒ Right((w, pa)))
+      // Finally apply fmapG(ftnP) to that, obtain gpga.flatMap(seq).map(pa ⇒ Right((w, pa))).map(ftnP)
+      // We would like to pull everything under gpga.flatMap, so we using a naturality law for flatMap:
+      // f2(x) = gpga.flatMap(pga ⇒ seq(pga).map(pa ⇒ ftnP(Right((w, pa)))))
+      
+      // It remains to compare `seq(ftnP(Right((w, pga))))` and `seq(pga).map(pa ⇒ ftnP(Right((w, pa))))`.
+      // Consider two cases for `pga: P[G[A]]`, Left(z) and Right((w2, ga)).
+     
+      // Case 1: pga = Left(z). For f1, we have ftnP(Right((w, Left(z)))) = Left(z), then seq(Left(z)) = pureG(Left(z)) as before.
+      // For f2, we have pureG(Left(z)).map(...) = pureG( Left(z) ).
+      
+      // Case 2: pga = Right((w2, ga)). For f1, we have ftnP(Right((w, Right((w2, ga)))) = Right((w |+| w2, ga)).
+      // Then we compute seq of that and get ga.map( a ⇒ Right((w |+| w2, a))).
+      // For f2, we have seq(Right((w2, ga))) = ga.map(a ⇒ Right((w2, a))).
+      // Then we compute `.map(pa ⇒ ftnP(Right((w, pa))))` of that and obtain
+      // ga.map(a ⇒ Right((w |+| w2, a))).
     }
   }
 }
