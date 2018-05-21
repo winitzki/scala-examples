@@ -150,6 +150,28 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     // The definition of `fmap` is standard for the product of two functors.
     def fmap[G[_] : Functor, H[_] : Functor, A, B](f: A ⇒ B)(fa: F[G, H, A]): F[G, H, B] = (fa._1.map(f), fa._2.map(f))
 
+    // How does this monad work:
+    /*
+    val result = for {
+      x1 ← (ga1, ha1)
+      x2 ← (ga2, ha2)
+    } yield (x1 + x2)
+    
+    is the same as
+    
+    val ga = for {
+      x1 ← ga1
+      x2 ← ga2
+    } yield (x1 + x2)
+    
+    val ha = for {
+      x1 ← ha1
+      x2 ← ha2
+    } yield (x1 + x2)
+    
+    val result = (ga, ha)
+     */
+
     // Verify the identity laws.
 
     // pure ◦ ftn = id
@@ -602,12 +624,52 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
           case F(Right(gfc)) ⇒ F(Right(gfc.map(flmFtn[A])))
         }
       }
-      
+
       // Observe that the (recursive) definitions of ftnFtn and flmFtn are identical.
     }
   }
-  
-  it should "verify monad construction 8" in {
-    
+
+  it should "verify that construction 8 is not a monad" in {
+    def construction8[G[_] : Functor](): Unit = {
+      case class F[A](value: Either[G[A], G[F[A]]])
+
+      def ftn[A](ffa: F[F[A]]): F[A] = ffa match {
+        case F(Left(gfa)) ⇒ F(Right(gfa)) // Redistribute G-leaves into G-branches.
+        case F(Right(gffa)) ⇒ F(Right(gffa.map(ftn[A]))) // Recursive case.
+      }
+
+      def fmap[A, B](f: A ⇒ B)(fa: F[A]): F[B] = fa match {
+        case F(Left(ga)) ⇒ F(Left(ga.map(f))) // Map over the G-leaves.
+        case F(Right(gffa)) ⇒ F(Right(gffa.map(fmap(f)))) // Recursive case.
+      }
+
+      // Exercise 14 will show that ftn is associative, which is sufficient for a semimonad.
+
+      // If we wanted to make F a full monad, we would need to define `pure`.
+      // This would require a `pure` method on G. Suppose we had one:
+
+      def pureG[A]: A ⇒ G[A] = ???
+
+      // The usual way of defining `pure` is to generate G-leaves:
+      def pure[A]: A ⇒ F[A] = a ⇒ F(Left(pureG(a)))
+
+      // Another way of defining `pure` is to generate G-branches, but that would lead to an unterminated recursion:
+      def badPure[A]: A ⇒ F[A] = a ⇒ F(Right(pureG(badPure(a))))
+      
+      // We could terminate that recursion at some point, e.g.:
+      def doubtfulPure[A]: A ⇒ F[A] = a ⇒ F(Right(pureG(pure(a))))
+      // But we will shortly see that this doesn't help.
+
+      // Compute ftn(pure(fa)):
+      def pureFtn[A](fa: F[A]): F[A] = {
+        //        ftn(pure(fa))
+        //        ftn(F(Left(pureG(fa))))
+        F(Right(pureG(fa)))
+      }
+      // This is not always equal to fa. For example, take fa = F(Left(x)) for some x.
+      // The result of ftn() is always some F(Right(...)), so ftn(...) can never yield an F(Left(...)).
+      // So the left identity law does not hold for `pure` and `ftn`, no matter how we implement `pure`.
+    }
   }
+
 }
