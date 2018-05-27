@@ -690,55 +690,120 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       def fmap[A, B](f: A ⇒ B)(fa: F[A]): F[B] = hb ⇒ fmapAG(f)(fa(hb.contramap(f)))
 
       def ftn[A](ffa: F[F[A]]): F[A] = { ha ⇒
-        // We have an ffa: H[F[A]] ⇒ (F[A], G[F[A]]), and we need to return (A, G[A]).
-        // We need to call ffa on an argument of type H[F[A]] = H[H[A] ⇒ (A, G[A])].
+        // We have an `ffa: H[F[A]] ⇒ (F[A], G[F[A]])`, and we need to return `(A, G[A])`.
+        // We need to call `ffa` on an argument of type `H[F[A]]`, which is `H[H[A] ⇒ (A, G[A])]`.
         // Then we will get (F[A], G[F[A]]]), so we can discard G[F[A]] and return F[A] as required.
 
-        val hfa: H[F[A]] =
-        // To get H[F[A]], we use the contramap on ha: H[A] applied to a g: F[A] ⇒ A.
-        // To get such a g, we write fa ⇒ ??? where we need to produce an A out of fa: F[A].
-          ha.contramap(fa ⇒ fa(ha)._1)
+        val hfa =
+        // To get an `H[F[A]]` from `H[A]`, we use the contramap on `ha: H[A]` applied to a `g: F[A] ⇒ A`.
+        // To get such a `g`, we write `fa ⇒ ???` where we need to produce an `A` out of `fa: F[A]`.
+          ha.contramap[F[A]](fa ⇒ fa(ha)._1)
 
         ffa(hfa)._1(ha)
       }
 
-      // Simplify: ftn(ffa) = { ha ⇒ ffa(ha.contramap(fa ⇒ fa(ha)._1))._1(ha) }
+      // For clarity, define the function H[A] ⇒ H[F[A]] separately:
+      def insF[A](ha: H[A]): H[F[A]] = ha.contramap[F[A]](fa ⇒ fa(ha)._1)
 
-      // Verify the associativity law.
-      // Compare ftn(ftn[F[A]](fffa)) and ftn(fmap(ftn)(fffa)).
+      // Rewrite `ftn` more concisely:
+      def ftnShorter[A](ffa: F[F[A]]): F[A] = { ha ⇒ ffa(insF(ha))._1(ha) }
 
-      // First expression: start with
-      // ftn[F[A]](fffa) = { hfa ⇒ fffa(hfa.contramap(ffa ⇒ ffa(hfa)._1))._1(hfa) }
-      // ftn(ftn(fffa)) = { ha ⇒ ffa(ha.contramap(fa ⇒ fa(ha)._1))._1(ha) } where ffa = ftn(fffa)
-      // So, substitute hfa = ha.contramap(fa ⇒ fa(ha)._1) into the body of ftn(fffa):
-      // ftn(ftn(fffa)) = { ha ⇒
-      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
-      //   fffa(hfa.contramap(ffa ⇒ ffa(hfa)._1))._1(hfa)._1(ha)
-      // }
+      // Verify the associativity law:
+      // Compare ftn(ftn[F[A]](fffa)) with ftn(fmap(ftn)(fffa)).
 
-      // Second expression: start with
-      // fmap(ftn)(fffa) = hfb ⇒ fmapAG(ftn)(fffa(hfb.contramap(ftn)))
-      
-      // ftn(fmap(ftn)(fffa)) = { ha ⇒
-      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
-      //   fmapAG(ftn)(fffa(hfa.contramap(ftn)))._1(ha)
-      // }
+      // First function:
+      def ftnFtn[A](fffa: F[F[F[A]]]): F[A] = {
+        // Start with
+        // ftn[F[A]](fffa) = { hfa ⇒ fffa(insF(hfa))._1(hfa) }
+        // ftn(ftn(fffa)) = { ha ⇒ ftn(fffa)(insF(ha))._1(ha) }
 
-      // Substitute the definition of fmapAG() and apply ._1 to that:
-      // fmapAG(f)(ag)._1 = f(ag._1)
+        // So, substitute hfa = insF(ha) into the body of ftn(fffa):
+        ha ⇒ fffa(insF(insF(ha)))._1(insF(ha))._1(ha)
+      }
 
-      // ftn(fmap(ftn)(fffa)) = { ha ⇒
-      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
-      //   ftn(fffa(hfa.contramap(ftn)))(ha)
-      // }
-      
-      // Substitute the definition of tne outer ftn:
+      // Second function:
+      def fmapFtnFtn[A](fffa: F[F[F[A]]]): F[A] = { ha ⇒
+        // Start with
+        // fmap(ftn)(fffa) = { hfa ⇒ fmapAG(ftn)(fffa(hfa.contramap(ftn))) }
+        // So we have
+        //   ftn(fmap(ftn)(fffa)) = ftn[A] { hfa ⇒ fmapAG(ftn[A])(fffa(hfa.contramap(ftn))) }
+        // Now substitute the definition of the outer ftn, which results in substituting hfa = insF(ha) into fmapAG(ftn[A])(fffa(hfa.contramap(ftn))):
+        // ftn(fmap(ftn)(fffa)) = { ha ⇒
+        //        fmapAG(ftn[A])(fffa(insF(ha).contramap(ftn)))._1(ha)
+        // }
+        // Substitute the definition of fmapAG() and apply _._1 to that:
+        // We have `fmapAG(f)(ag)._1 = f(ag._1)`
+        // So
+        // ftn(fmap(ftn)(fffa)) = { ha ⇒
+        //        ftn{fffa(insF(ha).contramap(ftn))._1}(ha)
+        // }
+        // Substitute the definition of ftn(ffa)(ha):
+        fffa(insF(ha).contramap(ftn))._1(insF(ha))._1(ha)
+      }
 
-      // ftn(fmap(ftn)(fffa)) = { ha ⇒
-      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
-      //   fffa(hfa.contramap(ftn))(hfa)._1(ha)
-      // }
+      // It remains to compare the arguments of `fffa`: `insF(insF(ha))` vs `insF(ha).contramap(ftn)`.
+      // We need to show that these two expressions (both of type H[F[F[A]]]) are always equal, for any `ha`.
 
+      def ex1[A](ha: H[A]): H[F[F[A]]] = {
+        //        insF(insF(ha))
+        // Substitute the definition of insF:
+        ha.contramap[F[F[A]]] { ffa ⇒ ffa(insF(ha))._1(ha)._1 }
+      }
+
+      def ex2[A](ha: H[A]): H[F[F[A]]] = {
+        //        insF(ha).contramap(ftn)
+        // Substitute the definition of insF:
+        //        ha.contramap[F[A]](fa ⇒ fa(ha)._1).contramap(ftn)
+        // Use contramap composition law to merge two contramaps:
+        // ha.contramap(f).contramap(g) = ha.contramap(g andThen f) = ha.contramap(ffa ⇒ f(g(ffa)))
+        // So we get
+        //        ha.contramap[F[F[A]]](ffa ⇒ ftn(ffa)(ha)._1)
+        // Substitute the definition of ftn(ffa)(ha):
+        ha.contramap(ffa ⇒ ffa(insF(ha))._1(ha)._1)
+      }
+
+      // We observe that ex1 and ex2 are identical.
+
+      // Show that the full monad laws for F require G[A] ≡ 1.
+      // Suppose we have a `pureG` for G:
+      def pureG[A]: A ⇒ G[A] = ???
+
+      // Now we can define pure[A] for F:
+      def pure[A](a: A): F[A] = _ ⇒ (a, pureG(a))
+
+      // Identity laws.
+      def pureFtn[A](fa: F[A]): F[A] = {
+        //        ftn(pure(fa))
+        // Substitute the definition of ftn:
+        //        ha ⇒ pure(fa)(insF(ha))._1(ha)
+        // pure(fa) ignores its argument, and pure(fa)(_)._1 = fa, so
+        ha ⇒ fa(ha)
+        // The function `ha ⇒ fa(ha)` is the same as `fa`, so this law holds.
+      }
+
+      def fmapPureFtn[A](fa: F[A]): F[A] = { ha ⇒
+        //        ftn(fmap(pure[A])(fa))(ha)
+        // Substitute the definition of ftn(ffa)(ha) with ffa = fmap(pure[A])(fa):
+        //        fmap(pure[A])(fa)(insF(ha))._1(ha)
+        // Substitute the definition of `fmap(f)(fa)(hb)` with f = pure[A] and hb = insF(ha):
+        //        fmapAG(pure[A])(fa(insF(ha).contramap(pure)))._1(ha)
+        // Use `fmapAG(f)(ag)._1 = f(ag._1)`:
+        //        pure[A](fa(insF(ha).contramap(pure))._1)(ha)
+        // Compute insF(ha).contramap(pure) = ha.contramap(pure andThen fa ⇒ fa(ha)._1)
+        // = ha.contramap(a ⇒ pure(a)(ha)._1).
+        // Substitute pure(a)(_) = (a, pureG(a)), then:
+        // insF(ha).contramap(pure) = ha.contramap(a ⇒ a) = ha.
+        // Therefore
+        // pure[A](fa(insF(ha).contramap(pure))._1)(ha) = pure[A](fa(ha)._1)(ha) =
+        (fa(ha)._1, pureG(fa(ha)._1))
+        // For this to be equal to `fa(ha)`, we need that
+        // fa(ha)._2 = pureG(fa(ha)._1) for arbitrary `fa(ha): (A, G[A])`.
+        // In other words, we need the second element of an arbitrary tuple of type (A, G[A])
+        // to be computable from the first element.
+        // This is impossible as long as the type of G[A] contains _any_ nontrivial information. 
+        // Therefore F[A] can be a full monad only if G[A] contains no information,
+        // i.e. G[A] must be the unit type for all A.
+      }
     }
   }
 
