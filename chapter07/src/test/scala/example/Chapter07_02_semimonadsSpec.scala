@@ -54,14 +54,14 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       }
     }
 
-    // If G = 1, we have F[A] = A; this is the Identity monad. flatmap = id, fmap = id, flatten = id, pure = id.
+    // If G = 1, we have F[A] = A; this is the `Identity` monad. flatMap = id, fmap = id, flatten = id, pure = id.
     // All monad laws hold trivially.
 
     // Now verify the associativity law for an arbitrary functor G.
 
     // Define type aliases for brevity.
     type F[G[_], A] = (A, G[A])
-    type FF[G[_], A] = (F[G, A], G[F[G, A]])
+    type FF[G[_], A] = (F[G, A], G[F[G, A]]) // F(F(A))
     type FFF[G[_], A] = (FF[G, A], G[FF[G, A]])
 
     // Derive flatten from flatMap as flatten(ffa) = ffa.flatMap(id), where id is of type F[F[A]] ⇒ F[F[A]].
@@ -77,7 +77,6 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       */
       // Simplify.
       (ffa._1._1, ffa._2.map(_._1))
-
     }
 
     // Implement fmap.
@@ -99,7 +98,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       ((fffa._1._1._1, fffa._1._2.map(_._1)), fffa._2.map(ftn[G, A]))
     }
 
-    // Compute  fmap(ftn) ◦ ftn, that is, ftn(fmap(ftn)(fffa)), symbolically.
+    // Compute fmap(ftn) ◦ ftn, that is, ftn(fmap(ftn)(fffa)), symbolically.
     def fmapFtnFtn[G[_] : Functor, A](fffa: FFF[G, A]): F[G, A] = {
       // ftn {
       //      ((fffa._1._1._1, fffa._1._2.map(_._1)), fffa._2.map(ftn[G, A]))
@@ -109,7 +108,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // Combine the two `map()` calls and simplify:
       //      (fffa._1._1._1, fffa._2.map(ffa ⇒ ftn[G, A](ffa)._1))
       // Note that ftn(x)._1 = x._1._1 and simplify:
-      (fffa._1._1._1, fffa._2.map(ffa ⇒ ffa._1._1))
+      (fffa._1._1._1, fffa._2.map(_._1._1))
     }
 
     // Compute ftn[F[A]] ◦ ftn[A], that is, ftn(ftn(fffa)) symbolically.
@@ -141,12 +140,13 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
     // We use `map(_._1)` and `map(_._2)` to discard H[A] inside G[(G[A], H[A])] and to discard G[A] inside H[(G[A], H[A])].
     def ftn[G[_] : Monad, H[_] : Monad, A](ffa: FF[G, H, A]): (G[A], H[A]) = {
-      //      (ffa._1.map(_._1).flatten, ffa._2.map(_._2).flatten)
+      //      (fa._1.map(_._1).flatten, fa._2.map(_._2).flatten)
       // Simplify by substituting `flatMap`s already defined in the monads G and H:
       (ffa._1.flatMap(_._1), ffa._2.flatMap(_._2))
     }
 
-    def pure[G[_] : Monad, H[_] : Monad, A](a: A): (G[A], H[A]) = (Monad[G].pure(a), Monad[H].pure(a))
+    def pure[G[_] : Monad, H[_] : Monad, A](a: A): (G[A], H[A]) =
+      (Monad[G].pure(a), Monad[H].pure(a))
 
     // The definition of `fmap` is standard for the product of two functors.
     def fmap[G[_] : Functor, H[_] : Functor, A, B](f: A ⇒ B)(fa: F[G, H, A]): F[G, H, B] = (fa._1.map(f), fa._2.map(f))
@@ -187,17 +187,17 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     }
 
     // fmap(pure) ◦ ftn = id
-    def fmapPureFtn[G[_] : Monad, H[_] : Monad, A](ffa: FF[G, H, A]): FF[G, H, A] = {
-      // Compute ftn(fmap(pure)(ffa)).
-      // ftn { (ffa._1.map(pure), ffa._2.map(pure) } 
-      // = (ffa._1.map(pure).flatMap(_._1), ffa._2.map(pure).flatMap(_._2))
+    def fmapPureFtn[G[_] : Monad, H[_] : Monad, A](fa: F[G, H, A]): F[G, H, A] = {
+      // Compute ftn(fmap(pure)(fa)).
+      // ftn { (fa._1.map(pure), fa._2.map(pure) }
+      // = (fa._1.map(pure).flatMap(_._1), fa._2.map(pure).flatMap(_._2))
       // Use the naturality law to simplify `.map(f).flatMap(g) = .flatMap(f andThen g)`. 
       // Substitute the definition of `pure` and observe that e.g. `pure andThen (_._1)` is Monad[G].pure:
-      // = (ffa._1.flatMap(Monad[G].pure), ffa._2.flatMap(Monad[H].pure))
+      // = (fa._1.flatMap(Monad[G].pure), fa._2.flatMap(Monad[H].pure))
       // Now use the identity law for monads G and H, e.g.
       // ga.flatMap(Monad[G].pure) = ga, similarly for H.
-      (ffa._1, ffa._2)
-      // This is identical to just `ffa`.
+      (fa._1, fa._2)
+      // This is identical to just `fa`.
     }
 
     // Verify the associativity law for `ftn`.
@@ -218,7 +218,8 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       //       (fffa._1.flatMap(ftn andThen (_._1)), fffa._2.flatMap(ftn andThen (_._2)))
       // Simplify `ftn andThen _._1` to `_._1.flatMap(_._1)`.
       //      (fffa._1.flatMap(_._1.flatMap(_._1)), fffa._2.flatMap(_._2.flatMap(_._2)))
-      // Use the associativity law for the monads G and H to simplify `.flatMap(x andThen flatMap(y))` to `.flatMap(x).flatMap(y)`.
+      // Use the associativity law for the monads G and H to simplify
+      // `.flatMap(x andThen flatMap(y))` to `.flatMap(x).flatMap(y)`.
       (fffa._1.flatMap(_._1).flatMap(_._1), fffa._2.flatMap(_._2).flatMap(_._2))
     }
 
@@ -238,7 +239,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
     // The definition of flatten uses G's `pure` and `flatten`.
     def ftn[G[_] : Monad, A](ffa: FF[G, A]): F[G, A] = ffa match {
-      // ffa has type (A + G[A]) + G[A + G[A]], and we need to return A + G[A].
+      // fa has type (A + G[A]) + G[A + G[A]], and we need to return A + G[A].
       case Left(fa) ⇒ fa
       // We will use `merge`: (A + G[A]) ⇒ G[A] (this function is defined above). 
       // First, use `.map(merge)` to transform G[A + G[A]] into G[G[A]].
@@ -249,7 +250,8 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         Right(gfa.flatMap(merge))
     }
 
-    // The definition of `pure` does not use any properties of `G`, but the laws won't hold unless G is a monad.
+    // The definition of `pure` does not use any properties of `G`,
+    // but the laws won't hold unless G is a monad.
     def pure[G[_], A](a: A): F[G, A] = Left(a)
 
     // The definition of `fmap` is standard for the disjunction of two functors.
@@ -268,32 +270,32 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     }
 
     // fmap(pure) ◦ ftn = id
-    def fmapPureFtn[G[_] : Monad, A](ffa: FF[G, A]): FF[G, A] = {
-      // Compute ftn(fmap(pure)(ffa)).
-      // ftn { ffa match {
+    def fmapPureFtn[G[_] : Monad, A](fa: F[G, A]): F[G, A] = {
+      // Compute ftn(fmap(pure)(fa)).
+      // ftn { fa match {
       //        case Left(fa) ⇒ Left(pure(fa))
       //        case Right(gfa) ⇒ Right(gfa.map(pure))
       //     }
       // } 
       /* Substitute the definition of `ftn`:
-      ffa match {
-        case Left(fa) ⇒ pure(fa)
-        case Right(gfa) ⇒ Right(gfa.map(pure).flatMap(merge))
+      fa match {
+        case Left(a) ⇒ pure(a)
+        case Right(ga) ⇒ Right(ga.map(pure).flatMap(merge))
       }
       */
       // Use the naturality law to simplify `.map(f).flatMap(g) = .flatMap(f andThen g)` where f = pure. 
       /* Substitute the definition of `pure` and observe that `pure andThen merge` is the same as Monad[G].pure:
-      ffa match {
-        case Left(fa) ⇒ Left(fa)
-        case Right(gfa) ⇒ Right(gfa.flatMap(Monad[G].pure))
+      fa match {
+        case Left(a) ⇒ Left(a)
+        case Right(ga) ⇒ Right(ga.flatMap(Monad[G].pure))
       }
       */
       // Now use the identity law for the monad G, that is, ga.flatMap(Monad[G].pure) = ga.
-      ffa match {
-        case Left(fa) ⇒ Left(fa)
-        case Right(gfa) ⇒ Right(gfa)
+      fa match {
+        case Left(a) ⇒ Left(a)
+        case Right(ga) ⇒ Right(ga)
       }
-      // This is identical to just `ffa`.
+      // This is identical to just `fa`.
     }
 
     // Verify the associativity law for `ftn`.
@@ -317,7 +319,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       /*      ftn(fmap(ftn)(fffa)) = 
       ftn {
         fffa match {
-          case Left(ffa) ⇒ Left(ftn(ffa))
+          case Left(fa) ⇒ Left(ftn(fa))
           case Right(gffa) ⇒ Right(gffa.map(ftn))
         }
       }
@@ -345,7 +347,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       
       Substitute the definition of ftn:
       
-      gffa.flatMap { ffa ⇒ ffa match {
+      gffa.flatMap { fa ⇒ fa match {
               case Left(fa) ⇒ merge(fa)
               case Right(gfa) ⇒ merge(Right(gfa.flatMap(merge)))
            }
@@ -353,7 +355,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       
       Substitute the definition of merge:
       
-      gffa.flatMap { ffa ⇒ ffa match {
+      gffa.flatMap { fa ⇒ fa match {
               case Left(fa) ⇒ merge(fa)
               case Right(gfa) ⇒ gfa.flatMap(merge))
            }
@@ -366,24 +368,24 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       This gives, instead of gffa.flatMap(merge).flatMap(merge),
       
-      gffa.flatMap { ffa ⇒ merge(ffa).flatMap(merge) }.
+      gffa.flatMap { fa ⇒ merge(fa).flatMap(merge) }.
       
-      It remains to compare two functions inside `flatMap`:
+      It remains to compare two functions inside `gffa.flatMap(...)`:
       
       The first function is
       
-      ffa ⇒ ffa match {
+      fa ⇒ fa match {
               case Left(fa) ⇒ merge(fa)
               case Right(gfa) ⇒ gfa.flatMap(merge))
            }
       
       The second function is
       
-      ffa ⇒ merge(ffa).flatMap(merge).
+      fa ⇒ merge(fa).flatMap(merge).
       
       Substitute the definition of merge:
       
-      ffa ⇒ ffa match {
+      fa ⇒ fa match {
         case Left(fa) ⇒ Monad[G].pure(fa).flatMap(merge)
         case Right(gfa) ⇒ gfa.flatMap(merge)
       }
@@ -400,7 +402,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     // Cut down the number of type parameters to be written each time.
     def construction6[G[_] : Monad, W: Monoid, Z](): Unit = {
 
-      type P[A] = Either[Z, (W, A)]
+      type P[A] = Either[Z, (W, A)] // P[A] = Z + W × A
 
       type F[A] = G[P[A]]
 
@@ -416,7 +418,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
           case Left(z1) ⇒ Left(z1)
           case Right((w1, a1)) ⇒ f(a1) match {
             case Left(z2) ⇒ Left(z2)
-            case Right((w2, a2)) ⇒ Right((w1 |+| w2, a2))
+            case Right((w2, b)) ⇒ Right((w1 |+| w2, b))
           }
         }
 
@@ -444,7 +446,9 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = fmapF(f)(fa)
       }
 
-      def pure[A](a: A): F[A] = Monad[G].pure(Right((Monoid[W].empty, a)))
+      def pureF[A](a: A): F[A] = Monad[G].pure(Right((Monoid[W].empty, a)))
+      // pureF(a) = pureG(pureP(a))
+      // pureF = pureP ◦ pureG
 
       // flatten for F transforms `G[P[G[P[A]]]]` first into `G[G[P[P[A]]]]` by 
       // using the "sequencing" function `seq: P[G[C]] ⇒ G[P[C]]`, which
@@ -465,7 +469,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         // P[G[P[A]]] ... `seq` ...> G[P[P[A]]] ... fmapG(ftnP) ...> G[P[A]]  
         // The type of this inner function is P[G[P[A]]] ⇒ G[P[A]],
         // so G.flatMap of it will be G[P[G[P[A]]]] ⇒ G[P[A]].
-        seq[P[A]] _ andThen fmapG(ftnP)
+        (seq[P[A]] _) andThen fmapG(ftnP)
       }
 
       // Short notation: ftnF = flmG(seq ◦ fmapG(ftnP))
@@ -475,8 +479,9 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // This will minimize the amount of computation that needs to be done in explicit code.
 
       // Compute fmapF(ftnF) ◦ ftnF = fmapG(fmapP(ftnF)) ◦ ftnF  -- now substitute the definition of ftnF:
-      // = fmapG(fmapP(flmG(seq) ◦ fmapG(ftnP)) ◦ flmG(seq ◦ fmapG(ftnP)) 
-      // We want to pull fmapP(FmapG(...)) ◦ seq together. Use naturality fmapG(x) ◦ flmG(y) = flmG(x ◦ y):
+      // = fmapG(fmapP(flmG(seq) ◦ fmapG(ftnP))) ◦ flmG(seq ◦ fmapG(ftnP))
+      // We want to pull fmapP(fmapG(...)) ◦ seq together. Use naturality
+      // fmapG(x) ◦ flmG(y) = flmG(x ◦ y):
       // = flmG { fmapP(flmG(seq) ◦ fmapG(ftnP)) ◦ seq ◦ fmapG(ftnP) }  -- now split off fmapP(x ◦ y) = fmapP(x) ◦ fmapP(y):
       // = flmG { fmapP(flmG(seq)) ◦ fmapP(fmapG(ftnP)) ◦ seq ◦ fmapG(ftnP) } -- now use naturality of seq:
       // = flmG { fmapP(flmG(seq)) ◦ seq ◦ fmapG(fmapP(ftnP)) ◦ fmapG(ftnP) } -- now pull fmapG() together:
@@ -492,7 +497,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // Checking that the types compile:
       def f1[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = seq[P[G[A]]] _ andThen fmapG(ftnP) andThen flmG(seq[A])
 
-      def f2[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = fmapP(flmG(seq[A])) _ andThen seq andThen fmapG(ftnP)
+      def f2[A]: P[G[P[G[A]]]] ⇒ G[P[A]] = (fmapP(flmG(seq[A])) _) andThen seq andThen fmapG(ftnP)
 
       // In the short notation, it is not necessary to write out the types -- or to check them.
       // This is so because the laws hold for the most general inferred type of both sides.
