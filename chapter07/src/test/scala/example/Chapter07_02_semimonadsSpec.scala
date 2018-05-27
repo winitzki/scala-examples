@@ -404,7 +404,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       type F[A] = G[P[A]]
 
-      // P[A] is a monad; exercise 8 is to show that its laws hold.
+      // P[A] is a monad; exercise 9 is to show that the monad laws hold for P.
 
       def fmapP[A, B](f: A ⇒ B)(fa: P[A]): P[B] = fa match {
         case Left(z) ⇒ Left(z)
@@ -644,7 +644,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         case F(Right(gffa)) ⇒ F(Right(gffa.map(fmap(f)))) // Recursive case.
       }
 
-      // Exercise 14 will show that ftn is associative, which is sufficient for a semimonad.
+      // Exercise 15 will show that ftn is associative, which is sufficient for a semimonad.
 
       // If we wanted to make F a full monad, we would need to define `pure`.
       // This would require a `pure` method on G. Suppose we had one:
@@ -677,26 +677,64 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
     def construction9[G[_] : Functor, H[_] : Contravariant](): Unit = {
       type F[A] = H[A] ⇒ (A, G[A])
 
-      def fmap[A, B](f: A ⇒ B)(fa: F[A]): F[B] = hb ⇒ fa(hb.contramap(f)) match {
+      // Auxiliary functor instance for (A, G[A]):
+      def fmapAG[A, B](f: A ⇒ B)(ag: (A, G[A])): (B, G[B]) = ag match {
         case (a, ga) ⇒ (f(a), ga.map(f))
       }
+
+      def fmap[A, B](f: A ⇒ B)(fa: F[A]): F[B] = hb ⇒ fmapAG(f)(fa(hb.contramap(f)))
 
       def ftn[A](ffa: F[F[A]]): F[A] = { ha ⇒
         // We have an ffa: H[F[A]] ⇒ (F[A], G[F[A]]), and we need to return (A, G[A]).
         // We need to call ffa on an argument of type H[F[A]] = H[H[A] ⇒ (A, G[A])].
-        // Then we will get (F[A], G[F[A]]]), we can discard G[] and return F[A] as required.
+        // Then we will get (F[A], G[F[A]]]), so we can discard G[F[A]] and return F[A] as required.
+
         val hfa: H[F[A]] =
         // To get H[F[A]], we use the contramap on ha: H[A] applied to a g: F[A] ⇒ A.
         // To get such a g, we write fa ⇒ ??? where we need to produce an A out of fa: F[A].
           ha.contramap(fa ⇒ fa(ha)._1)
-        
+
         ffa(hfa)._1(ha)
       }
-      
+
       // Simplify: ftn(ffa) = { ha ⇒ ffa(ha.contramap(fa ⇒ fa(ha)._1))._1(ha) }
-      
+
       // Verify the associativity law.
-      // Compute ftn(ftn(fffa)) = 
+      // Compare ftn(ftn[F[A]](fffa)) and ftn(fmap(ftn)(fffa)).
+
+      // First expression: start with
+      // ftn[F[A]](fffa) = { hfa ⇒ fffa(hfa.contramap(ffa ⇒ ffa(hfa)._1))._1(hfa) }
+      // ftn(ftn(fffa)) = { ha ⇒ ffa(ha.contramap(fa ⇒ fa(ha)._1))._1(ha) } where ffa = ftn(fffa)
+      // So, substitute hfa = ha.contramap(fa ⇒ fa(ha)._1) into the body of ftn(fffa):
+      // ftn(ftn(fffa)) = { ha ⇒
+      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
+      //   fffa(hfa.contramap(ffa ⇒ ffa(hfa)._1))._1(hfa)._1(ha)
+      // }
+
+      // Second expression: start with
+      // fmap(ftn)(fffa) = hfb ⇒ fmapAG(ftn)(fffa(hfb.contramap(ftn)))
+      
+      // ftn(fmap(ftn)(fffa)) = { ha ⇒
+      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
+      //   fmapAG(ftn)(fffa(hfa.contramap(ftn)))._1(ha)
+      // }
+
+      // Substitute the definition of fmapAG() and apply ._1 to that:
+      // fmapAG(f)(ag)._1 = f(ag._1)
+
+      // ftn(fmap(ftn)(fffa)) = { ha ⇒
+      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
+      //   ftn(fffa(hfa.contramap(ftn)))(ha)
+      // }
+      
+      // Substitute the definition of tne outer ftn:
+
+      // ftn(fmap(ftn)(fffa)) = { ha ⇒
+      //   val hfa = ha.contramap(fa ⇒ fa(ha)._1)
+      //   fffa(hfa.contramap(ftn))(hfa)._1(ha)
+      // }
+
     }
   }
+
 }
