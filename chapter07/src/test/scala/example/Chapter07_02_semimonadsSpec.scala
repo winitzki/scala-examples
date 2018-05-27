@@ -708,6 +708,9 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // Rewrite `ftn` more concisely:
       def ftnShorter[A](ffa: F[F[A]]): F[A] = { ha ⇒ ffa(insF(ha))._1(ha) }
 
+      // Can we do this in the point-free style? Probably not usefully.
+      // ftn(ffa) = insF ◦ ffa ◦ _._1 ◦ ???
+
       // Verify the associativity law:
       // Compare ftn(ftn[F[A]](fffa)) with ftn(fmap(ftn)(fffa)).
 
@@ -746,8 +749,8 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       def ex1[A](ha: H[A]): H[F[F[A]]] = {
         //        insF(insF(ha))
-        // Substitute the definition of insF:
-        ha.contramap[F[F[A]]] { ffa ⇒ ffa(insF(ha))._1(ha)._1 }
+        // Substitute the definition of insF, combine two .contramap() calls:
+        ha.contramap { ffa ⇒ ffa(insF(ha))._1(ha)._1 }
       }
 
       def ex2[A](ha: H[A]): H[F[F[A]]] = {
@@ -759,7 +762,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         // So we get
         //        ha.contramap[F[F[A]]](ffa ⇒ ftn(ffa)(ha)._1)
         // Substitute the definition of ftn(ffa)(ha):
-        ha.contramap(ffa ⇒ ffa(insF(ha))._1(ha)._1)
+        ha.contramap { ffa ⇒ ffa(insF(ha))._1(ha)._1 }
       }
 
       // We observe that ex1 and ex2 are identical.
@@ -777,7 +780,8 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         // Substitute the definition of ftn:
         //        ha ⇒ pure(fa)(insF(ha))._1(ha)
         // pure(fa) ignores its argument, and pure(fa)(_)._1 = fa, so
-        ha ⇒ fa(ha)
+        //        ha ⇒ fa(ha)
+        fa
         // The function `ha ⇒ fa(ha)` is the same as `fa`, so this law holds.
       }
 
@@ -796,6 +800,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         // Therefore
         // pure[A](fa(insF(ha).contramap(pure))._1)(ha) = pure[A](fa(ha)._1)(ha) =
         (fa(ha)._1, pureG(fa(ha)._1))
+        // fa(ha) : (A, G[A])
         // For this to be equal to `fa(ha)`, we need that
         // fa(ha)._2 = pureG(fa(ha)._1) for arbitrary `fa(ha): (A, G[A])`.
         // In other words, we need the second element of an arbitrary tuple of type (A, G[A])
