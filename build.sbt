@@ -58,3 +58,7 @@ lazy val chapter06 = (project in file("chapter06"))
 lazy val chapter07 = (project in file("chapter07"))
   .settings(commonSettings)
   .dependsOn(common)
+
+lazy val chapter08 = (project in file("chapter08"))
+  .settings(commonSettings)
+  .dependsOn(common)

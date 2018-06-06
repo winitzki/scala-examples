@@ -161,7 +161,6 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     final case class MyLogData(log: String = MyLogData.emptyLog)
 
     // Declare that MyLogData belongs to the Monoid type class.
-
     object MyLogData {
       val emptyLog = "no logs so far"
 
@@ -176,6 +175,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
           x
         else
           MyLogData(x.log + "\n" + y.log)
+        // Note added: This definition of `combine` violates the associativity law when some log strings are empty!
       }
     }
 
