@@ -1,6 +1,6 @@
 package example
 
-import cats.{Apply, Functor}
+import cats.Functor
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -53,9 +53,19 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
       safeDivide(3, 1)
     ) { (x, y, z) ⇒ x - y } shouldEqual Left("Error: dividing 1.0 by 0\nError: dividing 2.0 by 0\n")
 
+    // Create a case class with validated values:
+    case class C(x: Double, y: Double, z: Double)
+
+    val result = map3(
+      safeDivide(10, 5),
+      safeDivide(20, 5),
+      safeDivide(30, 5)
+    )(C.apply)
+
+    result shouldEqual Right(C(2, 4, 6))
   }
 
-  it should "define mapN" in {
+  it should "define mapN for Either" in {
     type Op[A] = Either[String, A]
 
     def map2[A, B, Z](a: Op[A], b: Op[B])(f: (A, B) ⇒ Z): Op[Z] = (a, b) match {
@@ -118,7 +128,17 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
 
     // Define fmap2 through ap and fmap:
     def fmap2[A, B, Z](f: A ⇒ B ⇒ Z): Op[A] ⇒ Op[B] ⇒ Op[Z] = {
-      opa ⇒ opb ⇒ f <@> opa <*> opb // This is almost the same as f (opa) (opb).
+      opa ⇒
+        opb ⇒
+          // Here we need to return an Op[Z].
+          //    val x: Op[B ⇒ Z] = fmap(f)(opa)
+          // Use `ap` on that x and obtain Op[B] ⇒ Op[Z].
+          // So then `ap(x)(opb)` will be of type Op[Z] as required.
+          // Use the infix syntax  to write `f <@> opa` instead of `fmap(f)(opa)`
+          // and `x <*> opb` instead of `ap(x)(opb)`.
+          //
+          // Note that <@> and <*> associate to the left, so we can simply write this:
+          f <@> opa <*> opb // This syntax now looks similar to `f (opa) (opb)` with special separators.
     }
 
     def fmap3[A, B, C, Z](f: A ⇒ B ⇒ C ⇒ Z): Op[A] ⇒ Op[B] ⇒ Op[C] ⇒ Op[Z] = {
@@ -134,14 +154,22 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
       Left(s"Error: dividing $x by 0\n")
     else Right(x / y)
 
-    val f: Double ⇒ Double ⇒ Double = x ⇒ y ⇒ x + y
+    val f: Double ⇒ Double ⇒ Double = { x ⇒ y ⇒ x + y }
+
     val res: Op[Double] = f <@> safeDivide(2, 1) <*> safeDivide(4, 2)
+
     res shouldEqual Right(4.0)
+
+    // Create a validated case class.
+    case class C2(x: Double, y: Double)
+
+    val result: Op[C2] = (C2.apply _).curried <@> safeDivide(2, 1) <*> safeDivide(4, 2)
+    result shouldEqual Right(C2(2.0, 2.0))
   }
 
   it should "apply a function to the results of Future" in {
-    import scala.concurrent._
     import scala.concurrent.ExecutionContext.Implicits.global
+    import scala.concurrent._
 
     // Define map2 for Future by hand.
     def map2[A, B, Z](fa: Future[A], fb: Future[B])(f: (A, B) ⇒ Z): Future[Z] = for {
@@ -158,5 +186,9 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
 
     // scala.concurrent.Future already defines Future.sequence(), so let's use that.
     def mapN[A](fa: List[Future[A]]): Future[List[A]] = Future.sequence(fa)
+  }
+
+  it should "use map2 with reader monad" in {
+    // Reader monad 
   }
 }
