@@ -85,7 +85,7 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
   
  Why can't the usual `fmap` work this way? Here's the definition of `fmap` for `Op`:
     */
-    def fmap[A, B](f: A ⇒ B): Op[A] ⇒ Op[B] = _.map(f) // Just use Either#map().
+    def fmap[A, B](f: A ⇒ B): Op[A] ⇒ Op[B] = _.map(f) // Just use .map() on Either.
 
     // For convenience, define an infix syntax for `fmap`:
     implicit class FmapSyntax[A, B](val f: A ⇒ B) {
@@ -129,6 +129,14 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
       opa ⇒ opb ⇒ opc ⇒ opd ⇒ f <@> opa <*> opb <*> opc <*> opd
     }
 
+    // Instead of calling `mapN`, we could just use <@> and <*> directly:
+    def safeDivide(x: Double, y: Double): Op[Double] = if (y == 0.0)
+      Left(s"Error: dividing $x by 0\n")
+    else Right(x / y)
+
+    val f: Double ⇒ Double ⇒ Double = x ⇒ y ⇒ x + y
+    val res: Op[Double] = f <@> safeDivide(2, 1) <*> safeDivide(4, 2)
+    res shouldEqual Right(4.0)
   }
 
   it should "apply a function to the results of Future" in {
@@ -141,14 +149,14 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
       y ← fb
     } yield f(x, y)
 
-    val resultFuture =  map2(
+    val resultFuture = map2(
       Future(1 + 2),
       Future(3 + 4)
     )(_ + _)
 
     Await.result(resultFuture, Duration.Inf) shouldEqual 10
-    
-    // scala.concurrent.Future already defines #sequence, so let's use that.
+
+    // scala.concurrent.Future already defines Future.sequence(), so let's use that.
     def mapN[A](fa: List[Future[A]]): Future[List[A]] = Future.sequence(fa)
   }
 }
