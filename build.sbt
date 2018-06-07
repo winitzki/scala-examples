@@ -1,4 +1,4 @@
-val scalaV = "2.12.4"
+val scalaV = "2.12.6"
 
 lazy val commonSettings = Seq(
   addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.4" cross CrossVersion.binary),
@@ -14,12 +14,13 @@ lazy val commonSettings = Seq(
   ),
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.0.4"
-    , "org.scalacheck" %% "scalacheck" % "1.13.5"
+    , "org.scalacheck" %% "scalacheck" % "1.14.0"
     , "org.typelevel" %% "cats-core" % "1.1.0"
     , "org.typelevel" %% "kittens" % "1.0.0-RC2" // 1.0.0-RC3 has an API change for derive.functor
-//    , "org.scalaz" %% "scalaz-core" % "7.2.18"
+    , "org.scalaz" %% "scalaz-core" % "7.2.24"
     , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
     , "io.chymyst" %% "curryhoward" % "0.3.7"
+    , "com.eed3si9n.expecty" %% "expecty" % "0.11.0" % Test
   )
 )
 
