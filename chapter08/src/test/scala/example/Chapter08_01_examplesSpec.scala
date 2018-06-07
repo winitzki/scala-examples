@@ -189,6 +189,65 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
   }
 
   it should "use map2 with reader monad" in {
-    // Reader monad 
+    // Reader monad always has independent and commutative effects.
+
+    // Example: computations that use a logger.
+    case class Logger(print: Any ⇒ Unit)
+
+    val emptyLogger = Logger { _ ⇒ () }
+
+    type Lo[A] = Logger ⇒ A
+    import cats.Monad
+    import cats.instances.function._
+    import cats.syntax.flatMap._
+    import cats.syntax.functor._
+
+    implicitly[Monad[Lo]]
+
+    def logPlus(x: Int, y: Int): Lo[Int] = { logger ⇒
+      val z = x + y
+      logger.print(s"Got $z")
+      z
+    }
+
+    // Combine computations monadically.
+    val res1 = for {
+      x ← logPlus(1, 2)
+      y ← logPlus(10, 20)
+    } yield x + y
+
+    // Changing the order of computations gives the same result.
+    val res2 = for {
+      y ← logPlus(10, 20)
+      x ← logPlus(1, 2)
+    } yield x + y
+
+    res1(emptyLogger) shouldEqual res2(emptyLogger)
+
+    // So we can define `map2` via `flatMap` and get the same results as when we define map2 as:
+    def map2[A, B, Z](a: Lo[A], b: Lo[B])(f: (A, B) ⇒ Z): Lo[Z] = logger ⇒ f(a(logger), b(logger))
+
+    def map2A[A, B, Z](a: Lo[A], b: Lo[B])(f: (A, B) ⇒ Z): Lo[Z] = for {
+      x ← a
+      y ← b
+    } yield f(x, y)
+
+    // Let us verify that the code of map2A() comes out to be identical to map2().
+    def map[A, B](fa: Lo[A])(f: A ⇒ B): Lo[B] = logger ⇒ f(fa(logger))
+
+    def flatMap[A, B](fa: Lo[A])(f: A ⇒ Lo[B]): Lo[B] = logger ⇒ f(fa(logger))(logger)
+    /* Now we can symbolically calculate
+    map2A(a, b)(f) = a.flatMap(x ⇒ b.map(y ⇒ f(x, y)) = ?
+    
+    First consider `b.map(y ⇒ f(x, y)`.
+    This is logger ⇒ (y ⇒ f(x, y))(b(logger))
+    = logger ⇒ f(x, fa(logger)).
+    Now consider a.flatMap(x ⇒ b.map(y ⇒ f(x, y))
+    = logger ⇒ (x ⇒ logger ⇒ f(x, b(logger)))(a(logger))(logger)
+    = logger ⇒ f(a(logger), b(logger)).
+    
+    This code is the same as for map2(a, b)(f).
+    */
   }
+
 }
