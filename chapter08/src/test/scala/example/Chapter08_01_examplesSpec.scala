@@ -250,4 +250,41 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
     */
   }
 
+  it should "transpose matrices using mapN" in {
+    // Define map2 for List.
+    def map2[A, B, Z](a: List[A], b: List[B])(f: (A, B) ⇒ Z): List[Z] = (a zip b).map { case (x, y) ⇒ f(x, y) }
+
+    map2(List(1, 2), List(10, 20))(_ + _) shouldEqual List(11, 22)
+
+    def transpose[A](m: List[List[A]]): List[List[A]] = m match {
+      case Nil ⇒ Nil
+      case heads :: tails ⇒
+        val transposedTails = tails match {
+          case Nil ⇒
+            // Special case: transposing a single row, heads :: List().
+            // Need to produce a list of single-element lists.
+            heads.map(_ ⇒ Nil)
+          case _ ⇒ transpose(tails)
+        }
+        map2(heads, transposedTails) { (x, xs) ⇒ x :: xs };
+    }
+
+    transpose(List(List(1))) shouldEqual List(List(1))
+    transpose(List(List(1), List(2))) shouldEqual List(List(1, 2))
+    transpose(List(List(1, 2))) shouldEqual List(List(1), List(2))
+
+    val matrix = List(
+      List(1, 10),
+      List(2, 20),
+      List(3, 30)
+    )
+
+    val matrixT = List(
+      List(1, 2, 3),
+      List(10, 20, 30)
+    )
+    transpose(matrix) shouldEqual matrixT
+    transpose(matrixT) shouldEqual matrix
+  }
+
 }
