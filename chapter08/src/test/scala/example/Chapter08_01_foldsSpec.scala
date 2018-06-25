@@ -2,7 +2,7 @@ package example
 
 import algebra.ring.Field
 import cats.syntax.foldable._
-import cats.{Foldable, Functor, InvariantSemigroupal}
+import cats.{Applicative, Foldable, Functor, InvariantSemigroupal}
 import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
 import spire.implicits._
@@ -118,6 +118,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     }
 
     // Helper function to create instances of this more easily.
+    // The types may need to be specified explicitly in some cases.
     def mkFold[Z, A1, R](theInit: A1)(theUpdate: (A1, Z) ⇒ A1)(theTransform: A1 ⇒ R): Fold[Z, R] = new Fold[Z, R] {
       override type A = A1
       override val init: A = theInit
@@ -141,18 +142,25 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
       }
     }
 
-
-    // Now `Fold[Z, ?]` is a functor.
-    implicit def functorFold[Z, C]: Functor[Fold[Z, ?]] = new Functor[Fold[Z, ?]] {
-      override def map[R, T](fa: Fold[Z, R])(f: R ⇒ T): Fold[Z, T] = mkFold(fa.init)(fa.update)(fa.transform andThen f)
-    }
-
-    // Syntax for appending an operation.
+    // Syntax for appending another transformation.
     implicit class FoldTransform[Z, R](fld: Fold[Z, R]) {
       def andThen[T](f: R ⇒ T): Fold[Z, T] = mkFold(fld.init)(fld.update)(fld.transform andThen f)
     }
 
-    implicit def numericFold[Z, A, N](implicit num: Numeric[N]): Field[Fold[Z, N]] = new Field[Fold[Z, N]] {
+    // Now `Fold[Z, ?]` is a functor.
+    implicit def functorFold[Z]: Functor[Fold[Z, ?]] = new Functor[Fold[Z, ?]] {
+      override def map[R, T](fa: Fold[Z, R])(f: R ⇒ T): Fold[Z, T] = fa andThen f
+    }
+
+    // It is also applicative.
+    implicit def applicativeFold[Z, C]: Applicative[Fold[Z, ?]] = new Applicative[Fold[Z, ?]] {
+      override def pure[A](x: A): Fold[Z, A] = mkFold[Z, A, A](x)((_, _) ⇒ x)(_ ⇒ x)
+
+      override def ap[A, B](ff: Fold[Z, A ⇒ B])(fa: Fold[Z, A]): Fold[Z, B] = (ff × fa) andThen { case (f, x) ⇒ f(x) }
+    }
+
+    // Type class instance for `spire.math.Field`, defining arithmetic operations on `Fold`s.
+    implicit def numericFold[Z, N](implicit num: Numeric[N]): Field[Fold[Z, N]] = new Field[Fold[Z, N]] {
       private def binaryOp(x: Fold[Z, N], y: Fold[Z, N], op: (N, N) ⇒ N): Fold[Z, N] = (x × y) andThen {
         case (p, q) ⇒ op(p, q)
       }
@@ -179,7 +187,6 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     // Note that the accumulator type `(N, N)` is now automatic. We do not need to take care about that.
     def average[N: Numeric]: Fold[N, N] = sum / len
-
 
     import cats.instances.list._
 
