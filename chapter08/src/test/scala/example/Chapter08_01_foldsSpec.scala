@@ -23,7 +23,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     // Syntax for Foldable.
     implicit class FldSyntax[F[_] : Foldable, Z](fa: F[Z]) {
-      def fld[R](fld: Fld[Z, R]): R = fa.foldl(fld.init)(fld.update)
+      def fld[R](fld: Fld[Z, R]): R = fa.foldLeft(fld.init)(fld.update)
     }
 
     implicit def applyFld[Z]: InvariantSemigroupal[Fld[Z, ?]] = new InvariantSemigroupal[Fld[Z, ?]] {
@@ -105,95 +105,105 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
   // This is still cumbersome. We would like to write simply `sum / len`.
   // Let us implement a type class instance of spire.math.Field for Fold[Z, A, N].
   // But we find that the type `A` must change after binary operations.
+  // Make the type parameter `A` existential instead of universal.
+  trait Fold[Z, R] { // This imitates a case class with an embedded type member.
+  type A
+
+    def init: A
+
+    val update: (A, Z) ⇒ A
+    val transform: A ⇒ R
+  }
+
+  // Helper function to create instances of this more easily.
+  // The types may need to be specified explicitly in some cases.
+  def mkFold[Z, A1, R](theInit: A1)(theUpdate: (A1, Z) ⇒ A1)(theTransform: A1 ⇒ R): Fold[Z, R] = new Fold[Z, R] {
+    override type A = A1
+    override val init: A = theInit
+    override val update: (A, Z) ⇒ A = theUpdate
+    override val transform: A ⇒ R = theTransform
+  }
+
+  // Syntax for Foldable.
+  implicit class FoldSyntax[F[_] : Foldable, Z](fa: F[Z]) {
+    def fldl[A, R](fld: Fold[Z, R]): R = fld.transform(fa.foldLeft(fld.init)(fld.update))
+  }
+
+  // Syntax for combining the folds.
+  implicit class FoldCombine[Z, R](fld: Fold[Z, R]) {
+    def ×[B, T](otherFld: Fold[Z, T]): Fold[Z, (R, T)] = mkFold[Z, (fld.A, otherFld.A), (R, T)] {
+      (fld.init, otherFld.init)
+    } {
+      case ((a1, a2), z) ⇒ (fld.update(a1, z), otherFld.update(a2, z))
+    } {
+      case (a1, a2) ⇒ (fld.transform(a1), otherFld.transform(a2))
+    }
+  }
+
+  // Syntax for appending another transformation.
+  implicit class FoldTransform[Z, R](fld: Fold[Z, R]) {
+    def andThen[T](f: R ⇒ T): Fold[Z, T] = mkFold(fld.init)(fld.update)(fld.transform andThen f)
+  }
+
+  // Now `Fold[Z, ?]` is a functor.
+  implicit def functorFold[Z]: Functor[Fold[Z, ?]] = new Functor[Fold[Z, ?]] {
+    override def map[R, T](fa: Fold[Z, R])(f: R ⇒ T): Fold[Z, T] = fa andThen f
+  }
+
+  // It is also applicative.
+  implicit def applicativeFold[Z, C]: Applicative[Fold[Z, ?]] = new Applicative[Fold[Z, ?]] {
+    override def pure[A](x: A): Fold[Z, A] = mkFold[Z, A, A](x)((_, _) ⇒ x)(_ ⇒ x)
+
+    override def ap[A, B](ff: Fold[Z, A ⇒ B])(fa: Fold[Z, A]): Fold[Z, B] = (ff × fa) andThen { case (f, x) ⇒ f(x) }
+  }
+
+  // Type class instance for `spire.math.Field`, defining arithmetic operations on `Fold`s.
+  implicit def numericFold[Z, N](implicit num: Numeric[N]): Field[Fold[Z, N]] = new Field[Fold[Z, N]] {
+    private def binaryOp(x: Fold[Z, N], y: Fold[Z, N], op: (N, N) ⇒ N): Fold[Z, N] = (x × y) andThen {
+      case (p, q) ⇒ op(p, q)
+    }
+
+    override def negate(x: Fold[Z, N]): Fold[Z, N] = x andThen (-_)
+
+    override def plus(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ + _)
+
+    override def div(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ / _)
+
+    override def one: Fold[Z, N] = mkFold[Z, N, N](num.one)((_, _) ⇒ num.one)(_ ⇒ num.one)
+
+    override def zero: Fold[Z, N] = mkFold[Z, N, N](num.zero)((_, _) ⇒ num.zero)(_ ⇒ num.zero)
+
+    override def times(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ * _)
+  }
+
+  // Define some useful folding operations for numeric data.
+  def len[N: Numeric]: Fold[N, N] = mkFold[N, N, N](0)((l, i) ⇒ l + 1)(identity)
+
+  def sumMap[N: Numeric](f: N ⇒ N): Fold[N, N] = mkFold[N, N, N](0)((l, i) ⇒ l + f(i))(identity)
+
+  def sum[N: Numeric]: Fold[N, N] = sumMap(identity)
+
+  // Note that the accumulator type `(N, N)` is now automatic. We do not need to take care about that.
+  def average[N: Numeric]: Fold[N, N] = sum / len
 
   it should "implement fold fusion using arithmetic operators" in {
-    // Make the type parameter `A` existential instead of universal.
-    trait Fold[Z, R] { // This imitates a case class with an embedded type member.
-    type A
-
-      def init: A
-
-      val update: (A, Z) ⇒ A
-      val transform: A ⇒ R
-    }
-
-    // Helper function to create instances of this more easily.
-    // The types may need to be specified explicitly in some cases.
-    def mkFold[Z, A1, R](theInit: A1)(theUpdate: (A1, Z) ⇒ A1)(theTransform: A1 ⇒ R): Fold[Z, R] = new Fold[Z, R] {
-      override type A = A1
-      override val init: A = theInit
-      override val update: (A, Z) ⇒ A = theUpdate
-      override val transform: A ⇒ R = theTransform
-    }
-
-    // Syntax for Foldable.
-    implicit class FoldSyntax[F[_] : Foldable, Z](fa: F[Z]) {
-      def fldl[A, R](fld: Fold[Z, R]): R = fld.transform(fa.foldl(fld.init)(fld.update))
-    }
-
-    // Syntax for combining the folds.
-    implicit class FoldCombine[Z, R](fld: Fold[Z, R]) {
-      def ×[B, T](otherFld: Fold[Z, T]): Fold[Z, (R, T)] = mkFold[Z, (fld.A, otherFld.A), (R, T)] {
-        (fld.init, otherFld.init)
-      } {
-        case ((a1, a2), z) ⇒ (fld.update(a1, z), otherFld.update(a2, z))
-      } {
-        case (a1, a2) ⇒ (fld.transform(a1), otherFld.transform(a2))
-      }
-    }
-
-    // Syntax for appending another transformation.
-    implicit class FoldTransform[Z, R](fld: Fold[Z, R]) {
-      def andThen[T](f: R ⇒ T): Fold[Z, T] = mkFold(fld.init)(fld.update)(fld.transform andThen f)
-    }
-
-    // Now `Fold[Z, ?]` is a functor.
-    implicit def functorFold[Z]: Functor[Fold[Z, ?]] = new Functor[Fold[Z, ?]] {
-      override def map[R, T](fa: Fold[Z, R])(f: R ⇒ T): Fold[Z, T] = fa andThen f
-    }
-
-    // It is also applicative.
-    implicit def applicativeFold[Z, C]: Applicative[Fold[Z, ?]] = new Applicative[Fold[Z, ?]] {
-      override def pure[A](x: A): Fold[Z, A] = mkFold[Z, A, A](x)((_, _) ⇒ x)(_ ⇒ x)
-
-      override def ap[A, B](ff: Fold[Z, A ⇒ B])(fa: Fold[Z, A]): Fold[Z, B] = (ff × fa) andThen { case (f, x) ⇒ f(x) }
-    }
-
-    // Type class instance for `spire.math.Field`, defining arithmetic operations on `Fold`s.
-    implicit def numericFold[Z, N](implicit num: Numeric[N]): Field[Fold[Z, N]] = new Field[Fold[Z, N]] {
-      private def binaryOp(x: Fold[Z, N], y: Fold[Z, N], op: (N, N) ⇒ N): Fold[Z, N] = (x × y) andThen {
-        case (p, q) ⇒ op(p, q)
-      }
-
-      override def negate(x: Fold[Z, N]): Fold[Z, N] = x andThen (-_)
-
-      override def plus(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ + _)
-
-      override def div(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ / _)
-
-      override def one: Fold[Z, N] = mkFold[Z, N, N](num.one)((_, _) ⇒ num.one)(_ ⇒ num.one)
-
-      override def zero: Fold[Z, N] = mkFold[Z, N, N](num.zero)((_, _) ⇒ num.zero)(_ ⇒ num.zero)
-
-      override def times(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ * _)
-    }
-
-    // Define some useful folding operations for numeric data.
-    def len[N: Numeric]: Fold[N, N] = mkFold[N, N, N](0)((l, i) ⇒ l + 1)(identity)
-
-    def sumMap[N: Numeric](f: N ⇒ N): Fold[N, N] = mkFold[N, N, N](0)((l, i) ⇒ l + f(i))(identity)
-
-    def sum[N: Numeric]: Fold[N, N] = sumMap(identity)
-
-    // Note that the accumulator type `(N, N)` is now automatic. We do not need to take care about that.
-    def average[N: Numeric]: Fold[N, N] = sum / len
-
     import cats.instances.list._
 
     // This fold is performed in a single traversal.
     val result = (1 to 10).map(_.toDouble).toList.fldl(average)
 
     result shouldEqual 5.5
+  }
+
+  behavior of "scans"
+
+  // Syntax for scanLeft.
+  implicit class FoldScanLeft[Z](fa: Seq[Z]) {
+    def scanl[R](fold: Fold[Z, R]): Seq[R] = fa.scanLeft(fold.init)(fold.update).map(fold.transform)
+  }
+  
+  it should "implement syntax for scans" in {
+    (1 to 10).map(_.toDouble).toList.scanl(average).tail shouldEqual List(1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5)
   }
 
 }
