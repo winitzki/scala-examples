@@ -1,8 +1,9 @@
 package example
 
-import algebra.ring.Field
+import cats.syntax.functor._
+import cats.instances.list._
 import cats.syntax.foldable._
-import cats.{Applicative, Foldable, Functor, InvariantSemigroupal}
+import cats.{Foldable, Functor, InvariantSemigroupal}
 import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
 import spire.implicits._
@@ -14,196 +15,177 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
   behavior of "folds"
 
+  val list10 = (1 to 10).map(_.toDouble).toList
+
   it should "implement applicative fusion for folds using plain product" in {
 
-    // Fld[Z, R] = R × (R × Z ⇒ R)
-    // This `Fold` will be applied to a sequence with items of type `Z`,
+    // Fold0[Z, R] = R × (R × Z ⇒ R)
+    // This `Fold0` will be applied to a sequence with items of type `Z`,
     // and will accumulate a result value of type `R`.
-    case class Fld[Z, R](init: R, update: (R, Z) ⇒ R)
+    case class Fold0[Z, R](init: R, update: (R, Z) ⇒ R)
 
     // Syntax for Foldable.
     implicit class FldSyntax[F[_] : Foldable, Z](fa: F[Z]) {
-      def fld[R](fld: Fld[Z, R]): R = fa.foldLeft(fld.init)(fld.update)
+      def fld[R](fld: Fold0[Z, R]): R = fa.foldLeft(fld.init)(fld.update)
     }
 
-    implicit def applyFld[Z]: InvariantSemigroupal[Fld[Z, ?]] = new InvariantSemigroupal[Fld[Z, ?]] {
-      override def imap[A, B](fa: Fld[Z, A])(f: A ⇒ B)(g: B ⇒ A): Fld[Z, B] = implement
+    implicit def applyFld[Z]: InvariantSemigroupal[Fold0[Z, ?]] = new InvariantSemigroupal[Fold0[Z, ?]] {
+      override def imap[A, B](fa: Fold0[Z, A])(f: A ⇒ B)(g: B ⇒ A): Fold0[Z, B] = implement
 
-      override def product[A, B](fa: Fld[Z, A], fb: Fld[Z, B]): Fld[Z, (A, B)] = implement
+      override def product[A, B](fa: Fold0[Z, A], fb: Fold0[Z, B]): Fold0[Z, (A, B)] = implement
     }
 
     // Syntax for combining the folds.
-    implicit class FldCombine[Z, A](fld: Fld[Z, A]) {
-      def ×[B](otherFld: Fld[Z, B]): Fld[Z, (A, B)] = applyFld.product(fld, otherFld)
+    implicit class FldCombine[Z, A](fld: Fold0[Z, A]) {
+      def ×[B](otherFld: Fold0[Z, B]): Fold0[Z, (A, B)] = applyFld.product(fld, otherFld)
     }
 
 
     // Define some useful folding operations for numeric data.
-    def len[N: Numeric]: Fld[N, N] = Fld(0, (l, i) ⇒ l + 1)
+    def len[N: Numeric]: Fold0[N, N] = Fold0(0, (l, i) ⇒ l + 1)
 
-    def sum[N: Numeric]: Fld[N, N] = Fld(0, (s, i) ⇒ s + i)
+    def sum[N: Numeric]: Fold0[N, N] = Fold0(0, (s, i) ⇒ s + i)
 
-    def twoFold[N: Numeric]: Fld[N, (N, N)] = len × sum
-
-    import cats.instances.list._
+    def twoFold[N: Numeric]: Fold0[N, (N, N)] = len × sum
 
     // This fold is performed in a single traversal.
-    val result = (1 to 10).toList.fld(twoFold)
+    val result = list10.fld(twoFold)
 
     result shouldEqual(10, 55)
 
-    val average = result._2 / result._1.toDouble
+    val average = result._2 / result._1
 
     average shouldEqual 5.5
   }
 
   // This is inconvenient: We would like to incorporate a final computation into the `Fld`,
   // rather than work with tupled results.
-  // This `Fold` will be applied to a sequence with items of type `Z`, 
+  // This `Fold1` will be applied to a sequence with items of type `Z`, 
   // will accumulate a value of type `A`, and will output a result value of type `R`.
+  case class Fold1[Z, A, R](init: A, update: (A, Z) ⇒ A, transform: A ⇒ R)
+
+  // Syntax for Foldable.
+  implicit class Fold1Syntax[F[_] : Foldable, Z](fa: F[Z]) {
+    def foldl1[A, R](fld: Fold1[Z, A, R]): R = fld.transform(fa.foldl(fld.init)(fld.update))
+  }
+
+  // Syntax for combining the folds.
+  implicit class Fold1Combine[Z, A, R](fld: Fold1[Z, A, R]) {
+    def ×[B, T](otherFld: Fold1[Z, B, T]): Fold1[Z, (A, B), (R, T)] = implement
+  }
+
+  // Now `Fold1[Z, C, ?]` is a functor.
+  implicit def functorFold1[Z, C]: Functor[Fold1[Z, C, ?]] = new Functor[Fold1[Z, C, ?]] {
+    override def map[A, B](fa: Fold1[Z, C, A])(f: A ⇒ B): Fold1[Z, C, B] = implement
+  }
+
+  // Syntax for appending an operation.
+  implicit class Fold1Transform[Z, A, R](fld: Fold1[Z, A, R]) {
+    def andThen[T](f: R ⇒ T): Fold1[Z, A, T] = implement
+  }
+
+  // Define some useful folding operations for numeric data.
+  def len1[N: Numeric]: Fold1[N, N, N] = Fold1(0, (l, i) ⇒ l + 1, identity)
+
+  def sumMap1[N: Numeric](f: N ⇒ N): Fold1[N, N, N] = Fold1(0, (s, i) ⇒ s + f(i), identity)
+
+  def sum1[N: Numeric]: Fold1[N, N, N] = sumMap1(identity)
+
+  // Note that the accumulator type has become `(N, N)`, showing that we have to accumulate two values.
+  def average1[N: Numeric]: Fold1[N, (N, N), N] = (sum1 × len1) andThen { case (s, l) ⇒ s / l }
+
   it should "implement applicative fusion for folds" in {
-    case class Fold[Z, A, R](init: A, update: (A, Z) ⇒ A, transform: A ⇒ R)
 
-    // Syntax for Foldable.
-    implicit class FoldSyntax[F[_] : Foldable, Z](fa: F[Z]) {
-      def fldl[A, R](fld: Fold[Z, A, R]): R = fld.transform(fa.foldl(fld.init)(fld.update))
-    }
-
-    // Syntax for combining the folds.
-    implicit class FoldCombine[Z, A, R](fld: Fold[Z, A, R]) {
-      def ×[B, T](otherFld: Fold[Z, B, T]): Fold[Z, (A, B), (R, T)] = implement
-    }
-
-    // Now `Fold[Z, C, ?]` is a functor.
-    implicit def functorFold[Z, C]: Functor[Fold[Z, C, ?]] = new Functor[Fold[Z, C, ?]] {
-      override def map[A, B](fa: Fold[Z, C, A])(f: A ⇒ B): Fold[Z, C, B] = implement
-    }
-
-    // Syntax for appending an operation.
-    implicit class FoldTransform[Z, A, R](fld: Fold[Z, A, R]) {
-      def andThen[T](f: R ⇒ T): Fold[Z, A, T] = implement
-    }
-
-    // Define some useful folding operations for numeric data.
-    def len[N: Numeric]: Fold[N, N, N] = Fold(0, (l, i) ⇒ l + 1, identity)
-
-    def sumMap[N: Numeric](f: N ⇒ N): Fold[N, N, N] = Fold(0, (s, i) ⇒ s + f(i), identity)
-
-    def sum[N: Numeric]: Fold[N, N, N] = sumMap(identity)
-
-    // Note that the accumulator type has become `(N, N)`, showing that we have to accumulate two values.
-    def average[N: Numeric]: Fold[N, (N, N), N] = (sum × len) andThen { case (s, l) ⇒ s / l }
-
-
-    import cats.instances.list._
     // This fold is performed in a single traversal.
-    val result = (1 to 10).map(_.toDouble).toList.fldl(average)
+    val result = list10.foldl1(average1)
 
     result shouldEqual 5.5
   }
 
   // This is still cumbersome. We would like to write simply `sum / len`.
-  // Let us implement a type class instance of spire.math.Field for Fold[Z, A, N].
-  // But we find that the type `A` must change after binary operations.
-  // Make the type parameter `A` existential instead of universal.
-  trait Fold[Z, R] { // This imitates a case class with an embedded type member.
-  type A
+  // Let us implement arithmetic operations on `Fold1`.
 
-    def init: A
+  implicit class Fold1Arithmetic[Z, A, N](fold1: Fold1[Z, A, N])(implicit num: Numeric[N]) {
 
-    val update: (A, Z) ⇒ A
-    val transform: A ⇒ R
-  }
+    def unary_- : Fold1[Z, A, N] = fold1 andThen (-_)
 
-  // Helper function to create instances of this more easily.
-  // The types may need to be specified explicitly in some cases.
-  def mkFold[Z, A1, R](theInit: A1)(theUpdate: (A1, Z) ⇒ A1)(theTransform: A1 ⇒ R): Fold[Z, R] = new Fold[Z, R] {
-    override type A = A1
-    override val init: A = theInit
-    override val update: (A, Z) ⇒ A = theUpdate
-    override val transform: A ⇒ R = theTransform
-  }
+    def +[B](fold: Fold1[Z, B, N]): Fold1[Z, (A, B), N] = binaryOp(fold1, fold, _ + _)
 
-  // Syntax for Foldable.
-  implicit class FoldSyntax[F[_] : Foldable, Z](fa: F[Z]) {
-    def fldl[A, R](fld: Fold[Z, R]): R = fld.transform(fa.foldLeft(fld.init)(fld.update))
-  }
+    def *[B](fold: Fold1[Z, B, N]): Fold1[Z, (A, B), N] = binaryOp(fold1, fold, _ * _)
 
-  // Syntax for combining the folds.
-  implicit class FoldCombine[Z, R](fld: Fold[Z, R]) {
-    def ×[B, T](otherFld: Fold[Z, T]): Fold[Z, (R, T)] = mkFold[Z, (fld.A, otherFld.A), (R, T)] {
-      (fld.init, otherFld.init)
-    } {
-      case ((a1, a2), z) ⇒ (fld.update(a1, z), otherFld.update(a2, z))
-    } {
-      case (a1, a2) ⇒ (fld.transform(a1), otherFld.transform(a2))
-    }
-  }
+    def /[B](fold: Fold1[Z, B, N]): Fold1[Z, (A, B), N] = binaryOp(fold1, fold, _ / _)
 
-  // Syntax for appending another transformation.
-  implicit class FoldTransform[Z, R](fld: Fold[Z, R]) {
-    def andThen[T](f: R ⇒ T): Fold[Z, T] = mkFold(fld.init)(fld.update)(fld.transform andThen f)
-  }
+    def one: Fold1[Z, N, N] = Fold1(num.one, (_, _) ⇒ num.one, _ ⇒ num.one)
 
-  // Now `Fold[Z, ?]` is a functor.
-  implicit def functorFold[Z]: Functor[Fold[Z, ?]] = new Functor[Fold[Z, ?]] {
-    override def map[R, T](fa: Fold[Z, R])(f: R ⇒ T): Fold[Z, T] = fa andThen f
-  }
+    def zero: Fold1[Z, N, N] = Fold1(num.zero, (_, _) ⇒ num.zero, _ ⇒ num.zero)
 
-  // It is also applicative.
-  implicit def applicativeFold[Z, C]: Applicative[Fold[Z, ?]] = new Applicative[Fold[Z, ?]] {
-    override def pure[A](x: A): Fold[Z, A] = mkFold[Z, A, A](x)((_, _) ⇒ x)(_ ⇒ x)
-
-    override def ap[A, B](ff: Fold[Z, A ⇒ B])(fa: Fold[Z, A]): Fold[Z, B] = (ff × fa) andThen { case (f, x) ⇒ f(x) }
-  }
-
-  // Type class instance for `spire.math.Field`, defining arithmetic operations on `Fold`s.
-  implicit def numericFold[Z, N](implicit num: Numeric[N]): Field[Fold[Z, N]] = new Field[Fold[Z, N]] {
-    private def binaryOp(x: Fold[Z, N], y: Fold[Z, N], op: (N, N) ⇒ N): Fold[Z, N] = (x × y) andThen {
+    private def binaryOp[B](x: Fold1[Z, A, N], y: Fold1[Z, B, N], op: (N, N) ⇒ N): Fold1[Z, (A, B), N] = (x × y) andThen {
       case (p, q) ⇒ op(p, q)
     }
-
-    override def negate(x: Fold[Z, N]): Fold[Z, N] = x andThen (-_)
-
-    override def plus(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ + _)
-
-    override def div(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ / _)
-
-    override def one: Fold[Z, N] = mkFold[Z, N, N](num.one)((_, _) ⇒ num.one)(_ ⇒ num.one)
-
-    override def zero: Fold[Z, N] = mkFold[Z, N, N](num.zero)((_, _) ⇒ num.zero)(_ ⇒ num.zero)
-
-    override def times(x: Fold[Z, N], y: Fold[Z, N]): Fold[Z, N] = binaryOp(x, y, _ * _)
   }
 
-  // Define some useful folding operations for numeric data.
-  def len[N: Numeric]: Fold[N, N] = mkFold[N, N, N](0)((l, i) ⇒ l + 1)(identity)
-
-  def sumMap[N: Numeric](f: N ⇒ N): Fold[N, N] = mkFold[N, N, N](0)((l, i) ⇒ l + f(i))(identity)
-
-  def sum[N: Numeric]: Fold[N, N] = sumMap(identity)
-
-  // Note that the accumulator type `(N, N)` is now automatic. We do not need to take care about that.
-  def average[N: Numeric]: Fold[N, N] = sum / len
-
   it should "implement fold fusion using arithmetic operators" in {
-    import cats.instances.list._
 
     // This fold is performed in a single traversal.
-    val result = (1 to 10).map(_.toDouble).toList.fldl(average)
+    val result = list10.foldl1(sum1[Double] / len1[Double])
 
     result shouldEqual 5.5
   }
 
   behavior of "scans"
 
-  // Syntax for scanLeft.
-  implicit class FoldScanLeft[Z](fa: Seq[Z]) {
-    def scanl[R](fold: Fold[Z, R]): Seq[R] = fa.scanLeft(fold.init)(fold.update).map(fold.transform)
+  // Syntax for scanLeft with Fold1.
+  implicit class FoldScanLeft1[Z](fa: Seq[Z]) {
+    def scanl1[A, R](fold: Fold1[Z, A, R]): Seq[R] = fa.scanLeft(fold.init)(fold.update).map(fold.transform)
   }
-  
+
   it should "implement syntax for scans" in {
-    (1 to 10).map(_.toDouble).toList.scanl(average).tail shouldEqual List(1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5)
+    list10.scanl1(average1).tail shouldEqual List(1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5)
+  }
+
+  behavior of "monadic fold"
+
+  // `Fold1[Z, A, R]` is actually a monad in R.
+  // We can implement `flatMap` in a useful way for Fold1 (but not for Fold2).
+  // However, we need to change the type of `A` because we will need to accumulate more data. 
+  implicit class Fold1FlatMap[Z, A, R](fold: Fold1[Z, A, R]) {
+    def flatMap[B, T](f: R ⇒ Fold1[Z, B, T]): Fold1[Z, (A, B), T] = {
+      val init: (A, B) = (fold.init, f(fold.transform(fold.init)).init)
+      val update: ((A, B), Z) ⇒ (A, B) = {
+        case ((a1, b1), z) ⇒
+          val newA = fold.update(a1, z)
+          val newFold: Fold1[Z, B, T] = f(fold.transform(newA))
+          val newB = newFold.update(b1, z)
+          (newA, newB)
+      }
+      val transform: ((A, B)) ⇒ T = {
+        case (a1, b1) ⇒
+          val newFold: Fold1[Z, B, T] = f(fold.transform(a1))
+          newFold.transform(b1)
+      }
+      Fold1(init, update, transform)
+    }
+  }
+
+  it should "implement monadic fold" in {
+    // Compute running averages of running average.
+    list10.scanl1(average1).tail shouldEqual List(1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5)
+    // This goes over the list twice.
+    list10.scanl1(average1).tail.scanl1(average1).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
+
+    def ave1Ave1[N: Numeric]: Fold1[N, _, N] = average1.flatMap(x ⇒ Fold1[N, N, N](0, (a, z) ⇒ a + x, identity) / len1)
+
+    list10.scanl1(ave1Ave1).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
+    
+    // Use the for/yield syntax for the monadic folds.
+    
+    def ave1ave1forYield[N: Numeric]: Fold1[N, _, N] = for {
+      x ← average1
+      acc ← Fold1[N, N, N](0, (a, z) ⇒ a + x, identity)
+      n ← len1
+    } yield acc / n
+
+    list10.scanl1(ave1ave1forYield).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
   }
 
 }
