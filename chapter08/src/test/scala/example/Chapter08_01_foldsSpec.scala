@@ -178,7 +178,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     list10.scanl1(ave1Ave1).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
     
     // Use the for/yield syntax for the monadic folds.
-    
+    // This syntax is much more visual.
     def ave1ave1forYield[N: Numeric]: Fold1[N, _, N] = for {
       x ← average1
       acc ← Fold1[N, N, N](0, (a, z) ⇒ a + x, identity)
