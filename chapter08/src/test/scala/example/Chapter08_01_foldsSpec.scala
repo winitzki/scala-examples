@@ -37,7 +37,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
       override def product[A, B](fa: Fold0[Z, A], fb: Fold0[Z, B]): Fold0[Z, (A, B)] = implement
     }
 
-    // Syntax for combining the folds.
+    // Syntax for combining the folds. Use the `product` as defined above.
     implicit class FldCombine[Z, A](fld: Fold0[Z, A]) {
       def zip[B](otherFld: Fold0[Z, B]): Fold0[Z, (A, B)] = applyFld.product(fld, otherFld)
     }
@@ -60,10 +60,11 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     average shouldEqual 5.5
   }
 
-  // This is inconvenient: We would like to incorporate a final computation into the `Fld`,
-  // rather than work with tupled results.
-  // This `Fold1` will be applied to a sequence with items of type `Z`, 
+  // This is inconvenient: We would like to incorporate a final computation into the `Fold`,
+  // rather than work with tupled results. So, add a `transform: A ⇒ R` to `Fold0`.
+  // The new `Fold1` will be applied to a sequence with items of type `Z`, 
   // will accumulate a value of type `A`, and will output a result value of type `R`.
+  
   case class Fold1[Z, A, R](init: A, update: (A, Z) ⇒ A, transform: A ⇒ R)
 
   // Syntax for Foldable.
@@ -152,6 +153,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
   // However, we need to change the type of `A` because we will need to accumulate more data. 
   implicit class Fold1FlatMap[Z, A, R](fold: Fold1[Z, A, R]) {
     def flatMap[B, T](f: R ⇒ Fold1[Z, B, T]): Fold1[Z, (A, B), T] = {
+      // Create a new `Fold1()` value. We need `init`, `update`, and `transform`.
       val init: (A, B) = (fold.init, f(fold.transform(fold.init)).init)
       val update: ((A, B), Z) ⇒ (A, B) = {
         case ((a1, b1), z) ⇒

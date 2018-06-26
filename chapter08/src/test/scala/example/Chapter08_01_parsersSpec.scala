@@ -39,8 +39,8 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     (result, s)
   }
 
-  val eofError: Parser[Double] = Parser { s ⇒
-    val result = if (s.isEmpty) Left(NoContent) else Right(0.0)
+  val eofError: Parser[Unit] = Parser { s ⇒
+    val result = if (s.isEmpty) Left(NoContent) else Right(())
     (result, s)
   }
 
@@ -98,7 +98,7 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
       (result, restB)
     }
 
-    // Monadic combinator.
+    // Monadic combinator that ignores the result of the previous parser.
     def &&[B](parserB: Parser[B]): Parser[B] = flatMap(_ ⇒ parserB)
 
     def |(parserB: ⇒ Parser[A]): Parser[A] = Parser { s ⇒
