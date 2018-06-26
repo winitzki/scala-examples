@@ -29,6 +29,8 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
       def fld[R](fld: Fold0[Z, R]): R = fa.foldLeft(fld.init)(fld.update)
     }
 
+    // "zippable profunctor" = "invariant semigroupal"
+
     implicit def applyFld[Z]: InvariantSemigroupal[Fold0[Z, ?]] = new InvariantSemigroupal[Fold0[Z, ?]] {
       override def imap[A, B](fa: Fold0[Z, A])(f: A ⇒ B)(g: B ⇒ A): Fold0[Z, B] = implement
 
@@ -42,7 +44,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
 
     // Define some useful folding operations for numeric data.
-    def len[N: Numeric]: Fold0[N, N] = Fold0(0, (l, i) ⇒ l + 1)
+    def len[N: Numeric]: Fold0[N, N] = Fold0(0, (l, _) ⇒ l + 1)
 
     def sum[N: Numeric]: Fold0[N, N] = Fold0(0, (s, i) ⇒ s + i)
 
@@ -51,7 +53,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     // This fold is performed in a single traversal.
     val result = list10.fld(twoFold)
 
-    result shouldEqual(10, 55)
+    result shouldEqual((10, 55))
 
     val average = result._2 / result._1
 
@@ -146,7 +148,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
   behavior of "monadic fold"
 
   // `Fold1[Z, A, R]` is actually a monad in R.
-  // We can implement `flatMap` in a useful way for Fold1 (but not for Fold2).
+  // We can implement `flatMap` in a useful way for Fold1.
   // However, we need to change the type of `A` because we will need to accumulate more data. 
   implicit class Fold1FlatMap[Z, A, R](fold: Fold1[Z, A, R]) {
     def flatMap[B, T](f: R ⇒ Fold1[Z, B, T]): Fold1[Z, (A, B), T] = {
@@ -154,7 +156,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
       val update: ((A, B), Z) ⇒ (A, B) = {
         case ((a1, b1), z) ⇒
           val newA = fold.update(a1, z)
-          val newFold: Fold1[Z, B, T] = f(fold.transform(newA))
+          val newFold: Fold1[Z, B, T] = f(fold.transform(newA)) // newA or a1?
           val newB = newFold.update(b1, z)
           (newA, newB)
       }
@@ -181,7 +183,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     // This syntax is much more visual.
     def ave1ave1forYield[N: Numeric]: Fold1[N, _, N] = for {
       x ← average1
-      acc ← Fold1[N, N, N](0, (a, z) ⇒ a + x, identity)
+      acc ← Fold1[N, N, N](0, (a, _) ⇒ a + x, identity)
       n ← len1
     } yield acc / n
 

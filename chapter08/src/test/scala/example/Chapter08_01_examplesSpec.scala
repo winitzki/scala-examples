@@ -83,7 +83,7 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
     Await.result(resultFuture, Duration.Inf) shouldEqual 10
 
     // scala.concurrent.Future already defines Future.sequence(), so let's use that.
-    def mapN[A](fa: List[Future[A]]): Future[List[A]] = Future.sequence(fa)
+    def mapN[A, B](fa: List[Future[A]])(f: List[A] ⇒ B): Future[B] = Future.sequence(fa).map(f)
   }
 
   it should "use map2 with reader monad" in {
@@ -114,7 +114,7 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
       y ← logPlus(10, 20)
     } yield x + y
 
-    // Changing the order of computations gives the same result.
+    // Changing the order of computations gives the same result (except for the side effect of printing!).
     val res2 = for {
       y ← logPlus(10, 20)
       x ← logPlus(1, 2)
@@ -205,7 +205,8 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
 
     // We can define `zip` for it.
     def zip[A, B](p: Semigroup[A], q: Semigroup[B]): Semigroup[(A, B)] = new Semigroup[(A, B)] {
-      override def combine(x: (A, B), y: (A, B)): (A, B) = (p.combine(x._1, y._1), q.combine(x._2, y._2))
+      override def combine(x: (A, B), y: (A, B)): (A, B) =
+        (p.combine(x._1, y._1), q.combine(x._2, y._2))
     }
 
     // Use this to define semigroup for pairs.
@@ -227,13 +228,23 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement imap2 for Z × A ⇒ A × A" in {
     type F[A, Z] = (Z, A) ⇒ (A, A)
-    
+
     def imap2[Z, A, B, C](f: (A, B) ⇒ C)(g: C ⇒ (A, B))(faz: F[A, Z], fbz: F[B, Z]): F[C, Z] = { (z, c) ⇒
+      // Need to return a tuple (C, C).
       val (newA, newB) = g(c) // Need to back-transform C into (A, B) and substitute them into faz and fbz.
+
       val newAA = faz(z, newA)
       val newBB = fbz(z, newB)
       // Now apply f to all this data.
       (f(newAA._1, newBB._1), f(newAA._2, newBB._2))
+    }
+
+    def zip[A, B, Z](faz: F[A, Z], fbz: F[B, Z]): F[(A, B), Z] = {
+      case (z, (a, b)) ⇒
+        // Need to return ((A, B), (A, B)).
+        val newAA = faz(z, a)
+        val newBB = fbz(z, b)
+        ((newAA._1, newBB._1), (newAA._2, newBB._2))
     }
   }
 
