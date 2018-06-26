@@ -99,7 +99,7 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     }
 
     // Monadic combinator.
-    def >>[B](parserB: Parser[B]): Parser[B] = flatMap(_ ⇒ parserB)
+    def &&[B](parserB: Parser[B]): Parser[B] = flatMap(_ ⇒ parserB)
 
     def |(parserB: ⇒ Parser[A]): Parser[A] = Parser { s ⇒
       val (resultA, rest) = parserA.run(s)
@@ -123,7 +123,7 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     }
   }
 
-  def languageRec: Parser[Double] = eofError >> (number.map(_.toDouble) | (openTag >> languageRec & closeTag).map { case (x, _) ⇒ math.sqrt(x) })
+  def languageRec: Parser[Double] = eofError && (number.map(_.toDouble) | (openTag && languageRec & closeTag).map { case (x, _) ⇒ math.sqrt(x) })
 
   val language: Parser[Double] = (languageRec & eofOK).map(_._1)
 
@@ -177,7 +177,7 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     case s ⇒ (Left(NotClosed), s)
   }
 
-  def language2Rec: Parser[Int] = eofError >> (number | anyTag.flatMap(tag ⇒ language2Rec & closeTag(tag)).map(_._1))
+  def language2Rec: Parser[Int] = eofError && (number | anyTag.flatMap(tag ⇒ language2Rec & closeTag(tag)).map(_._1))
 
   val language2: Parser[Int] = (language2Rec & eofOK).map(_._1)
 

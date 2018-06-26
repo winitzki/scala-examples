@@ -37,7 +37,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     // Syntax for combining the folds.
     implicit class FldCombine[Z, A](fld: Fold0[Z, A]) {
-      def ×[B](otherFld: Fold0[Z, B]): Fold0[Z, (A, B)] = applyFld.product(fld, otherFld)
+      def zip[B](otherFld: Fold0[Z, B]): Fold0[Z, (A, B)] = applyFld.product(fld, otherFld)
     }
 
 
@@ -46,7 +46,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     def sum[N: Numeric]: Fold0[N, N] = Fold0(0, (s, i) ⇒ s + i)
 
-    def twoFold[N: Numeric]: Fold0[N, (N, N)] = len × sum
+    def twoFold[N: Numeric]: Fold0[N, (N, N)] = len zip sum
 
     // This fold is performed in a single traversal.
     val result = list10.fld(twoFold)
@@ -71,10 +71,10 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
   // Syntax for combining the folds.
   implicit class Fold1Combine[Z, A, R](fld: Fold1[Z, A, R]) {
-    def ×[B, T](otherFld: Fold1[Z, B, T]): Fold1[Z, (A, B), (R, T)] = implement
+    def zip[B, T](otherFld: Fold1[Z, B, T]): Fold1[Z, (A, B), (R, T)] = implement
   }
 
-  // Now `Fold1[Z, C, ?]` is a functor.
+  // Now `Fold1[Z, C, ?]` is a functor. (This is the "free functor" construction.)
   implicit def functorFold1[Z, C]: Functor[Fold1[Z, C, ?]] = new Functor[Fold1[Z, C, ?]] {
     override def map[A, B](fa: Fold1[Z, C, A])(f: A ⇒ B): Fold1[Z, C, B] = implement
   }
@@ -92,7 +92,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
   def sum1[N: Numeric]: Fold1[N, N, N] = sumMap1(identity)
 
   // Note that the accumulator type has become `(N, N)`, showing that we have to accumulate two values.
-  def average1[N: Numeric]: Fold1[N, (N, N), N] = (sum1 × len1) andThen { case (s, l) ⇒ s / l }
+  def average1[N: Numeric]: Fold1[N, (N, N), N] = (sum1 zip len1) andThen { case (s, l) ⇒ s / l }
 
   it should "implement applicative fusion for folds" in {
 
@@ -119,7 +119,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     def zero: Fold1[Z, N, N] = Fold1(num.zero, (_, _) ⇒ num.zero, _ ⇒ num.zero)
 
-    private def binaryOp[B](x: Fold1[Z, A, N], y: Fold1[Z, B, N], op: (N, N) ⇒ N): Fold1[Z, (A, B), N] = (x × y) andThen {
+    private def binaryOp[B](x: Fold1[Z, A, N], y: Fold1[Z, B, N], op: (N, N) ⇒ N): Fold1[Z, (A, B), N] = (x zip y) andThen {
       case (p, q) ⇒ op(p, q)
     }
   }
@@ -177,7 +177,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     list10.scanl1(ave1Ave1).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
     
-    // Use the for/yield syntax for the monadic folds.
+    // Use the for/yield syntax for the monadic folds. This depends on having both `map` and `flatMap`.
     // This syntax is much more visual.
     def ave1ave1forYield[N: Numeric]: Fold1[N, _, N] = for {
       x ← average1

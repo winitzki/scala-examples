@@ -162,7 +162,7 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
             // Special case: no tails, transposing a single row, heads :: List().
             // Need to produce a list of single-element lists.
             heads.map(_ ⇒ Nil)
-            // General case: transposing tails recursively.
+          // General case: transposing tails recursively.
           case _ ⇒ transpose(tails)
         }
         map2(heads, transposedTails) { (x, xs) ⇒ x :: xs }
@@ -184,6 +184,57 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
     )
     transpose(matrix) shouldEqual matrixT
     transpose(matrixT) shouldEqual matrix
+  }
+
+  behavior of "zippable profunctors"
+
+  it should "define Semigroup for a pair" in {
+
+    // Semigroup type class.
+    trait Semigroup[S] {
+      def combine(x: S, y: S): S
+    }
+
+    // Syntax.
+    implicit class SemigroupSyntax[A: Semigroup](x: A) {
+      def |+|(y: A): A = implicitly[Semigroup[A]].combine(x, y)
+    }
+
+    // As a data type, this is S × S ⇒ S. This is not a functor and not a contrafunctor in S.
+    // This is a profunctor (has S in both covariant and contravariant positions).
+
+    // We can define `zip` for it.
+    def zip[A, B](p: Semigroup[A], q: Semigroup[B]): Semigroup[(A, B)] = new Semigroup[(A, B)] {
+      override def combine(x: (A, B), y: (A, B)): (A, B) = (p.combine(x._1, y._1), q.combine(x._2, y._2))
+    }
+
+    // Use this to define semigroup for pairs.
+    implicit def pairSemigroup[A: Semigroup, B: Semigroup]: Semigroup[(A, B)] = new Semigroup[(A, B)] {
+      override def combine(x: (A, B), y: (A, B)): (A, B) = (x._1 |+| y._1, x._2 |+| y._2)
+    }
+
+    // Check that this works.
+    // Semigroup instances for Int and for Double.
+    implicit val semigroupInt: Semigroup[Int] = _ * _
+    implicit val semigroupDouble: Semigroup[Double] = _ + _
+
+    val pair1: (Int, Double) = (10, 1.0)
+    val pair2: (Int, Double) = (20, 2.0)
+
+    // Semigroup syntax should work now for pairs.
+    pair1 |+| pair2 shouldEqual ((200, 3.0))
+  }
+
+  it should "implement imap2 for Z × A ⇒ A × A" in {
+    type F[A, Z] = (Z, A) ⇒ (A, A)
+    
+    def imap2[Z, A, B, C](f: (A, B) ⇒ C)(g: C ⇒ (A, B))(faz: F[A, Z], fbz: F[B, Z]): F[C, Z] = { (z, c) ⇒
+      val (newA, newB) = g(c) // Need to back-transform C into (A, B) and substitute them into faz and fbz.
+      val newAA = faz(z, newA)
+      val newBB = fbz(z, newB)
+      // Now apply f to all this data.
+      (f(newAA._1, newBB._1), f(newAA._2, newBB._2))
+    }
   }
 
 }
