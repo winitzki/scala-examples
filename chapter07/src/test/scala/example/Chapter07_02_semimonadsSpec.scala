@@ -689,11 +689,10 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
       def fmap[A, B](f: A ⇒ B)(fa: F[A]): F[B] = hb ⇒ fmapAG(f)(fa(hb.contramap(f)))
 
+      // We have an `ffa: H[F[A]] ⇒ (F[A], G[F[A]])`, and we need to return `F[A])`.
+      // We need to call `ffa` on an argument of type `H[F[A]]`.
+      // Then we will get (F[A], G[F[A]]]), so we can discard G[F[A]] and return F[A] as required.
       def ftn[A](ffa: F[F[A]]): F[A] = { ha ⇒
-        // We have an `ffa: H[F[A]] ⇒ (F[A], G[F[A]])`, and we need to return `(A, G[A])`.
-        // We need to call `ffa` on an argument of type `H[F[A]]`, which is `H[H[A] ⇒ (A, G[A])]`.
-        // Then we will get (F[A], G[F[A]]]), so we can discard G[F[A]] and return F[A] as required.
-
         val hfa =
         // To get an `H[F[A]]` from `H[A]`, we use the contramap on `ha: H[A]` applied to a `g: F[A] ⇒ A`.
         // To get such a `g`, we write `fa ⇒ ???` where we need to produce an `A` out of `fa: F[A]`.

@@ -3,6 +3,7 @@ package example
 import cats.Functor
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
+import io.chymyst.ch._
 
 class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
@@ -36,11 +37,12 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
               map2(opa, opb) { (x, y) ⇒ f(x)(y) }
         }
   
- Why can't the usual `fmap` work this way? Here's the definition of `fmap` for `Op`:
+    Why can't the usual `fmap` work this way? Here's the definition of `fmap` for `Op`:
     */
     def fmap[A, B](f: A ⇒ B): Op[A] ⇒ Op[B] = _.map(f) // Just use .map() on Either.
 
-    // For convenience, define an infix syntax for `fmap`:
+    // For convenience, define an infix syntax for `fmap`, 
+    // so that we can write `f <@> fa` instead of `fa.map(f)`.
     implicit class FmapSyntax[A, B](val f: A ⇒ B) {
       def <@>[F[_] : Functor](fa: F[A]): F[B] = fa.map(f)
     }
@@ -92,6 +94,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       opa ⇒ opb ⇒ opc ⇒ opd ⇒ f <@> opa <*> opb <*> opc <*> opd
     }
 
+    // Let's test this new syntax.
     // Instead of calling `mapN`, we could just use <@> and <*> directly:
     def safeDivide(x: Double, y: Double): Op[Double] = if (y == 0.0)
       Left(s"Error: dividing $x by 0\n")
@@ -110,4 +113,25 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     result shouldEqual Right(C2(2.0, 2.0))
   }
 
+  it should "fail to define zippable for some functors" in {
+    type F[A, P] = (A ⇒ P) ⇒ Option[A]
+    type G[A, P, Q] = Either[A ⇒ P, A ⇒ Q]
+    type H[A, P, Q] = Either[P ⇒ A, Q ⇒ A]
+    type K[A, P, Q] = (A ⇒ P) ⇒ Q
+
+    def zipsF[A, B, P] = allOfType[(F[A, P], F[B, P]) ⇒ F[(A, B), P]]
+
+    def zipsG[A, B, P, Q] = allOfType[(G[A, P, Q], G[B, P, Q]) ⇒ G[(A, B), P, Q]]
+
+    def zipsH[A, B, P, Q] = allOfType[(H[A, P, Q], H[B, P, Q]) ⇒ H[(A, B), P, Q]]
+
+    def zipsK[A, B, P, Q] = allOfType[(K[A, P, Q], K[B, P, Q]) ⇒ K[(A, B), P, Q]]
+
+    zipsF.length shouldEqual 1
+    // This function always returns `None`, and so fails the identity laws.
+    zipsF.head.lambdaTerm.prettyPrint shouldEqual "a ⇒ b ⇒ (None() + 0)"
+    zipsG.length shouldEqual 2 // This is OK.
+    zipsH.length shouldEqual 0 // No implementations.
+    zipsK.length shouldEqual 0 // No implementations.
+  }
 }
