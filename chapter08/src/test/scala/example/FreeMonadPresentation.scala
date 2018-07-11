@@ -1,7 +1,6 @@
 package example
 
 import cats.data.Writer
-import cats.free.Free
 import cats.{Monad, ~>}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FSDataOutputStream => OutS, FileSystem => FS}
@@ -134,7 +133,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
   // Convert HdfsOps to `Writer[String, ?]`. This interpreter will only create log messages.
   // We use `cats.~>` because we need to convert HdfsOps[A] to Try[A] for all A:
-  def toWriter: HdfsOps ~> Writer[String, ?] = new (HdfsOps ~> Writer[String, ?]) {
+  val toWriter: HdfsOps ~> Writer[String, ?] = new (HdfsOps ~> Writer[String, ?]) {
     override def apply[A](fa: HdfsOps[A]): Writer[String, A] = (fa match {
       case Delete(fs, path) ⇒ Writer(s"deleting $path\n", true)
       case Create(fs, path) ⇒ Writer(s"creating $path\n", null)
@@ -162,7 +161,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   }
 
   // Convert HdfsOps to `Try`, actually performing all operations and catching any exceptions.
-  def toTry: HdfsOps ~> Try = new (HdfsOps ~> Try) {
+  val toTry: HdfsOps ~> Try = new (HdfsOps ~> Try) {
     override def apply[A](fa: HdfsOps[A]): Try[A] = (fa match {
 
       case Delete(fs, path) ⇒ Try(fs.delete(path, false))
@@ -209,19 +208,8 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
       _ ← Delete(localFs, testPath)
     } yield readBytes
 
-    // Define an interpreter into Writer.
-    // To implement this, we use `cats.~>`.
-    // Suggestive syntax: F ~> M  is `for all A: F[A] ⇒ M[A]`.
-    val toWriter = new (HdfsOps ~> Writer[String, ?]) {
-      override def apply[A](fa: HdfsOps[A]): Writer[String, A] = (fa match {
-        case Delete(fs, path) ⇒ Writer(s"deleting $path\n", true)
-        case Create(fs, path) ⇒ Writer(s"creating $path\n", null)
-        case Write(out, body) ⇒ Writer(s"writing ${new String(body)}\n", ())
-        case Read(fs, path) ⇒ Writer(s"reading from $path\n", "<unknown>".getBytes)
-      }).map(_.asInstanceOf[A]) // Seems to be required.
-    }
-
-    // Run and check the results. The "runner" is called `foldMap`.
+    // Run using `toWriter` and check the results. The "runner" is called `foldMap`.
     catsHdfsProg.foldMap(toWriter).run._1 shouldEqual expectedLog
   }
+
 }

@@ -66,14 +66,14 @@ lazy val chapter08 = (project in file("chapter08"))
   .settings(
     libraryDependencies ++= Seq(
       "org.apache.hadoop" % "hadoop-common" % "3.1.0" excludeAll(
-        ExclusionRule(organization = "org.mortbay.jetty"),
-        ExclusionRule(organization = "net.java.dev.jets3t"),
-        ExclusionRule(organization = "org.apache.curator"),
-        ExclusionRule(organization = "org.apache.zookeeper"),
-        ExclusionRule(organization = "com.sun.jersey"),
+        ExclusionRule(organization = "org.mortbay.jetty")
+        , ExclusionRule(organization = "net.java.dev.jets3t")
+        , ExclusionRule(organization = "org.apache.curator")
+        , ExclusionRule(organization = "org.apache.zookeeper")
+        , ExclusionRule(organization = "com.sun.jersey")
         // Replaced by a later version of commons-beanutils, see comment below.
-        ExclusionRule(organization = "commons-beanutils", name = "commons-beanutils-core")
-      ),
+        ,ExclusionRule(organization = "commons-beanutils", name = "commons-beanutils-core")
+      )
       /*
        * See http://commons.apache.org/proper/commons-beanutils/#BeanUtils_Core_And_Modules
        * Prior to 1.9.0, commons-beanutils was split into commons-beanutils, commons-beanutils-core, and
@@ -83,9 +83,11 @@ lazy val chapter08 = (project in file("chapter08"))
        * was all resolved in 1.9.0 which reverted to a single jar, commons-beanutils, without any copies of collections
        * classes. So here we explicitly use the new jar, and above, exclude the older commons-beanutils-core.
        */
-      "commons-beanutils" % "commons-beanutils" % "1.9.3",
-      "org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0",
-      "org.typelevel" %% "cats-free" % "1.1.0"
+      ,"commons-beanutils" % "commons-beanutils" % "1.9.3"
+      ,"org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0"
+      ,"org.typelevel" %% "cats-free" % "1.1.0"
+      , "com.typesafe.akka" %% "akka-http-testkit" % "10.0.10" % Test
+      , "com.typesafe.akka" %% "akka-http" % "10.0.10"
     )
   )
   .dependsOn(common)
