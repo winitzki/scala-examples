@@ -138,19 +138,23 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     }).map(_.asInstanceOf[A])
   } 
 
-  import cats.instances.all._
-  // Run the HDFS program using `toWriter` as the interpreter.
-  val logWriter: Writer[String, Array[Byte]] = interpret(hdfsProgram, toWriter)
-  // Extract the value out of the writer.
-  val log: String = logWriter.run._1
-  log shouldEqual """deleting target/tmp/test-hdfs-file.txt
-                    |creating target/tmp/test-hdfs-file.txt
-                    |writing test
-                    |reading from target/tmp/test-hdfs-file.txt
-                    |deleting target/tmp/test-hdfs-file.txt
-                    |""".stripMargin
+  it should "run the HDFS program using `toWriter` as the interpreter" in {
+    import cats.instances.all._
+    
+    val logWriter: Writer[String, Array[Byte]] = interpret(hdfsProgram, toWriter)
+    // Extract the value out of the writer.
+    val log: String = logWriter.run._1
+    log shouldEqual
+      """deleting target/tmp/test-hdfs-file.txt
+        |creating target/tmp/test-hdfs-file.txt
+        |writing test
+        |reading from target/tmp/test-hdfs-file.txt
+        |deleting target/tmp/test-hdfs-file.txt
+        |""".stripMargin
 
-  // Convert HdfsOps to `Try`, actually performing all operations.
+  }
+  
+  // Convert HdfsOps to `Try`, actually performing all operations and catching any exceptions.
   def toTry: HdfsOps ~> Try = new (HdfsOps  ~> Try) {
     override def apply[A](fa: HdfsOps[A]): Try[A] = (fa match {
 
@@ -173,5 +177,11 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
       }
     }).map(_.asInstanceOf[A])
   }
+  
+  it should "run the HDFS program using `toTry` as the interpreter" in {
+    import cats.instances.all._
 
+    val tryResult: Try[Array[Byte]] = interpret(hdfsProgram, toTry)
+    new String(tryResult.get) shouldEqual "test"
+  }
 }
