@@ -1,8 +1,8 @@
 package example
 
 import cats.data.Writer
+import cats.free.Free
 import cats.{Monad, ~>}
-import cats.syntax.monad._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FSDataOutputStream => OutS, FileSystem => FS}
 import org.scalatest.{FlatSpec, Matchers}
@@ -13,7 +13,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   // Prepare a sample HDFS config, using a local filesystem.
   val hdfsConfig = new Configuration()
   hdfsConfig.set("fs.defaultFS", "file:///")
-  val localFs = FS.get(hdfsConfig)
+  val localFs: FS = FS.get(hdfsConfig)
   val url = "./target/tmp/test-hdfs-file.txt"
   val testPath = new Path(url)
 
@@ -44,6 +44,8 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     localFs.delete(testPath, false)
     the[java.io.FileNotFoundException] thrownBy localFs.open(testPath) should have message "File target/tmp/test-hdfs-file.txt does not exist"
   }
+
+  behavior of "HDFS programs as a free monad"
 
   // Define a data type for HDFS operations.
 
@@ -86,15 +88,15 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     def map[B](f: A ⇒ B): FreeMonad[F, B] = flatMap(f andThen FreeMonad.pure)
   }
 
-  object FreeMonad {
-    def pure[F[_], A](a: A): FreeMonad[F, A] = Pure(a)
-  }
-
   final case class Pure[F[_], A](a: A) extends FreeMonad[F, A]
 
   final case class FlatMap[F[_], A, B](fa: FreeMonad[F, A], afb: A ⇒ FreeMonad[F, B]) extends FreeMonad[F, B]
 
   final case class Wrap[F[_], A](fa: F[A]) extends FreeMonad[F, A]
+
+  object FreeMonad {
+    def pure[F[_], A](a: A): FreeMonad[F, A] = Pure(a)
+  }
 
   // Define an automatic conversion from F[A] to FreeMonad[F, A].
   implicit def wrapInFreeMonad[F[_], A](fa: F[A]): FreeMonad[F, A] = Wrap(fa)
@@ -113,7 +115,10 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   // The way to do this is to define a transformation from HdfsOps[A] to some other monad, say M[A].
   // The monad `M` could actually perform some operations, or could just write a log file, etc.
 
-  // If we have such a transformation, we can transform arbitrary "HDFS programs" into `M` values:
+  // If we have such a transformation, we can transform arbitrary "HDFS programs" into `M` values.
+  // The transformation is commonly called an "interpreter" and has type [A] ⇒ F[A] ⇒ M[A],
+  // which should work separately for each type A. To implement this, we use `cats.~>`.
+  // Suggestive syntax: F ~> M  is `for all A: F[A] ⇒ M[A]`.
 
   def interpret[F[_], M[_] : Monad, A, C](program: FreeMonad[F, A], interpreter: F ~> M): M[A] = program match {
     case Pure(a) ⇒ Monad[M].pure(a)
@@ -135,27 +140,29 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
       case Create(fs, path) ⇒ Writer(s"creating $path\n", null)
       case Write(out, body) ⇒ Writer(s"writing ${new String(body)}\n", ())
       case Read(fs, path) ⇒ Writer(s"reading from $path\n", "<unknown>".getBytes)
-    }).map(_.asInstanceOf[A])
-  } 
+    }).map(_.asInstanceOf[A]) // Seems to be required.
+  }
+
+  val expectedLog =
+    """deleting target/tmp/test-hdfs-file.txt
+      |creating target/tmp/test-hdfs-file.txt
+      |writing test
+      |reading from target/tmp/test-hdfs-file.txt
+      |deleting target/tmp/test-hdfs-file.txt
+      |""".stripMargin
+
 
   it should "run the HDFS program using `toWriter` as the interpreter" in {
     import cats.instances.all._
-    
+
     val logWriter: Writer[String, Array[Byte]] = interpret(hdfsProgram, toWriter)
     // Extract the value out of the writer.
     val log: String = logWriter.run._1
-    log shouldEqual
-      """deleting target/tmp/test-hdfs-file.txt
-        |creating target/tmp/test-hdfs-file.txt
-        |writing test
-        |reading from target/tmp/test-hdfs-file.txt
-        |deleting target/tmp/test-hdfs-file.txt
-        |""".stripMargin
-
+    log shouldEqual expectedLog
   }
-  
+
   // Convert HdfsOps to `Try`, actually performing all operations and catching any exceptions.
-  def toTry: HdfsOps ~> Try = new (HdfsOps  ~> Try) {
+  def toTry: HdfsOps ~> Try = new (HdfsOps ~> Try) {
     override def apply[A](fa: HdfsOps[A]): Try[A] = (fa match {
 
       case Delete(fs, path) ⇒ Try(fs.delete(path, false))
@@ -177,11 +184,44 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
       }
     }).map(_.asInstanceOf[A])
   }
-  
+
   it should "run the HDFS program using `toTry` as the interpreter" in {
     import cats.instances.all._
 
     val tryResult: Try[Array[Byte]] = interpret(hdfsProgram, toTry)
     new String(tryResult.get) shouldEqual "test"
+  }
+
+  // The implementation of the free monad in `cats` is `cats.Free`. Let's implement the same thing using `cats.Free`.
+
+  it should "do the same using cats.free" in {
+    import cats.free.Free
+    import cats.instances.all._
+
+    // Define an automatic conversion from F[A] to cats.Free[F, A].
+    implicit def wrapInFreeMonad[F[_], A](fa: F[A]): Free[F, A] = Free.liftF(fa)
+
+    val catsHdfsProg: Free[HdfsOps, Array[Byte]] = for {
+      _ ← Delete(localFs, testPath)
+      out ← Create(localFs, testPath)
+      _ ← Write(out, someBytes)
+      readBytes ← Read(localFs, testPath)
+      _ ← Delete(localFs, testPath)
+    } yield readBytes
+
+    // Define an interpreter into Writer.
+    // To implement this, we use `cats.~>`.
+    // Suggestive syntax: F ~> M  is `for all A: F[A] ⇒ M[A]`.
+    val toWriter = new (HdfsOps ~> Writer[String, ?]) {
+      override def apply[A](fa: HdfsOps[A]): Writer[String, A] = (fa match {
+        case Delete(fs, path) ⇒ Writer(s"deleting $path\n", true)
+        case Create(fs, path) ⇒ Writer(s"creating $path\n", null)
+        case Write(out, body) ⇒ Writer(s"writing ${new String(body)}\n", ())
+        case Read(fs, path) ⇒ Writer(s"reading from $path\n", "<unknown>".getBytes)
+      }).map(_.asInstanceOf[A]) // Seems to be required.
+    }
+
+    // Run.
+    catsHdfsProg.foldMap(toWriter).run._1 shouldEqual expectedLog
   }
 }

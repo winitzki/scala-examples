@@ -84,7 +84,8 @@ lazy val chapter08 = (project in file("chapter08"))
        * classes. So here we explicitly use the new jar, and above, exclude the older commons-beanutils-core.
        */
       "commons-beanutils" % "commons-beanutils" % "1.9.3",
-      "org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0"
+      "org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0",
+      "org.typelevel" %% "cats-free" % "1.1.0"
     )
   )
   .dependsOn(common)
