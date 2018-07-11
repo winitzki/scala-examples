@@ -15,13 +15,14 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   val localFs: FS = FS.get(hdfsConfig)
   val url = "./target/tmp/test-hdfs-file.txt"
   val testPath = new Path(url)
+  val someBytes = "test".getBytes
 
   behavior of "hdfs operations"
 
   it should "delete file, create file, write to file, read from file" in {
     localFs.delete(testPath, false)
     val out = localFs.create(testPath)
-    out.write("test".getBytes)
+    out.write(someBytes)
 
     out.hflush()
     out.hsync()
@@ -34,7 +35,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     read.readFully(target)
     read.close()
 
-    new String(target) shouldEqual "test"
+    new String(target) shouldEqual new String(someBytes)
 
     localFs.delete(testPath, false)
   }
@@ -58,10 +59,29 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
   final case class Read(fs: FS, path: Path) extends HdfsOps[Array[Byte]]
 
-  /* We would like to compose these values into a "declarative HDFS program",
-  so that our test can be rewritten like this:
+  // We could imagine a sequence of HDFS operations as a list:
+  lazy val ops = List(
+    Delete(localFs, testPath)
+    , Create(localFs, testPath) // This neds to return an `OutS`. How?
+    , Write(???, someBytes) // This `Write` needs to use the `OutS` just returned. But how???
+    , Read(localFs, testPath) // This `Read` needs to return a result.
+  )
+
+  /* 
+  This list cannot encode the dependence of later operations on the results of earlier operations.
+  The list merely puts all operations as values in a sequence, with no meaningful connection.
   
-  val hdfsProgram: ??? = for {
+  One way of expressing the sequential connection is by using `flatMap`:
+  
+  Create(fs, path).flatMap(out ⇒ Write(out, someBytes).flatMap(_ ⇒ ...))
+  
+  Note that Create(fs, path) is of type HdfsOps[OutS].
+  If only `flatMap` could have the type signature
+  HdfsOps[A].flatMap(A ⇒ HdfsOps[B]) : HdfsOps[B],
+  we would be able to compose several operations into a "declarative HDFS program",
+  so that our test would be rewritten like this:
+  
+  val hdfsProgram = for {
     _         ← Delete(fs, path)
     out       ← Create(fs, path)
     _         ← Write(out, someBytes)
@@ -69,16 +89,24 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     _         ← Delete(fs, path)
   } yield readBytes
   
+  // And then we could run it somehow:
   val result: Array[Byte] = hdfsProgram.run(???)
   
+  Note that `HdfsOps` is not a functor because of non-generic type arguments!
+  So we cannot have a flatMap with the signature above.
   The first step is to convert `HdfsOps` into values of some monad.
-   */
+  */
 
   // Define a free monad construction. We want `FreeMonad[F, A]` to be a monad in A,
   // and also we want to be able to convert values of type `F[A]` into `FreeMonad[F, A]`.
 
   // The implementation shown here is "completely lazy":
   // `pure` and `flatMap` perform no computations at all.
+
+  // Define `pure` in a companion object.
+  object FreeMonad {
+    def pure[F[_], A](a: A): FreeMonad[F, A] = Pure(a)
+  }
 
   sealed trait FreeMonad[F[_], A] {
     def flatMap[B](afb: A ⇒ FreeMonad[F, B]): FreeMonad[F, B] = FlatMap(this, afb)
@@ -93,16 +121,10 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
   final case class Wrap[F[_], A](fa: F[A]) extends FreeMonad[F, A]
 
-  // Define `pure` in a companion object.
-  object FreeMonad {
-    def pure[F[_], A](a: A): FreeMonad[F, A] = Pure(a)
-  }
-
   // Define an automatic conversion from F[A] to FreeMonad[F, A].
   implicit def wrapInFreeMonad[F[_], A](fa: F[A]): FreeMonad[F, A] = Wrap(fa)
 
   // Check that we can write "HDFS programs" now.
-  val someBytes = "test".getBytes
   val hdfsProgram = for {
     _ ← Delete(localFs, testPath)
     out ← Create(localFs, testPath)
@@ -111,7 +133,26 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     _ ← Delete(localFs, testPath)
   } yield readBytes
 
+  // Let's visualize the value of a shorter program:
+  val x1 = for {
+    _ ← Delete(localFs, testPath)
+    out ← Create(localFs, testPath)
+    _ ← Write(out, someBytes)
+  } yield ()
+  // This is equivalent to:
+  val x2 = Delete(localFs, testPath).flatMap(_ ⇒ Create(localFs, testPath).flatMap(out ⇒ Write(out, someBytes)))
+  // and is actually just a few nested case classes and some functions that return more nested case classes:
+  val x3 =
+    FlatMap(
+      Wrap(Delete(localFs, testPath))
+      , (_: Boolean) ⇒ FlatMap(
+        Wrap(Create(localFs, testPath))
+        , (out: OutS) ⇒ Wrap(Write(out, someBytes))
+      )
+    )
+
   // How to run such a program? We need to be able to "run" each of the HDFS operations.
+
   // The way to do this is to define a transformation from HdfsOps[A] to some other monad, say M[A].
   // The monad `M` could actually perform some operations, or could just write a log file, etc.
 
