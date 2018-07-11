@@ -15,6 +15,7 @@ class DirectiveMonadSpec extends FlatSpec with Matchers with ScalatestRouteTest 
       segment ← path("some" / Segment)
       method ← extractMethod
     } yield s"method: ${method.value}, segment: $segment"
+    
     Get("/some/1") ~> route ~> check {
       responseAs[String] shouldEqual "method: GET, segment: 1"
     }
@@ -28,6 +29,7 @@ class DirectiveMonadSpec extends FlatSpec with Matchers with ScalatestRouteTest 
     } yield {
       s"segment1: $segment1, segment2: $segment2"
     }
+    
     Get("/test/some/1/2") ~> route ~> check {
       responseAs[String] shouldEqual "segment1: 1, segment2: 2"
     }
@@ -39,6 +41,7 @@ class DirectiveMonadSpec extends FlatSpec with Matchers with ScalatestRouteTest 
       (segment1, segment2, segment3) ← path("test" / "some" / Segment / Segment / Segment)
       method ← extractMethod
     } yield s"method: ${method.value}, segment1: $segment1, segment2: $segment2, segment3: $segment3"
+    
     Get("/test/some/1/2/3") ~> route ~> check {
       responseAs[String] shouldEqual "method: GET, segment1: 1, segment2: 2, segment3: 3"
     }

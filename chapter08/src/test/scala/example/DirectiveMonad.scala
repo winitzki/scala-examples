@@ -31,7 +31,11 @@ case class WrapDirective[+T](tapply: (T ⇒ Route) ⇒ Route) extends AnyVal {
   }
 }
 
-private[server] sealed trait AkkaHttpMonadLowPriority {
+object WrapDirective {
+  def pure[T](t: T): WrapDirective[T] = WrapDirective { inner ⇒ inner(t) }
+}
+
+sealed trait AkkaHttpMonadLowPriority {
   // Convert `Directive` to `WrapDirective` to activate new syntax.
   implicit def toWrapped[L](directive: Directive[L]): WrapDirective[L] = WrapDirective(directive.tapply)
 
@@ -40,8 +44,6 @@ private[server] sealed trait AkkaHttpMonadLowPriority {
 }
 
 object DirectiveMonad extends AkkaHttpMonadLowPriority {
-  def pure[T](t: T): WrapDirective[T] = WrapDirective { inner ⇒ inner(t) }
-
   // Unwrap `Tuple1` data when converting Directive1 to WrapDirective..
   implicit def toWrapped1[L](directive1: Directive1[L]): WrapDirective[L] = WrapDirective(lr ⇒ directive1.tapply(t1 ⇒ lr(t1._1)))
 
