@@ -198,7 +198,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     import cats.free.Free
     import cats.instances.all._
 
-    // Define an automatic conversion from F[A] to cats.Free[F, A].
+    // Define an automatic conversion from F[A] to cats.Free[F, A]. The "wrapper" is called `liftF`.
     implicit def wrapInFreeMonad[F[_], A](fa: F[A]): Free[F, A] = Free.liftF(fa)
 
     val catsHdfsProg: Free[HdfsOps, Array[Byte]] = for {
@@ -221,7 +221,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
       }).map(_.asInstanceOf[A]) // Seems to be required.
     }
 
-    // Run.
+    // Run and check the results. The "runner" is called `foldMap`.
     catsHdfsProg.foldMap(toWriter).run._1 shouldEqual expectedLog
   }
 }
