@@ -63,4 +63,28 @@ lazy val chapter07 = (project in file("chapter07"))
 
 lazy val chapter08 = (project in file("chapter08"))
   .settings(commonSettings)
+  .settings(
+    libraryDependencies ++= Seq(
+      "org.apache.hadoop" % "hadoop-common" % "3.1.0" excludeAll(
+        ExclusionRule(organization = "org.mortbay.jetty"),
+        ExclusionRule(organization = "net.java.dev.jets3t"),
+        ExclusionRule(organization = "org.apache.curator"),
+        ExclusionRule(organization = "org.apache.zookeeper"),
+        ExclusionRule(organization = "com.sun.jersey"),
+        // Replaced by a later version of commons-beanutils, see comment below.
+        ExclusionRule(organization = "commons-beanutils", name = "commons-beanutils-core")
+      ),
+      /*
+       * See http://commons.apache.org/proper/commons-beanutils/#BeanUtils_Core_And_Modules
+       * Prior to 1.9.0, commons-beanutils was split into commons-beanutils, commons-beanutils-core, and
+       * commons-beanutils-bean-collections. commons-beanutils was an aggregate of the latter two. This causes both
+       * commons-beanutils-1.7.0 and commons-beanutils-core-1.8.0 to be on the classpath at the same time. Furthermore,
+       * commons-beanutils contains classes that were copied from commons-collections, creating further conflicts. This
+       * was all resolved in 1.9.0 which reverted to a single jar, commons-beanutils, without any copies of collections
+       * classes. So here we explicitly use the new jar, and above, exclude the older commons-beanutils-core.
+       */
+      "commons-beanutils" % "commons-beanutils" % "1.9.3",
+      "org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0"
+    )
+  )
   .dependsOn(common)
