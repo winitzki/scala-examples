@@ -49,7 +49,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
   // Define a data type for HDFS operations.
 
-  sealed trait HdfsOps[T]
+  sealed trait HdfsOps[A]
 
   final case class Delete(fs: FS, path: Path) extends HdfsOps[Boolean]
 
@@ -60,9 +60,9 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   final case class Read(fs: FS, path: Path) extends HdfsOps[Array[Byte]]
 
   // We could imagine a sequence of HDFS operations as a list:
-  lazy val ops = List(
+  lazy val ops: List[HdfsOps[_]] = List(
     Delete(localFs, testPath)
-    , Create(localFs, testPath) // This neds to return an `OutS`. How?
+    , Create(localFs, testPath) // This needs to return an `OutS`. How?
     , Write(???, someBytes) // This `Write` needs to use the `OutS` just returned. But how???
     , Read(localFs, testPath) // This `Read` needs to return a result.
   )
@@ -114,9 +114,9 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
     // Also need to define `map`. Let's just define `map` via `flatMap` and `pure`.
     def map[B](f: A ⇒ B): FreeMonad[F, B] = flatMap(f andThen FreeMonad.pure)
   }
-
+  // pure: A => M[A]
   final case class Pure[F[_], A](a: A) extends FreeMonad[F, A]
-
+  // flatMap: (M[A] , A ⇒ M[B]) ⇒ M[B] 
   final case class FlatMap[F[_], A, B](fa: FreeMonad[F, A], afb: A ⇒ FreeMonad[F, B]) extends FreeMonad[F, B]
 
   final case class Wrap[F[_], A](fa: F[A]) extends FreeMonad[F, A]
@@ -125,12 +125,12 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   implicit def wrapInFreeMonad[F[_], A](fa: F[A]): FreeMonad[F, A] = Wrap(fa)
 
   // Check that we can write "HDFS programs" now.
-  val hdfsProgram = for {
-    _ ← Delete(localFs, testPath)
+  val hdfsProgram: FreeMonad[HdfsOps, Array[Byte]] = for {
+    _   ← Delete(localFs, testPath)
     out ← Create(localFs, testPath)
-    _ ← Write(out, someBytes)
+    _   ← Write(out, someBytes)
     readBytes ← Read(localFs, testPath)
-    _ ← Delete(localFs, testPath)
+    _   ← Delete(localFs, testPath)
   } yield readBytes
 
   // Let's visualize the value of a shorter program:
@@ -159,7 +159,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   // If we have such a transformation, we can transform arbitrary "HDFS programs" into `M` values.
   // The transformation is commonly called an "interpreter" and has type `for all A:  F[A] ⇒ M[A]`,
   // i.e. the function should work separately for each type A. To implement this, we use `cats.~>`.
-  // Suggestive syntax: F ~> M  is `for all A: F[A] ⇒ M[A]`.
+  // Suggestive syntax: F ~> M  is `for all X: F[X] ⇒ M[X]`.
 
   def interpret[F[_], M[_] : Monad, A, C](program: FreeMonad[F, A], interpreter: F ~> M): M[A] = program match {
     case Pure(a) ⇒ Monad[M].pure(a)
