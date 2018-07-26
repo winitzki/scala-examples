@@ -1,6 +1,6 @@
 package example
 
-import io.chymyst.ch.implement
+import example.Tx.ContFut
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -18,29 +18,20 @@ Drawbacks of this implementation:
 - Steps always return `Future`, cleanup actions always return `Try`.
  */
 
-// First, implement the standard continuation monad. (This implementation is not stack-safe!)
-// We are using the `curryhoward` library to implement methods automatically from type signatures.
-final case class Cont[R, A](run: (A ⇒ R) ⇒ R) {
-  def map[B](f: A ⇒ B): Cont[R, B] = implement
-
-  def flatMap[B](f: A ⇒ Cont[R, B]): Cont[R, B] = implement
-}
-
 // Define the trait `Tx[A]` for convenience.
 // The type `Tx[A]` is equivalent to `forall R: (A ⇒ Future[R]) ⇒ Future[R]`.
 // This type is the result of applying the continuation monad transformer to the `Future` monad.
 trait Tx[A] {
   self ⇒
-
   // This method needs to be overridden.
-  def run[R]: Cont[Future[R], A]
+  def run[R]: ContFut[R, A]
 
   final def map[B](f: A ⇒ B): Tx[B] = new Tx[B] {
-    def run[R]: Cont[Future[R], B] = self.run.map(f)
+    def run[R]: ContFut[R, B] = { g ⇒ self.run(f andThen g) }
   }
 
   final def flatMap[B](f: A ⇒ Tx[B]): Tx[B] = new Tx[B] {
-    def run[R]: Cont[Future[R], B] = self.run.flatMap(a ⇒ f(a).run)
+    def run[R]: ContFut[R, B] = { g ⇒ self.run(f(_).run(g)) }
   }
 
   // Necessary for Scala for/yield syntax to work. This is not a lawful `filter`, so do not use `if`.
@@ -49,6 +40,9 @@ trait Tx[A] {
 
 // Convenience methods.
 object Tx {
+
+  type ContFut[R, X] = (X ⇒ Future[R]) ⇒ Future[R]
+
   // Stub method: log failure while cleaning up.
   def log[A](t: Try[A]): Unit = t match {
     case Failure(ex) ⇒ println(s"Failure during cleanup: $ex")
@@ -60,12 +54,11 @@ object Tx {
 
   // Convenience method: create a `Tx` step from a future value (that may fail) and a cleanup function (that may also fail).
   def stepWithCleanup[A](step: ⇒ Future[A])(undo: A ⇒ Try[Unit]): Tx[A] = new Tx[A] {
-    override def run[R]: Cont[Future[R], A] = Cont(restOfPipeline ⇒
+    override def run[R]: ContFut[R, A] = restOfPipeline ⇒
       for {
         a ← step // We fail if this fails.
         result ← restOfPipeline(a).transform(identity, { ex ⇒ log(undo(a)); ex })
       } yield result
-    )
   }
 
   // Convenience syntax: `withCleanup`. Adds a cleanup operation to an existing `Tx` step.
@@ -76,7 +69,7 @@ object Tx {
     } yield a
 
     // Convenience method: convert a `Tx[A]` into a `Future[A]`.
-    def future: Future[A] = tx.run.run { a ⇒ Future.successful(a) }
+    def future: Future[A] = tx.run { a ⇒ Future.successful(a) }
   }
 
 }
