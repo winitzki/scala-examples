@@ -34,7 +34,8 @@ trait Tx[A] {
     def run[R]: ContFut[R, B] = { g ⇒ self.run(f(_).run(g)) }
   }
 
-  // Necessary for Scala for/yield syntax to work. This is not a lawful `filter`, so do not use `if`.
+  // Necessary for Scala for/yield syntax to work. This is a lawful `filter`,
+  // so we may now use `if` in the `for`/`yield` blocks.
   final def withFilter(p: A ⇒ Boolean): Tx[A] = new Tx[A] {
     override def run[R]: ContFut[R, A] = { g ⇒
       self.run { a ⇒
@@ -148,7 +149,7 @@ class TransactionMonad extends FlatSpec with Matchers {
       (tmpFileName, _) ← txWriteTmpFile("xyz")
       // Let's add a cleanup to this step.
       versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
-      _ ← txWriteFile("xyz", succeed = false)
+      _ ← txWriteFile("xyz", succeed = false) // This fails. The previous 2 steps are rolled back.
     } yield versionId
 
     // Run and wait for results. This future will fail.
@@ -165,7 +166,7 @@ Deleting tempfile1
     val txSaga2: Tx[Long] = for {
       (tmpFileName, _) ← txWriteTmpFile("xyz", cleanupSucceed = false)
       versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
-      _ ← txWriteFile("xyz", succeed = false)
+      _ ← txWriteFile("xyz", succeed = false) // This fails. The previous 2 steps are rolled back.
     } yield versionId
 
     // Run and wait for results. This future will fail.
@@ -182,13 +183,34 @@ Failure during cleanup: java.lang.Exception: failed to delete tempfile1
     val txSaga3 = for {
       (tmpFileName, _) ← txWriteTmpFile("xyz")
       versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
-      Some(_) ← txWriteFile("xyz", succeed = true)
+      Some(_) ← txWriteFile("xyz", succeed = true) // This fails. All 3 steps are rolled back.
     } yield versionId
 
     // Run and wait for results. This future will fail.
     the[Exception] thrownBy Await.result(txSaga3.future, Duration.Inf) should have message "Invalid match with value None"
     /*   Prints output:
 
+Deleting blah
+Deleting DB entry 9876543210
+Deleting tempfile1
+
+    */
+  }
+
+  it should "execute actions and fail due to failing `if` guard condition" in {
+    val txSaga4 = for {
+      (tmpFileName, _) ← txWriteTmpFile("xyz")
+      versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
+      if versionId > 0 // This passes.
+      result ← txWriteFile("xyz", succeed = true)
+      if result.nonEmpty // This fails. All 3 steps are rolled back.
+    } yield versionId
+
+    // Run and wait for results. This future will fail.
+    the[Exception] thrownBy Await.result(txSaga4.future, Duration.Inf) should have message "Invalid match with value None"
+    /*   Prints output:
+    
+Deleting blah
 Deleting DB entry 9876543210
 Deleting tempfile1
 
