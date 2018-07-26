@@ -18,7 +18,8 @@ Drawbacks of this implementation:
 - Steps always return `Future`, cleanup actions always return `Try`.
  */
 
-// First, implement the standard continuation monad. This implementation is not stack-safe!
+// First, implement the standard continuation monad. (This implementation is not stack-safe!)
+// We are using the `curryhoward` library to implement methods automatically from type signatures.
 final case class Cont[R, A](run: (A ⇒ R) ⇒ R) {
   def map[B](f: A ⇒ B): Cont[R, B] = implement
 
@@ -41,6 +42,7 @@ trait Tx[A] {
     def run[R]: Cont[Future[R], B] = self.run.flatMap(a ⇒ f(a).run)
   }
 
+  // Necessary for Scala for/yield syntax to work. This is not a lawful `filter`, so do not use `if`.
   final def withFilter(p: A ⇒ Boolean): Tx[A] = this
 }
 
@@ -53,10 +55,10 @@ object Tx {
   }
 
   // Convenience method: create a `Tx` step that has a no-op cleanup.
-  def step[A](step: ⇒ Future[A]): Tx[A] = stepWithUndo(step)(_ ⇒ Success(()))
+  def step[A](step: ⇒ Future[A]): Tx[A] = stepWithCleanup(step)(_ ⇒ Success(()))
 
-  // Convenience method: create a `Tx` step from a future value (that might throw exceptions) and a cleanup function.
-  def stepWithUndo[A](step: ⇒ Future[A])(undo: A ⇒ Try[Unit]): Tx[A] = new Tx[A] {
+  // Convenience method: create a `Tx` step from a future value (that may fail) and a cleanup function (that may also fail).
+  def stepWithCleanup[A](step: ⇒ Future[A])(undo: A ⇒ Try[Unit]): Tx[A] = new Tx[A] {
     override def run[R]: Cont[Future[R], A] = Cont(restOfPipeline ⇒
       for {
         a ← step // We fail if this fails.
@@ -65,14 +67,14 @@ object Tx {
     )
   }
 
-  // Convenience syntax: `withCleanup`. Adds an undo operation to an existing `Tx` step.
+  // Convenience syntax: `withCleanup`. Adds a cleanup operation to an existing `Tx` step.
   implicit class TxOps[A](tx: Tx[A]) {
     def withCleanup(undo: A ⇒ Try[Unit]): Tx[A] = for {
       a ← tx
-      _ ← stepWithUndo(Future.successful(a))(undo)
+      _ ← stepWithCleanup(Future.successful(a))(undo)
     } yield a
 
-    // Convenience method: convert to a `Future[A]`.
+    // Convenience method: convert a `Tx[A]` into a `Future[A]`.
     def future: Future[A] = tx.run.run { a ⇒ Future.successful(a) }
   }
 
@@ -118,9 +120,11 @@ class TransactionMonad extends FlatSpec with Matchers {
   }
 
   // Convert some parts of this API into the transaction monad type.
+  // We may use `stepWithCleanup` to define the cleanup together with an action,
+  // or we can define an action with `Tx.step` and add a cleanup later using `withCleanup`.
 
   def txWriteTmpFile(data: String, succeed: Boolean = true, cleanupSucceed: Boolean = true): Tx[(String, Long)] =
-    Tx.step(writeTmpFile(data, succeed)) withCleanup { case (fileName, _) ⇒ deleteFile(fileName, cleanupSucceed) }
+    Tx.stepWithCleanup(writeTmpFile(data, succeed)) { case (fileName, _) ⇒ deleteFile(fileName, cleanupSucceed) }
 
   def txWriteFile(data: String, succeed: Boolean = true): Tx[Long] =
     Tx.step(writeFile(data, succeed)) withCleanup { _ ⇒ deleteFile("blah") }
@@ -142,6 +146,7 @@ class TransactionMonad extends FlatSpec with Matchers {
   it should "execute 3 actions, the last one fails, with cleanup that succeeds" in {
     val txSaga2: Tx[Long] = for {
       (tmpFileName, _) ← txWriteTmpFile("xyz")
+      // Let's add a cleanup to this step.
       versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
       _ ← txWriteFile("xyz", succeed = false)
     } yield versionId
@@ -155,7 +160,7 @@ Deleting tempfile1
 
      */
   }
-  
+
   it should "execute 3 actions, the last one fails, with 1st cleanup that fails" in {
     val txSaga2: Tx[Long] = for {
       (tmpFileName, _) ← txWriteTmpFile("xyz", cleanupSucceed = false)
