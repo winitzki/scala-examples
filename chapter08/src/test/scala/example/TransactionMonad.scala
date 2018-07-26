@@ -28,6 +28,7 @@ final case class Cont[R, A](run: (A ⇒ R) ⇒ R) {
 
 // Define the trait `Tx[A]` for convenience.
 // The type `Tx[A]` is equivalent to `forall R: (A ⇒ Future[R]) ⇒ Future[R]`.
+// This type is the result of applying the continuation monad transformer to the `Future` monad.
 trait Tx[A] {
   self ⇒
 
