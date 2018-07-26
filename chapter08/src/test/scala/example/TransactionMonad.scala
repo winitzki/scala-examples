@@ -11,6 +11,17 @@ import scala.util.{Failure, Success, Try}
 /*
 A simplistic implementation of a "transaction monad" along the lines of https://www.fos.kuis.kyoto-u.ac.jp/~igarashi/papers/pdf/contextflow-REBLS17.pdf
 
+The main idea: when running a value of type `(A ⇒ R) ⇒ R`, we somehow obtain `A`, then we call
+the continuation `A ⇒ R` and return the resulting `R`.
+
+If our continuation type were just `(A ⇒ R) ⇒ R`, we could do nothing else other than pass on the same value `R`.
+
+But when our return type is actually `Future[R]` or `Try[R]` or some other type that encapsulates failure,
+instead of just plain `R`, we can modify that value before passing it on.
+
+So, in this case, we check whether running `A ⇒ Future[R]` returns a failure, and if so, we can
+run our cleanup on our value of `A`.
+ 
 Drawbacks of this implementation:
 
 - Not stack-safe! Can throw stack overflow exception if too many actions are chained together.
