@@ -20,7 +20,12 @@ But when our return type is actually `Future[R]` or `Try[R]` or some other type 
 instead of just plain `R`, we can modify that value before passing it on.
 
 So, in this case, we check whether running `A ⇒ Future[R]` returns a failure, and if so, we can
-run our cleanup on our value of `A`.
+run our cleanup on our value of `A` before we return the failed `Future[R]`.
+
+If there was a previous `(A ⇒ Future[R]) ⇒ Future[R]` that called us, they will receive the failure
+and execute their cleanup, and so on.
+
+In this way, cleanup steps will be automatically run in reverse order.
  
 Drawbacks of this implementation:
 
