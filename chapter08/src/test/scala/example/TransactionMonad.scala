@@ -35,7 +35,13 @@ trait Tx[A] {
   }
 
   // Necessary for Scala for/yield syntax to work. This is not a lawful `filter`, so do not use `if`.
-  final def withFilter(p: A ⇒ Boolean): Tx[A] = this
+  final def withFilter(p: A ⇒ Boolean): Tx[A] = new Tx[A] {
+    override def run[R]: ContFut[R, A] = { g ⇒
+      self.run { a ⇒
+        if (p(a)) g(a) else Future.failed(new Exception(s"Invalid match with value $a"))
+      }
+    }
+  }
 }
 
 // Convenience methods.
@@ -96,8 +102,8 @@ class TransactionMonad extends FlatSpec with Matchers {
   }
 
   // Create and write a (non-temporary) file whose name is fixed in advance. Returns file size.
-  def writeFile(data: String, succeed: Boolean = true): Future[Long] = {
-    if (succeed) Future.successful(56789L) else Future.failed(new Exception(s"failed to create file"))
+  def writeFile(data: String, succeed: Boolean = true): Future[Option[Long]] = {
+    if (succeed) Future.successful(None) else Future.failed(new Exception(s"failed to create file"))
   }
 
   // Put some entry into the database. Returns the new database ID for the new entry.
@@ -120,7 +126,7 @@ class TransactionMonad extends FlatSpec with Matchers {
   def txWriteTmpFile(data: String, succeed: Boolean = true, cleanupSucceed: Boolean = true): Tx[(String, Long)] =
     Tx.stepWithCleanup(writeTmpFile(data, succeed)) { case (fileName, _) ⇒ deleteFile(fileName, cleanupSucceed) }
 
-  def txWriteFile(data: String, succeed: Boolean = true): Tx[Long] =
+  def txWriteFile(data: String, succeed: Boolean = true): Tx[Option[Long]] =
     Tx.step(writeFile(data, succeed)) withCleanup { _ ⇒ deleteFile("blah") }
 
   def txCreateDBEntry(info: String, succeed: Boolean = true): Tx[Long] =
@@ -170,5 +176,22 @@ Deleting DB entry 9876543210
 Failure during cleanup: java.lang.Exception: failed to delete tempfile1
 
      */
+  }
+
+  it should "execute actions and fail due to match error" in {
+    val txSaga3 = for {
+      (tmpFileName, _) ← txWriteTmpFile("xyz")
+      versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
+      Some(_) ← txWriteFile("xyz", succeed = true)
+    } yield versionId
+
+    // Run and wait for results. This future will fail.
+    the[Exception] thrownBy Await.result(txSaga3.future, Duration.Inf) should have message "Invalid match with value None"
+    /*   Prints output:
+
+Deleting DB entry 9876543210
+Deleting tempfile1
+
+    */
   }
 }
