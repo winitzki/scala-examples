@@ -51,7 +51,8 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     import cats.instances.either._ // Enable the functor instance for Either.
 
     /* 
-  Now, if we apply `fmap` to `f: A ⇒ (B ⇒ Z)` then we get `fmap(f): Op[A] ⇒ Op[B ⇒ Z].
+  Now, if we apply `fmap` to `f: A ⇒ (B ⇒ Z)` then we get
+    `fmap(f): Op[A] ⇒ Op[B ⇒ Z].
   But we want Op[A] ⇒ (Op[B] ⇒ Op[Z]) instead.
   This can be obtained if we could somehow transform Op[B ⇒ Z] into Op[B] ⇒ Op[Z].
   This function is usually called `ap`: 
@@ -68,6 +69,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     // For convenience, define an infix syntax for `ap`:
+    // (so that we can write `fab <*> fa` instead of `ap(fab)(fa)`)
     implicit class ApSyntax[A, B](val opab: Op[A ⇒ B]) {
       def <*>(opa: Op[A]): Op[B] = ap(opab)(opa)
     }
