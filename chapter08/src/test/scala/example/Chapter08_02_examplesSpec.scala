@@ -1,6 +1,6 @@
 package example
 
-import cats.Functor
+import cats.{Applicative, Functor}
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
 import io.chymyst.ch._
@@ -43,6 +43,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // For convenience, define an infix syntax for `fmap`, 
     // so that we can write `f <@> fa` instead of `fa.map(f)`.
+    // This implements the short notation `f ↑ fa`.
     implicit class FmapSyntax[A, B](val f: A ⇒ B) {
       def <@>[F[_] : Functor](fa: F[A]): F[B] = fa.map(f)
     }
@@ -111,6 +112,25 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     val result: Op[C2] = (C2.apply _).curried <@> safeDivide(2, 1) <*> safeDivide(4, 2)
     result shouldEqual Right(C2(2.0, 2.0))
+  }
+
+  it should "define construction 2 for applicative functors" in {
+    // If G and H are applicative then G × H is also applicative.
+    // Define pure as G.pure ⊗ H.pure. Similarly, define zip and ap.
+    // E.g. zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
+    
+    implicit def construction2[G[_] : Applicative, H[_] : Applicative]: Applicative[Lambda[X ⇒ (G[X], H[X])]] =
+      new Applicative[Lambda[X ⇒ (G[X], H[X])]] {
+        override def pure[A](x: A): (G[A], H[A]) =
+          (Applicative[G].pure(x), Applicative[H].pure(x))
+
+        override def ap[A, B](ff: (G[A ⇒ B], H[A ⇒ B]))(fa: (G[A], H[A])): (G[B], H[B]) =
+          (Applicative[G].ap(ff._1)(fa._1), Applicative[H].ap(ff._2)(fa._2))
+      }
+    
+    // The laws hold separately in each part of the pair because, by assumption, they hold for G and H.
+    // Therefore, the laws hold for G × H.
+    
   }
 
   it should "fail to define zippable for some functors" in {

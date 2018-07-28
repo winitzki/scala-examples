@@ -77,23 +77,23 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
   
   Note that Create(fs, path) is of type HdfsOps[OutS].
   If only `flatMap` could have the type signature
-  HdfsOps[A].flatMap(A ⇒ HdfsOps[B]) : HdfsOps[B],
+      HdfsOps[A].flatMap(A ⇒ HdfsOps[B]) : HdfsOps[B],
   we would be able to compose several operations into a "declarative HDFS program",
   so that our test would be rewritten like this:
   
-  val hdfsProgram = for {
-    _         ← Delete(fs, path)
-    out       ← Create(fs, path)
-    _         ← Write(out, someBytes)
-    readBytes ← Read(fs, path)
-    _         ← Delete(fs, path)
-  } yield readBytes
-  
-  // And then we could run it somehow:
-  val result: Array[Byte] = hdfsProgram.run(???)
+      val hdfsProgram = for {
+        _         ← Delete(fs, path)
+        out       ← Create(fs, path)
+        _         ← Write(out, someBytes)
+        readBytes ← Read(fs, path)
+        _         ← Delete(fs, path)
+      } yield readBytes
+      
+  And then we could run it somehow:
+      val result: Array[Byte] = hdfsProgram.run(???)
   
   Note that `HdfsOps` is not a functor because of non-generic type arguments!
-  So we cannot have a flatMap with the signature above.
+  So we cannot have a `flatMap` with the signature above.
   The first step is to convert `HdfsOps` into values of some monad.
   */
 
@@ -135,9 +135,9 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
   // Let's visualize the value of a shorter program:
   val x1 = for {
-    _ ← Delete(localFs, testPath)
+    _   ← Delete(localFs, testPath)
     out ← Create(localFs, testPath)
-    _ ← Write(out, someBytes)
+    _   ← Write(out, someBytes)
   } yield ()
   // This is equivalent to:
   val x2 = Delete(localFs, testPath).flatMap(_ ⇒ Create(localFs, testPath).flatMap(out ⇒ Write(out, someBytes)))
@@ -244,11 +244,11 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
     // We can now write "HDFS programs".
     val catsHdfsProg = for {
-      _ ← Delete(localFs, testPath)
+      _   ← Delete(localFs, testPath)
       out ← Create(localFs, testPath)
-      _ ← Write(out, someBytes)
+      _   ← Write(out, someBytes)
       readBytes ← Read(localFs, testPath)
-      _ ← Delete(localFs, testPath)
+      _   ← Delete(localFs, testPath)
     } yield readBytes
 
     // Run using `toWriter` and check the results. The "runner" is called `foldMap` in `cats`.
