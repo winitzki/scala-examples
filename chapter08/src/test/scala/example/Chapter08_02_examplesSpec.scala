@@ -1,8 +1,9 @@
 package example
 
 import cats.kernel.Monoid
-import cats.{Applicative, Functor, Monad}
+import cats.{Applicative, Contravariant, Functor, Monad}
 import WuZip._
+import cats.syntax.applicative._
 import cats.syntax.functor._
 import cats.syntax.monoid._
 import org.scalatest.{FlatSpec, Matchers}
@@ -120,33 +121,10 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   }
 
   it should "define construction 1 for applicative functors" in {
-    // (a) Constant functor F[A] = Z where Z is a monoid.
-
-    implicit def functorA[Z]: Functor[Lambda[A ⇒ Z]] = new Functor[Lambda[A ⇒ Z]] {
-      override def map[A, B](fa: Z)(f: A ⇒ B): Z = fa
-    }
-
-    implicit def construction1a[Z: Monoid]: WuZip[Lambda[A ⇒ Z]] = new WuZip[Lambda[A ⇒ Z]] {
-      override def wu: Z = Monoid[Z].empty
-
-      override def zip[A, B](fa: Z, fb: Z): Z = fa |+| fb
-
-      // Note: We could have defined this to be `fb |+| fa`, it would still work.
-    }
-
-    // The laws hold because the monoid laws hold for Z.
-
-    // Note that this is not a monad because monadic identity laws fail:
-    implicit def badMonad[Z: Monoid]: CatsMonad[Lambda[A ⇒ Z]] = new CatsMonad[Lambda[A ⇒ Z]] {
-      // No choice here: can't use `x` to compute a `Z`.
-      override def pure[A](x: A): Z = Monoid[Z].empty
-
-      // We don't have an `A`, so can't use `f` at all (we are losing information!).
-      // The choice here is between returning `fa` and returning `empty`.
-      override def flatMap[A, B](fa: Z)(f: A ⇒ Z): Z = fa
-    }
-    // The left identity law: `pure andThen flatMap(f) = f`.
-    // This law cannot hold because flatMap does not use its argument `f`, i.e. it loses information.
+    // (a) Constant functor F[A] = 1.
+    /*
+    All methods return `()`. All laws are trivially satisfied.
+     */
 
     // (b) Identity functor F[A] = A.
     implicit def functorB: Functor[Lambda[A ⇒ A]] = new Functor[Lambda[A ⇒ A]] {
@@ -205,11 +183,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     implicit def construction3[G[_] : WuZip]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
-      override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(WuZip[G].wu))` does not obey identity laws!
+      override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(WuZip[G].wu)` does not obey identity laws!
 
       override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]]): Either[(A, B), G[(A, B)]] = (fa, fb) match {
         case (Left(a), Left(b)) ⇒ Left((a, b))
-        // If we have an a: A and a gb: G[B], we can't return (A, B), so we need to return G[(A, B)].
+        // If we have an `a: A` and a `gb: G[B]`, we can't return Left[(A, B)], so we need to return Right[G[(A, B)]].
         // Lift `A` to `G[A]` using G's `pure`:
         case (Left(a), Right(gb)) ⇒ Right(WuZip[G].zip(WuZip[G].pure(a), gb))
         case (Right(ga), Left(b)) ⇒ Right(WuZip[G].zip(ga, WuZip[G].pure(b)))
@@ -226,9 +204,9 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     
     Identity: The wrapped unit is `1 + 0`. 
     Consider the right identity law: (A + G[A]) zip (1 + 0).
-    If we have Left(a), the result is Left( (a, 1) ). This is equivalent to Left(a).
-    If we have Right(G[A]), we would lift 1 into G using `pure`. The result is, by definition, G's `wu`.
-    Hence we would have 
+    If we have Left(a), the result will be Left( (a, 1) ). This is equivalent to Left(a).
+    If we have Right(G[A]), we will lift 1 into G using `pure`. The result is, by definition, G's `wu`.
+    Hence we will have 
     zip(Right(ga), Left(())) = Right ( WuZip[G].zip(ga, WuZip[G].wu) ).
     Since the identity law holds for G, zipping ga with wu is equivalent to ga. Hence the identity laws hold. 
     
@@ -239,11 +217,84 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
      */
   }
 
+  it should "define construction 6 for applicative functors" in {
+    // Construction 6. Constant functor F[A] = Z where Z is a monoid.
+
+    implicit def functorA[Z]: Functor[Lambda[A ⇒ Z]] = new Functor[Lambda[A ⇒ Z]] {
+      override def map[A, B](fa: Z)(f: A ⇒ B): Z = fa
+    }
+
+    implicit def construction1a[Z: Monoid]: WuZip[Lambda[A ⇒ Z]] = new WuZip[Lambda[A ⇒ Z]] {
+      override def wu: Z = Monoid[Z].empty
+
+      override def zip[A, B](fa: Z, fb: Z): Z = fa |+| fb
+
+      // Note: We could have defined this to be `fb |+| fa`, it would still work.
+    }
+
+    // The laws hold because the monoid laws hold for Z.
+
+    // Note that this is not a monad because monadic identity laws fail:
+    implicit def badMonad[Z: Monoid]: CatsMonad[Lambda[A ⇒ Z]] = new CatsMonad[Lambda[A ⇒ Z]] {
+      // No choice here: can't use `x` to compute a `Z`.
+      override def pure[A](x: A): Z = Monoid[Z].empty
+
+      // We don't have an `A`, so can't use `f` at all (we are losing information!).
+      // The choice here is between returning `fa` and returning `empty`.
+      override def flatMap[A, B](fa: Z)(f: A ⇒ Z): Z = fa
+    }
+    // The left identity law: `pure andThen flatMap(f) = f`.
+    // This law cannot hold because flatMap does not use its argument `f`, i.e. it loses information.
+  }
+
+  it should "define construction 7 for applicative functors" in {
+    // Functor F[A] = Z + G[A], where Z is a monoid and G is applicative.
+    implicit def functorAG[G[_] : Functor, Z]: Functor[Lambda[A ⇒ Either[Z, G[A]]]] = new Functor[Lambda[A ⇒ Either[Z, G[A]]]] {
+      override def map[A, B](fa: Either[Z, G[A]])(f: A ⇒ B): Either[Z, G[B]] = fa match {
+        case Left(z) ⇒ Left(z)
+        case Right(ga) ⇒ Right(Functor[G].map(ga)(f))
+      }
+    }
+
+    implicit def construction7[G[_] : WuZip, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
+      override def wu: Either[Z, G[Unit]] = Right(WuZip[G].wu) // It turns out that `Left(Monoid[Z].empty)` does not obey identity laws!
+
+      override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]]): Either[Z, G[(A, B)]] = (fa, fb) match {
+        case (Left(x), Left(y)) ⇒ Left(x |+| y)
+        // If we have an `a: Z` and a `gb: G[B]`, we can't return Right[G[(A, B)]], so we need to return Left[Z].
+        case (Left(z), Right(_)) ⇒ Left(z)
+        case (Right(_), Left(z)) ⇒ Left(z)
+        case (Right(ga), Right(gb)) ⇒ Right(WuZip[G].zip(ga, gb))
+      }
+    }
+
+    /* Check the laws:
+    
+    Associativity: To verify that, consider (Z + G[A]) zip (Z + G[B]) zip (Z + G[C]).
+    If at least some of the 3 `Either`s are `Left`, we obtain the result `z1 |+| z2 |+| z3` or perhaps with fewer `z`s.
+    In any case, this is associative since Z is a monoid.
+    
+    Otherwise, we have `ga zip gb zip gc`, and we know that G's `zip` is associative. So this is associative as well.
+    
+    Therefore, `zip` is associative for Z + G[A].
+    
+    Identity: The wrapped unit is `0 + wuG`. 
+    Consider the right identity law: (Z + G[A]) zip (0 + wuG).
+    If we have Left(z), the result is Left(z).
+    If we have Right(ga), we will have ga zip wuG = ga since the identity law holds for G.  
+    Hence in both cases the identity law holds for Z + G[A]. 
+    
+    On the other hand, if we defined the wrapped unit as `Left(Monoid[Z].empty)`, and we consider
+    zip( Left(Monoid[Z].empty), Right(ga) ) = Left(Monoid[Z].empty)
+    This cannot be equivalent to Right(ga), which breaks the identity law.
+     */
+  }
+
   it should "fail to define zippable for some functors" in {
-    type F[A, P] = (A ⇒ P) ⇒ Option[A]
-    type G[A, P, Q] = Either[A ⇒ P, A ⇒ Q]
-    type H[A, P, Q] = Either[P ⇒ A, Q ⇒ A]
-    type K[A, P, Q] = (A ⇒ P) ⇒ Q
+    type F[A, P] = (A ⇒ P) ⇒ Option[A] // Not applicative.
+    type G[A, P, Q] = Either[A ⇒ P, A ⇒ Q] // This is an applicative contrafunctor.
+    type H[A, P, Q] = Either[P ⇒ A, Q ⇒ A] // Not applicative.
+    type K[A, P, Q] = (A ⇒ P) ⇒ Q // Not applicative.
 
     def zipsF[A, B, P] = allOfType[(F[A, P], F[B, P]) ⇒ F[(A, B), P]]
 
