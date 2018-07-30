@@ -345,10 +345,24 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     // It is "lazy": To get the next element, we need to call the closure each time.
-    val testList = list(List("A", "B", "C"))
-    val (first, rest) = testList.value.right.get()
+    val testList2 = list(List(10, 20))
+    val testList3 = list(List("A", "B", "C"))
+
+    val (first, rest) = testList3.value.right.get()
     first shouldEqual "A"
     rest.value.right.get()._1 shouldEqual "B"
+
+    // Convert to ordinary `List`.
+    def toList[A](fa: F[A]): List[A] = fa.value match {
+      case Left(_) ⇒ Nil
+      case Right(g) ⇒
+        val (a2, fa2) = g()
+        a2 :: toList(fa2)
+    }
+
+    // Check.
+    toList(testList2) shouldEqual List(10, 20)
+    toList(testList3) shouldEqual List("A", "B", "C")
 
     // Define a functor instance.
     implicit val functorF: Functor[F] = new Functor[F] {
@@ -363,7 +377,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Define a WuZip instance.
-    val wuZipF: WuZip[F] = new WuZip[F]() {
+    implicit val wuZipF: WuZip[F] = new WuZip[F]() {
       override def wu: F[Unit] = F(Right { () ⇒ ((), wu) }) // Never-ending sequence of `()`.
 
       override def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] = (fa.value, fb.value) match {
@@ -375,6 +389,31 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
           F(Right { () ⇒ ((a2, b2), zip(fa2, fb2)) })
       }
     }
+
+    // Zipping testList2 and testList3 should yield a list of length 2.
+    toList(WuZip[F].zip(testList2, testList3)) shouldEqual List((10, "A"), (20, "B"))
+    
+    // The `wu` value should act as an identity for zipping:
+    toList(WuZip[F].zip(testList3, WuZip[F].wu)).map(_._1) shouldEqual toList(testList3)
+    
+    /* How it works:
+    The `wu` represents an unterminated list, while testList3 is finite:
+
+    testList3:    wu:    zip(testList3, wu):
+    
+    "A"           ()        ("A", ())
+    "B"           ()        ("B", ())
+    "C"           ()        ("C", ())
+                  ()
+                  ()
+                  ()
+                  ()
+                 ...
+    
+    If we used the `List` monad's definition of `pure` in this applicative instance, we would have obtained
+    
+    wu = pure(()) = List( () ), i.e. a single-element list. This would not have given us a good applicative instance.
+     */
   }
 
   it should "fail to define zippable for some functors" in {
