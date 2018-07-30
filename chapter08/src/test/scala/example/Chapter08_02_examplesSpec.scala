@@ -163,9 +163,9 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     Therefore, the laws hold for G × H:
 
     Associativity:
-    ( (ga, ha) zip (gb, hb) ) zip (gc, hc) = (ga zip gb, ha zip hb) zip (gc, hc) = (ga zip gb zip gc, ha zip hb zip hc)
+    ( (ga, ha) zip (gb, hb) ) zip (gc, hc) = (ga zip gb, ha zip hb) zip (gc, hc) ≅ (ga zip gb zip gc, ha zip hb zip hc)
     We can use associativity for G and H, e.g. (ga zip gb) zip gc = ga zip (gb zip gc), and establish that the above equals
-    (ga, ha) zip ( (gb, hb) zip (gc, hc) ) = (ga, ha) zip (gb zip gc, hb zip hc) = (ga zip gb zip gc, ha zip hb zip hc)
+    (ga, ha) zip ( (gb, hb) zip (gc, hc) ) = (ga, ha) zip (gb zip gc, hb zip hc) ≅ (ga zip gb zip gc, ha zip hb zip hc)
 
     Left identity:
     (gwu, hwu) zip (ga, ha) = (gwu zip ga, hwu zip ha) ≅ (ga, ha) since the identity laws hold for G and H.
@@ -288,6 +288,48 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     zip( Left(Monoid[Z].empty), Right(ga) ) = Left(Monoid[Z].empty)
     This cannot be equivalent to Right(ga), which breaks the identity law.
      */
+  }
+
+  it should "define construction 8 for applicative functors" in {
+    // Functor F[A] = G[H[A]].
+
+    implicit def functorGH[G[_] : Functor, H[_] : Functor]: Functor[Lambda[A ⇒ G[H[A]]]] = new Functor[Lambda[A ⇒ G[H[A]]]] {
+      override def map[A, B](fa: G[H[A]])(f: A ⇒ B): G[H[B]] = fa.map(_.map(f))
+    }
+
+    // Define zip as G[H[A]] × G[H[B]] ⇒ G[H[A × B]] using zip for G and zip for H.
+
+    implicit def wuzipGH[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
+      override def wu: G[H[Unit]] = WuZip[G].pure(WuZip[H].wu)
+
+      override def zip[A, B](fa: G[H[A]], fb: G[H[B]]): G[H[(A, B)]] =
+        WuZip[G].zip(fa, fb).map { case (ha, hb) ⇒ WuZip[H].zip(ha, hb) }
+    }
+
+    /* Check the laws:
+    
+    Associativity: It is convenient to work in terms of G's `map2` because we will have many expressions of the kind `zip().map()`.
+    
+    (gha zip ghb) = zipG(gha, ghb).map(zipH) = map2(gha, ghb)(zipH)
+    
+    (gha zip ghb) zip ghc = map2 ( map2(gha, ghb)(zipH[A, B]), ghc)(zipH[(A, B), C])
+    
+    By the map2 naturality law, we can pull zipH[A, B] out:
+    
+    (gha zip ghb) zip ghc = map2 ( map2(gha, ghb)((_, _)), ghc) { case ((a,b),c) ⇒ zipH(zipH(a, b), c) }
+    
+    Similarly we get
+    gha zip (ghb zip ghc) = map2( gha, map2(ghb, ghc)((_, _))) { case (a, (b, c)) ⇒ zipH(a, zipH(b, c)) }
+    
+    Now, since G's `map2` satisfies associativity, and `zipH` also does, we see that these two expressions are equivalent in the sense of `≅`.
+    
+    Identity:
+    
+    wu zip gha = map2(pureG(wuH), gha)(zipH)  // Now use the left identity law for G's `map2`:
+     = gha.map { ha ⇒ zipH(wuH, ha) } = gha.map { ha ⇒ ha } = ga // We assume identity laws for G and H.  
+    
+    Similarly the right identity law holds.    
+    */
   }
 
   it should "fail to define zippable for some functors" in {
