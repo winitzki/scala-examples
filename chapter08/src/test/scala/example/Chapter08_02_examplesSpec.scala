@@ -460,6 +460,10 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   
   zip( (r, a1, a2), (s, b1, b2, b3, b4) ) = (r, (a1, b1), (a2, b2) )
   
+  If the terms have the same type, we can also combine the monoidal coefficients since they have the same type:
+  
+  zip( (r1, a1, a2), (r2, b1, b2) ) = (r1 |+| r2, (a1, b1), (a2, b2) )
+  
   In this way, we have defined `zip` for any combination of terms from F[A].  
    */
 }
