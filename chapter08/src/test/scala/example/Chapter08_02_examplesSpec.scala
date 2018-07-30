@@ -1,7 +1,10 @@
 package example
 
-import cats.{Applicative, Functor}
+import cats.kernel.Monoid
+import cats.{Applicative, Functor, Monad}
+import WuZip._
 import cats.syntax.functor._
+import cats.syntax.monoid._
 import org.scalatest.{FlatSpec, Matchers}
 import io.chymyst.ch._
 
@@ -116,24 +119,83 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     result shouldEqual Right(C2(2.0, 2.0))
   }
 
+  it should "define construction 1 for applicative functors" in {
+    // (a) Constant functor F[A] = Z where Z is a monoid.
+
+    implicit def functorA[Z]: Functor[Lambda[A ⇒ Z]] = new Functor[Lambda[A ⇒ Z]] {
+      override def map[A, B](fa: Z)(f: A ⇒ B): Z = fa
+    }
+
+    implicit def construction1a[Z: Monoid]: WuZip[Lambda[A ⇒ Z]] = new WuZip[Lambda[A ⇒ Z]] {
+      override def wu: Z = Monoid[Z].empty
+
+      override def zip[A, B](fa: Z, fb: Z): Z = fa |+| fb
+
+      // Note: We could have defined this to be `fb |+| fa`, it would still work.
+    }
+
+    // The laws hold because the monoid laws hold for Z.
+
+    // Note that this is not a monad because monadic identity laws fail:
+    implicit def badMonad[Z: Monoid]: CatsMonad[Lambda[A ⇒ Z]] = new CatsMonad[Lambda[A ⇒ Z]] {
+      // No choice here: can't use `x` to compute a `Z`.
+      override def pure[A](x: A): Z = Monoid[Z].empty
+
+      // We don't have an `A`, so can't use `f` at all (we are losing information!).
+      // The choice here is between returning `fa` and returning `empty`.
+      override def flatMap[A, B](fa: Z)(f: A ⇒ Z): Z = fa
+    }
+    // The left identity law: `pure andThen flatMap(f) = f`.
+    // This law cannot hold because flatMap does not use its argument `f`, i.e. it loses information.
+
+    // (b) Identity functor F[A] = A.
+    implicit def functorB: Functor[Lambda[A ⇒ A]] = new Functor[Lambda[A ⇒ A]] {
+      override def map[A, B](fa: A)(f: A ⇒ B): B = f(fa)
+    }
+
+    implicit def construction1b: WuZip[Lambda[A ⇒ A]] = new WuZip[Lambda[A ⇒ A]] {
+      override def wu: Unit = ()
+
+      override def zip[A, B](fa: A, fb: B): (A, B) = (fa, fb)
+    }
+    /* Check the laws: They are satisfied trivially, by definition of `≅`.
+      Associativity: (fa, (fb, fc)) ≅ ((fa, fb), fc).
+      Identity: ( (), fa ) ≅ fa ;  ( fa, () ) ≅ fa.
+     */
+  }
+
   it should "define construction 2 for applicative functors" in {
     // If G and H are applicative then G × H is also applicative.
     // Define pure as G.pure ⊗ H.pure. Similarly, define zip and ap.
     // E.g. zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
-    
-    implicit def construction2[G[_] : Applicative, H[_] : Applicative]: Applicative[Lambda[X ⇒ (G[X], H[X])]] =
-      new Applicative[Lambda[X ⇒ (G[X], H[X])]] {
-        override def pure[A](x: A): (G[A], H[A]) =
-          (Applicative[G].pure(x), Applicative[H].pure(x))
 
-        override def ap[A, B](ff: (G[A ⇒ B], H[A ⇒ B]))(fa: (G[A], H[A])): (G[B], H[B]) =
-          (Applicative[G].ap(ff._1)(fa._1), Applicative[H].ap(ff._2)(fa._2))
+    implicit def functorProduct[G[_] : Functor, H[_] : Functor]: Functor[Lambda[A ⇒ (G[A], H[A])]] = new Functor[Lambda[A ⇒ (G[A], H[A])]] {
+      override def map[A, B](fa: (G[A], H[A]))(f: A ⇒ B): (G[B], H[B]) = (Functor[G].map(fa._1)(f), Functor[H].map(fa._2)(f))
+    }
+
+    implicit def construction2[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
+      new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
+        override def wu: (G[Unit], H[Unit]) = (WuZip[G].wu, WuZip[H].wu)
+
+        override def zip[A, B](fa: (G[A], H[A]), fb: (G[B], H[B])): (G[(A, B)], H[(A, B)]) =
+          (WuZip[G].zip(fa._1, fb._1), WuZip[H].zip(fa._2, fb._2))
       }
-    
-    // The laws hold separately in each part of the pair because, by assumption, they hold for G and H.
-    // Therefore, the laws hold for G × H.
-    
+
+    /* The laws hold separately in each part of the pair because, by assumption, they hold for G and H.
+    Therefore, the laws hold for G × H.
+
+    Associativity:
+    ( (ga, ha) zip (gb, hb) ) zip (gc, hc) = (ga zip gb, ha zip hb) zip (gc, hc) = (ga zip gb zip gc, ha zip hb zip hc)
+    We can use associativity for G and H, e.g. (ga zip gb) zip gc = ga zip (gb zip gc), and establish that the above equals
+    (ga, ha) zip ( (gb, hb) zip (gc, hc) ) = (ga, ha) zip (gb zip gc, hb zip hc) = (ga zip gb zip gc, ha zip hb zip hc)
+
+    Left identity:
+    (gwu, hwu) zip (ga, ha) = (gwu zip ga, hwu zip ha) ≅ (ga, ha) since the identity laws hold for G and H.
+    Right identity is shown similarly.
+    */
   }
+  
+  
 
   it should "fail to define zippable for some functors" in {
     type F[A, P] = (A ⇒ P) ⇒ Option[A]
