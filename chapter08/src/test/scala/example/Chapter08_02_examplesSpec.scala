@@ -182,7 +182,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       }
 
     /* The laws hold separately in each part of the pair because, by assumption, they hold for G and H.
-    Therefore, the laws hold for G × H.
+    Therefore, the laws hold for G × H:
 
     Associativity:
     ( (ga, ha) zip (gb, hb) ) zip (gc, hc) = (ga zip gb, ha zip hb) zip (gc, hc) = (ga zip gb zip gc, ha zip hb zip hc)
@@ -194,8 +194,50 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     Right identity is shown similarly.
     */
   }
-  
-  
+
+  it should "define construction 3 for applicative functors" in {
+    // Functor F[A] = A + G[A].
+    implicit def functorAG[G[_] : Functor]: Functor[Lambda[A ⇒ Either[A, G[A]]]] = new Functor[Lambda[A ⇒ Either[A, G[A]]]] {
+      override def map[A, B](fa: Either[A, G[A]])(f: A ⇒ B): Either[B, G[B]] = fa match {
+        case Left(a) ⇒ Left(f(a))
+        case Right(ga) ⇒ Right(Functor[G].map(ga)(f))
+      }
+    }
+
+    implicit def construction3[G[_] : WuZip]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
+      override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(WuZip[G].wu))` does not obey identity laws!
+
+      override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]]): Either[(A, B), G[(A, B)]] = (fa, fb) match {
+        case (Left(a), Left(b)) ⇒ Left((a, b))
+        // If we have an a: A and a gb: G[B], we can't return (A, B), so we need to return G[(A, B)].
+        // Lift `A` to `G[A]` using G's `pure`:
+        case (Left(a), Right(gb)) ⇒ Right(WuZip[G].zip(WuZip[G].pure(a), gb))
+        case (Right(ga), Left(b)) ⇒ Right(WuZip[G].zip(ga, WuZip[G].pure(b)))
+        case (Right(ga), Right(gb)) ⇒ Right(WuZip[G].zip(ga, gb))
+      }
+    }
+
+    /* Check the laws:
+    
+    Associativity: To verify that, consider (A + G[A]) zip (B + G[B]) zip (C + G[C]).
+    If all 3 `Either`s are `Left`, we obtain the triple (A, B, C). This is associative.
+    Otherwise, the values are lifted into the functor `G` using G's `pure` and then zipped.
+    We know that G's `zip` is associative. Therefore, `zip` is associative for A + G[A].
+    
+    Identity: The wrapped unit is `1 + 0`. 
+    Consider the right identity law: (A + G[A]) zip (1 + 0).
+    If we have Left(a), the result is Left( (a, 1) ). This is equivalent to Left(a).
+    If we have Right(G[A]), we would lift 1 into G using `pure`. The result is, by definition, G's `wu`.
+    Hence we would have 
+    zip(Right(ga), Left(())) = Right ( WuZip[G].zip(ga, WuZip[G].wu) ).
+    Since the identity law holds for G, zipping ga with wu is equivalent to ga. Hence the identity laws hold. 
+    
+    On the other hand, if we defined the wrapped unit as `0 + wu[G]`, and we consider
+    zip( Left(a), Right(WuZip[G].wu) ) = Right( ... )
+    Whatever the result, it's a `Right(...)`, which cannot be equivalent to `Left(a)`.
+    So the `wu` must be defined as a `Left(())` as we did.
+     */
+  }
 
   it should "fail to define zippable for some functors" in {
     type F[A, P] = (A ⇒ P) ⇒ Option[A]
