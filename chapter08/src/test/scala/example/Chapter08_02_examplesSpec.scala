@@ -437,4 +437,29 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     zipsH.length shouldEqual 0 // No implementations.
     zipsK.length shouldEqual 0 // No implementations.
   }
+  
+  /* How to define an applicative instance for any polynomial functor with monoidal coefficients:
+  
+  Any polynomial functor can be rewritten as a "Horner scheme" in A with some monoidal coefficients, starting with the lowest power of A:
+  F[A] = Z × A × ... × A + Y × A × ... × A + ... + Q × A + P is rewritten as P + A × (Q + A × (... + A × (Y + A × Z)...).
+  
+  Some steps may contain more than one A, e.g. P + A × A × (Q + A × ...) 
+  
+  Each step corresponds to construction 7 (i.e. `Z + H[A]`) and construction 2 (i.e. `A × H[A]`).
+  
+  Since the wu for construction 7 is 0 + wuH and for construction 2 is 1 × wuH, we find that the wu for F[A] is 
+   Z1 × 1 × ... × 1 as in the highest-power term of the polynomial.
+  
+  Now let's look at defining `zip` for F[A]. It is sufficient to look at zip of two terms, say 
+  
+  zip(R × A × A, S × A × A × A × A)
+  
+  Construction 7 says that the result must be of type R × A × A. We zip together the two common elements of the two monomials, but discard S and the rest of the S term.
+  
+  So the result is
+  
+  zip( (r, a1, a2), (s, b1, b2, b3, b4) ) = (r, (a1, b1), (a2, b2) )
+  
+  In this way, we have defined `zip` for any combination of terms from F[A].  
+   */
 }
