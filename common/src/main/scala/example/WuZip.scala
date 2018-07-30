@@ -16,11 +16,11 @@ object WuZip {
 
   def apply[F[_] : WuZip]: WuZip[F] = implicitly[WuZip[F]]
 
-  // Define a `cats` `Applicative` instance through `wu` and `zip`.
-  implicit def toCatsApplicative[F[_] : WuZip]: Applicative[F] = new Applicative[F] {
+  // If desired, can define a `cats` `Applicative` instance through `wu` and `zip`.
+  def toCatsApplicative[F[_] : WuZip]: Applicative[F] = new Applicative[F] {
     override def pure[A](x: A): F[A] = WuZip[F].pure(x)
 
-    override def ap[A, B](ff: F[A ⇒ B])(fa: F[A]): F[B] = 
+    override def ap[A, B](ff: F[A ⇒ B])(fa: F[A]): F[B] =
       WuZip[F].functorF.map(WuZip[F].zip(ff, fa)) { case (f, x) ⇒ f(x) }
   }
 }

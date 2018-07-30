@@ -1,9 +1,8 @@
 package example
 
 import cats.kernel.Monoid
-import cats.{Applicative, Contravariant, Functor, Monad}
+import cats.Functor
 import WuZip._
-import cats.syntax.applicative._
 import cats.syntax.functor._
 import cats.syntax.monoid._
 import org.scalatest.{FlatSpec, Matchers}
@@ -148,11 +147,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     // E.g. zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
 
     implicit def functorProduct[G[_] : Functor, H[_] : Functor]: Functor[Lambda[A ⇒ (G[A], H[A])]] = new Functor[Lambda[A ⇒ (G[A], H[A])]] {
-      override def map[A, B](fa: (G[A], H[A]))(f: A ⇒ B): (G[B], H[B]) = (Functor[G].map(fa._1)(f), Functor[H].map(fa._2)(f))
+      override def map[A, B](fa: (G[A], H[A]))(f: A ⇒ B): (G[B], H[B]) = (fa._1 map f, fa._2 map f)
     }
 
-    implicit def construction2[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
-      new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
+    implicit def construction2[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
+      new WuZip[Lambda[A ⇒ (G[A], H[A])]]()(functorProduct[G, H]) {
         override def wu: (G[Unit], H[Unit]) = (WuZip[G].wu, WuZip[H].wu)
 
         override def zip[A, B](fa: (G[A], H[A]), fb: (G[B], H[B])): (G[(A, B)], H[(A, B)]) =
@@ -175,14 +174,15 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
   it should "define construction 3 for applicative functors" in {
     // Functor F[A] = A + G[A].
+
     implicit def functorAG[G[_] : Functor]: Functor[Lambda[A ⇒ Either[A, G[A]]]] = new Functor[Lambda[A ⇒ Either[A, G[A]]]] {
       override def map[A, B](fa: Either[A, G[A]])(f: A ⇒ B): Either[B, G[B]] = fa match {
         case Left(a) ⇒ Left(f(a))
-        case Right(ga) ⇒ Right(Functor[G].map(ga)(f))
+        case Right(ga) ⇒ Right(ga map f)
       }
     }
 
-    implicit def construction3[G[_] : WuZip]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
+    implicit def construction3[G[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
       override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(WuZip[G].wu)` does not obey identity laws!
 
       override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]]): Either[(A, B), G[(A, B)]] = (fa, fb) match {
@@ -252,11 +252,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     implicit def functorAG[G[_] : Functor, Z]: Functor[Lambda[A ⇒ Either[Z, G[A]]]] = new Functor[Lambda[A ⇒ Either[Z, G[A]]]] {
       override def map[A, B](fa: Either[Z, G[A]])(f: A ⇒ B): Either[Z, G[B]] = fa match {
         case Left(z) ⇒ Left(z)
-        case Right(ga) ⇒ Right(Functor[G].map(ga)(f))
+        case Right(ga) ⇒ Right(ga map f)
       }
     }
 
-    implicit def construction7[G[_] : WuZip, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
+    implicit def construction7[G[_] : WuZip : Functor, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
       override def wu: Either[Z, G[Unit]] = Right(WuZip[G].wu) // It turns out that `Left(Monoid[Z].empty)` does not obey identity laws!
 
       override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]]): Either[Z, G[(A, B)]] = (fa, fb) match {
@@ -299,7 +299,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Define zip as G[H[A]] × G[H[B]] ⇒ G[H[A × B]] using zip for G and zip for H.
 
-    implicit def wuzipGH[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
+    implicit def wuzipGH[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
       override def wu: G[H[Unit]] = WuZip[G].pure(WuZip[H].wu)
 
       override def zip[A, B](fa: G[H[A]], fb: G[H[B]]): G[H[(A, B)]] =
@@ -330,6 +330,51 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     
     Similarly the right identity law holds.    
     */
+  }
+
+  it should "implement a lazy list applicative functor" in {
+    case class F[A](value: Either[Unit, () ⇒ (A, F[A])])
+
+    // Empty list:
+    def empty[A]: F[A] = F(Left(()))
+
+    // List with some elements: F(Right{ () ⇒ ("first", F(Right{ () ⇒ ("second", F(Left(()))) }))})
+    def list[A](as: List[A]): F[A] = as match {
+      case Nil ⇒ empty
+      case head :: tl ⇒ F(Right { () ⇒ (head, list(tl)) })
+    }
+
+    // It is "lazy": To get the next element, we need to call the closure each time.
+    val testList = list(List("A", "B", "C"))
+    val (first, rest) = testList.value.right.get()
+    first shouldEqual "A"
+    rest.value.right.get()._1 shouldEqual "B"
+
+    // Define a functor instance.
+    implicit val functorF: Functor[F] = new Functor[F] {
+      override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = F(fa.value match {
+        case Left(_) ⇒ Left(())
+        case Right(g) ⇒ Right {
+          () ⇒
+            val (a2, fa2) = g()
+            (f(a2), map(fa2)(f))
+        }
+      })
+    }
+
+    // Define a WuZip instance.
+    val wuZipF: WuZip[F] = new WuZip[F]() {
+      override def wu: F[Unit] = F(Right { () ⇒ ((), wu) }) // Never-ending sequence of `()`.
+
+      override def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] = (fa.value, fb.value) match {
+        case (Left(_), _) ⇒ empty
+        case (_, Left(_)) ⇒ empty
+        case (Right(ga), Right(gb)) ⇒
+          val (a2, fa2) = ga()
+          val (b2, fb2) = gb()
+          F(Right { () ⇒ ((a2, b2), zip(fa2, fb2)) })
+      }
+    }
   }
 
   it should "fail to define zippable for some functors" in {
