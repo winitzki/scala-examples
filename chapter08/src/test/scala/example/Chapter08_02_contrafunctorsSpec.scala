@@ -170,22 +170,4 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     }
   }
 
-  it should "verify that some profunctors are not applicative" in {
-    type F[A] = (Int ⇒ A) ⇒ Option[A] // Not applicative, breaks identity laws.
-    type G[A, R, S] = Either[A ⇒ R, S ⇒ A] // Mot applicative.
-    type H[A] = (A ⇒ A) ⇒ A // Applicative.
-
-    def zipsF[A, B] = allOfType[(F[A], F[B]) ⇒ F[(A, B)]]
-
-    def zipsG[A, B, R, S] = allOfType[(G[A, R, S], G[B, R, S]) ⇒ G[(A, B), R, S]]
-
-    def zipsH[A, B] = allOfType[(H[A], H[B]) ⇒ H[(A, B)]]
-
-    println(zipsF[Int, Int].map(_.lambdaTerm.prettyPrint))
-//    zipsF.length shouldEqual 1
-    // This function always returns `None`, and so fails the identity laws.
-//    zipsF.head.lambdaTerm.prettyPrint shouldEqual "a ⇒ b ⇒ (None() + 0)"
-    zipsG.length shouldEqual 1 // This is OK.
-    zipsH.length shouldEqual 1 // Have one implementation.
-  }
 }
