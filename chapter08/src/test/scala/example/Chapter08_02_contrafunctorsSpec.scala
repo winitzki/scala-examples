@@ -35,7 +35,7 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
         case (Right(ha), Right(hb)) ⇒ Right(ha zip hb)
       }
     }
-    
+
     /* Check the laws:
     
     Associativity: Let's describe the computation of `zip` in a way that is clearly associative.
@@ -54,6 +54,73 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
       case (Left(ga), Left(gb)) ⇒ Left(ga zip gb) = Left(ga zip wU[G]) ≅ Left(ga)
       case (Right(ha), Left(gb)) ⇒ Right(ha contramap { case (x, ()) ⇒ x } ≅ Right(ha)
      }
+     */
+  }
+
+  it should "define construction 4 for contrafunctors" in {
+    // If H[A] is any functor and G[A] is a contrafunctor then H[A] ⇒ G[A] is applicative.
+
+    // Contrafunctor instance:
+    implicit def contrafunctor4[G[_] : Contravariant, H[_] : Functor]: Contravariant[Lambda[A ⇒ H[A] ⇒ G[A]]] = new Contravariant[Lambda[A ⇒ H[A] ⇒ G[A]]] {
+      override def contramap[A, B](fa: H[A] ⇒ G[A])(f: B ⇒ A): H[B] ⇒ G[B] = { hb ⇒ fa(hb map f) contramap f }
+    }
+
+    // Applicative instance:
+    implicit def contraaplicative4[G[_] : ContraWuZip : Contravariant, H[_] : Functor]: ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] = new ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] {
+      override def wu: H[Unit] ⇒ G[Unit] = { _ ⇒ wU[G] }
+
+      override def zip[A, B](fa: H[A] ⇒ G[A], fb: H[B] ⇒ G[B]): H[(A, B)] ⇒ G[(A, B)] = { hab ⇒
+        val ha = hab map { case (a, b) ⇒ a }
+        val hb = hab map { case (a, b) ⇒ b }
+        fa(ha) zip fb(hb)
+      }
+    }
+
+    /* Check the laws:
+    
+    Associativity:
+    
+    Consider (fa zip fb zip fc): H[(A, B, C)] ⇒ G[(A, B, C)].
+    This computation will proceed as
+      val ha = habc map { case (a, b, c) ⇒ a }
+      val hb = habc map { case (a, b, c) ⇒ b }
+      val hc = habc map { case (a, b, c) ⇒ c }
+      fa(ha) zip fb(hb) zip fc(hc)
+    The steps computing ha, hb, hc are associative because they are just deconstructing nested tuples, which are associative.
+    The last step is G's zip, so it is associative by assumption. 
+      
+    Identity:
+    
+    Compute zip(fa, _ ⇒ wU[G]) = { hab ⇒ ... fa(ha) zip (_ ⇒ wU[G])(hb) }
+    Clearly (_ ⇒ wU[G])(hb) = wU[G]. Hence we get fa(ha) zip wU[G].
+    Use G's identity law for its `zip`, and find that fa(ha) is just mapped from G[A] into G[(A, Unit)].
+    This is an isomorphism we expect. So the identity laws hold. 
+     */
+  }
+
+  it should "define construction 5 for contrafunctors" in {
+    // If H[A] is a functor and G[A] is a contrafunctor, both applicative, then H[G[A]] is applicative.
+
+    // Contrafunctor instance:
+    implicit def contrafunctor5[G[_] : Contravariant, H[_] : Functor]: Contravariant[Lambda[A ⇒ H[G[A]]]] = new Contravariant[Lambda[A ⇒ H[G[A]]]] {
+      override def contramap[A, B](fa: H[G[A]])(f: B ⇒ A): H[G[B]] = fa.map(_ contramap f)
+    }
+
+    // Applicative instance:
+    implicit def contraaplicative5[G[_] : ContraWuZip : Contravariant, H[_] : WuZip : Functor]: ContraWuZip[Lambda[A ⇒ H[G[A]]]] = new ContraWuZip[Lambda[A ⇒ H[G[A]]]] {
+      override def wu: H[G[Unit]] = WuZip[H].pure(wU[G])
+
+      import WuZip.WuZipSyntax
+
+      override def zip[A, B](hga: H[G[A]], hgb: H[G[B]]): H[G[(A, B)]] = (hga zip hgb).map { case (ga, gb) ⇒ ga zip gb }
+    }
+
+    /* Check the laws:
+    
+    Associativity:
+    
+    Identity:
+    
      */
   }
 }
