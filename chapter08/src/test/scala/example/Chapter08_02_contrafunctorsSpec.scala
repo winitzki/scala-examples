@@ -94,32 +94,34 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     Compute zip(fa, _ ⇒ wU[G]) = { hab ⇒ ... fa(ha) zip (_ ⇒ wU[G])(hb) }
     Clearly (_ ⇒ wU[G])(hb) = wU[G]. Hence we get fa(ha) zip wU[G].
     Use G's identity law for its `zip`, and find that fa(ha) is just mapped from G[A] into G[(A, Unit)].
-    This is an isomorphism we expect. So the identity laws hold. 
+    This is the isomorphism we expect.
+    
+    So the identity laws hold. 
      */
   }
 
   it should "define construction 5 for contrafunctors" in {
-    // If H[A] is a functor and G[A] is a contrafunctor, both applicative, then H[G[A]] is applicative.
+    // If G[A] is a functor and H[A] is a contrafunctor, both applicative, then G[H[A]] is an applicative contrafunctor.
 
     // Contrafunctor instance:
-    implicit def contrafunctor5[G[_] : Contravariant, H[_] : Functor]: Contravariant[Lambda[A ⇒ H[G[A]]]] = new Contravariant[Lambda[A ⇒ H[G[A]]]] {
-      override def contramap[A, B](fa: H[G[A]])(f: B ⇒ A): H[G[B]] = fa.map(_ contramap f)
+    implicit def contrafunctor5[G[_] : Functor, H[_] : Contravariant]: Contravariant[Lambda[A ⇒ G[H[A]]]] = new Contravariant[Lambda[A ⇒ G[H[A]]]] {
+      override def contramap[A, B](gha: G[H[A]])(f: B ⇒ A): G[H[B]] = gha.map(_ contramap f)
     }
 
     // Applicative instance:
-    implicit def contraaplicative5[G[_] : ContraWuZip : Contravariant, H[_] : WuZip : Functor]: ContraWuZip[Lambda[A ⇒ H[G[A]]]] = new ContraWuZip[Lambda[A ⇒ H[G[A]]]] {
-      override def wu: H[G[Unit]] = WuZip[H].pure(wU[G])
+    implicit def contraaplicative5[G[_] : WuZip : Functor, H[_] : ContraWuZip : Contravariant]: ContraWuZip[Lambda[A ⇒ G[H[A]]]] = new ContraWuZip[Lambda[A ⇒ G[H[A]]]] {
+      override def wu: G[H[Unit]] = WuZip[G].pure(wU[H])
 
       import WuZip.WuZipSyntax
 
-      override def zip[A, B](hga: H[G[A]], hgb: H[G[B]]): H[G[(A, B)]] = (hga zip hgb).map { case (ga, gb) ⇒ ga zip gb }
+      override def zip[A, B](gha: G[H[A]], ghb: G[H[B]]): G[H[(A, B)]] = (gha zip ghb).map { case (ha, hb) ⇒ ha zip hb }
     }
 
     /* Check the laws:
     
-    Associativity:
-    
-    Identity:
+    Follow the same proof as in construction 8 for applicative functors.
+    We use `map2` and `pureG` for G, but we never use `map2` or `pure` for `H` in that proof.
+    We only use the laws of H's `zip`. Therefore, the same proof goes through here.
     
      */
   }
