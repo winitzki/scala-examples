@@ -119,6 +119,8 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     result shouldEqual Right(C2(2.0, 2.0))
   }
 
+  behavior of "applicative functor constructions"
+  
   it should "define construction 1 for applicative functors" in {
     // (a) Constant functor F[A] = 1.
     /*
@@ -151,11 +153,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     implicit def construction2[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
-      new WuZip[Lambda[A ⇒ (G[A], H[A])]]()(functorProduct[G, H]) {
-        override def wu: (G[Unit], H[Unit]) = (WuZip[G].wu, WuZip[H].wu)
+      new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
+        override def wu: (G[Unit], H[Unit]) = (wU[G], wU[H])
 
         override def zip[A, B](fa: (G[A], H[A]), fb: (G[B], H[B])): (G[(A, B)], H[(A, B)]) =
-          (WuZip[G].zip(fa._1, fb._1), WuZip[H].zip(fa._2, fb._2))
+          (fa._1 zip fb._1, fa._2 zip fb._2)
       }
 
     /* The laws hold separately in each part of the pair because, by assumption, they hold for G and H.
@@ -183,15 +185,15 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     implicit def construction3[G[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
-      override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(WuZip[G].wu)` does not obey identity laws!
+      override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(wU[G])` does not obey identity laws!
 
       override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]]): Either[(A, B), G[(A, B)]] = (fa, fb) match {
         case (Left(a), Left(b)) ⇒ Left((a, b))
         // If we have an `a: A` and a `gb: G[B]`, we can't return Left[(A, B)], so we need to return Right[G[(A, B)]].
         // Lift `A` to `G[A]` using G's `pure`:
-        case (Left(a), Right(gb)) ⇒ Right(WuZip[G].zip(WuZip[G].pure(a), gb))
-        case (Right(ga), Left(b)) ⇒ Right(WuZip[G].zip(ga, WuZip[G].pure(b)))
-        case (Right(ga), Right(gb)) ⇒ Right(WuZip[G].zip(ga, gb))
+        case (Left(a), Right(gb)) ⇒ Right(WuZip[G].pure(a) zip gb)
+        case (Right(ga), Left(b)) ⇒ Right(ga zip WuZip[G].pure(b))
+        case (Right(ga), Right(gb)) ⇒ Right(ga zip gb)
       }
     }
 
@@ -207,11 +209,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     If we have Left(a), the result will be Left( (a, 1) ). This is equivalent to Left(a).
     If we have Right(G[A]), we will lift 1 into G using `pure`. The result is, by definition, G's `wu`.
     Hence we will have 
-    zip(Right(ga), Left(())) = Right ( WuZip[G].zip(ga, WuZip[G].wu) ).
+    zip(Right(ga), Left(())) = Right ( ga zip wU[G] ).
     Since the identity law holds for G, zipping ga with wu is equivalent to ga. Hence the identity laws hold. 
     
-    On the other hand, if we defined the wrapped unit as `0 + wu[G]`, and we consider
-    zip( Left(a), Right(WuZip[G].wu) ) = Right( ... )
+    On the other hand, if we defined the wrapped unit as `0 + wU[G]`, and we consider
+    zip( Left(a), Right(wU[G]) ) = Right( ... )
     Whatever the result, it's a `Right(...)`, which cannot be equivalent to `Left(a)`.
     So the `wu` must be defined as a `Left(())` as we did.
      */
@@ -257,14 +259,14 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     implicit def construction7[G[_] : WuZip : Functor, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
-      override def wu: Either[Z, G[Unit]] = Right(WuZip[G].wu) // It turns out that `Left(Monoid[Z].empty)` does not obey identity laws!
+      override def wu: Either[Z, G[Unit]] = Right(wU[G]) // It turns out that `Left(Monoid[Z].empty)` does not obey identity laws!
 
       override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]]): Either[Z, G[(A, B)]] = (fa, fb) match {
-        case (Left(x), Left(y)) ⇒ Left(x |+| y)
+        case (Left(za), Left(zb)) ⇒ Left(za |+| zb)
         // If we have an `a: Z` and a `gb: G[B]`, we can't return Right[G[(A, B)]], so we need to return Left[Z].
         case (Left(z), Right(_)) ⇒ Left(z)
         case (Right(_), Left(z)) ⇒ Left(z)
-        case (Right(ga), Right(gb)) ⇒ Right(WuZip[G].zip(ga, gb))
+        case (Right(ga), Right(gb)) ⇒ Right(ga zip gb)
       }
     }
 
@@ -300,10 +302,10 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     // Define zip as G[H[A]] × G[H[B]] ⇒ G[H[A × B]] using zip for G and zip for H.
 
     implicit def wuzipGH[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
-      override def wu: G[H[Unit]] = WuZip[G].pure(WuZip[H].wu)
+      override def wu: G[H[Unit]] = WuZip[G].pure(wU[H])
 
-      override def zip[A, B](fa: G[H[A]], fb: G[H[B]]): G[H[(A, B)]] =
-        WuZip[G].zip(fa, fb).map { case (ha, hb) ⇒ WuZip[H].zip(ha, hb) }
+      override def zip[A, B](gha: G[H[A]], ghb: G[H[B]]): G[H[(A, B)]] =
+        (gha zip ghb).map { case (ha, hb) ⇒ ha zip hb }
     }
 
     /* Check the laws:
@@ -391,10 +393,10 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Zipping testList2 and testList3 should yield a list of length 2.
-    toList(WuZip[F].zip(testList2, testList3)) shouldEqual List((10, "A"), (20, "B"))
+    toList(testList2 zip testList3) shouldEqual List((10, "A"), (20, "B"))
     
     // The `wu` value should act as an identity for zipping:
-    toList(WuZip[F].zip(testList3, WuZip[F].wu)).map(_._1) shouldEqual toList(testList3)
+    toList(testList3 zip wU[F]).map(_._1) shouldEqual toList(testList3)
     
     /* How it works:
     The `wu` represents an unterminated list, while testList3 is finite:
