@@ -149,10 +149,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     // E.g. zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
 
     implicit def functorProduct[G[_] : Functor, H[_] : Functor]: Functor[Lambda[A ⇒ (G[A], H[A])]] = new Functor[Lambda[A ⇒ (G[A], H[A])]] {
-      override def map[A, B](fa: (G[A], H[A]))(f: A ⇒ B): (G[B], H[B]) = (fa._1 map f, fa._2 map f)
+      override def map[A, B](fa: (G[A], H[A]))(f: A ⇒ B): (G[B], H[B]) =
+        (fa._1 map f, fa._2 map f)
     }
 
-    implicit def construction2[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
+    implicit def construction2[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
       new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
         override def wu: (G[Unit], H[Unit]) = (wU[G], wU[H])
 
@@ -169,7 +170,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     (ga, ha) zip ( (gb, hb) zip (gc, hc) ) = (ga, ha) zip (gb zip gc, hb zip hc) ≅ (ga zip gb zip gc, ha zip hb zip hc)
 
     Left identity:
-    (gwu, hwu) zip (ga, ha) = (gwu zip ga, hwu zip ha) ≅ (ga, ha) since the identity laws hold for G and H.
+    (wuG, wuH) zip (ga, ha) = (wuG zip ga, wuH zip ha) ≅ (ga, ha) since the identity laws hold for G and H.
     Right identity is shown similarly.
     */
   }
@@ -207,8 +208,8 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     
     Identity: The wrapped unit is `1 + 0`. 
     Consider the right identity law: (fa: A + G[A]) zip (1 + 0).
-    If fa = Left(a), the result will be Left( (a, 1) ). This is equivalent to Left(a).
-    If fa = Right(ga), we will lift 1 into G using `pure`. The result is, by definition, G's `wu`.
+    If fa = Left(a), the result will be Left( (a, ()) ). This is equivalent to Left(a).
+    If fa = Right(ga), we will lift 1 into G using `pure`. The result is, by definition, G's `wu` = pureG(()).
     Hence we will have 
     zip(Right(ga), Left(())) = Right ( ga zip wU[G] ).
     Since the identity law holds for G, zipping ga with wu is equivalent to ga. Hence the identity laws hold. 
@@ -218,6 +219,12 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     Whatever the result, it's a `Right(...)`, which cannot be equivalent to `Left(a)`.
     So the `wu` must be defined as a `Left(())` as we did.
      */
+
+// How to implement zip for a monad, through its flatMap:
+//    zip(fa, fb) = for {
+//      x ← fa
+//      y ← fb
+//    } yield (a, b)
   }
 
   it should "define construction 6 for applicative functors" in {
@@ -262,11 +269,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     implicit def construction7[G[_] : WuZip : Functor, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
-      override def wu: Either[Z, G[Unit]] = Right(wU[G]) // It turns out that `Left(Monoid[Z].empty)` does not obey identity laws!
+      override def wu: Either[Z, G[Unit]] = Right(wU[G]) // It turns out that `Left(Monoid[Z].empty)` does not obey the identity laws!
 
       override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]]): Either[Z, G[(A, B)]] = (fa, fb) match {
         case (Left(za), Left(zb)) ⇒ Left(za |+| zb)
-        // If we have an `a: Z` and a `gb: G[B]`, we can't return Right[G[(A, B)]], so we need to return Left[Z].
+        // If we have an `z: Z` and a `gb: G[B]`, we can't return Right[G[(A, B)]], so we need to return Left[Z].
         case (Left(z), Right(_)) ⇒ Left(z)
         case (Right(_), Left(z)) ⇒ Left(z)
         case (Right(ga), Right(gb)) ⇒ Right(ga zip gb)
@@ -279,7 +286,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     If at least some of the 3 `Either`s are `Left`, we obtain the result `z1 |+| z2 |+| z3` or perhaps with fewer `z`s.
     In any case, this is associative since Z is a monoid.
     
-    Otherwise, we have `ga zip gb zip gc`, and we know that G's `zip` is associative. So this is associative as well.
+    Otherwise, we have `Right(ga zip gb zip gc)`, and we know that G's `zip` is associative. So this is associative as well.
     
     Therefore, `zip` is associative for Z + G[A].
     
@@ -324,20 +331,21 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     (gha zip ghb) zip ghc = map2 ( map2(gha, ghb)((_, _)), ghc) { case ((a,b),c) ⇒ zipH(zipH(a, b), c) }
     
     Similarly we get
-    gha zip (ghb zip ghc) = map2( gha, map2(ghb, ghc)((_, _))) { case (a, (b, c)) ⇒ zipH(a, zipH(b, c)) }
+    gha zip (ghb zip ghc) = map2 ( gha, map2(ghb, ghc)((_, _))) { case (a,(b,c)) ⇒ zipH(a, zipH(b, c)) }
     
     Now, since G's `map2` satisfies associativity, and `zipH` also does, we see that these two expressions are equivalent in the sense of `≅`.
     
     Identity:
     
     wu zip gha = map2(pureG(wuH), gha)(zipH)  // Now use the left identity law for G's `map2`:
-     = gha.map { ha ⇒ zipH(wuH, ha) } = gha.map { ha ⇒ ha } = ga // We assume identity laws for G and H.  
+     = gha.map { ha ⇒ zipH(wuH, ha) } = gha.map { ha ⇒ ha } = gha // We assume identity laws for G and H.
     
     Similarly the right identity law holds.    
     */
   }
 
   it should "implement a lazy list applicative functor" in {
+    // F[A] = 1 + (1 ⇒ A × F[A])
     case class F[A](value: Either[Unit, () ⇒ (A, F[A])])
 
     // Empty list:
@@ -447,7 +455,8 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   /* How to define an applicative instance for any polynomial functor with monoidal coefficients:
   
   Any polynomial functor can be rewritten as a "Horner scheme" in A with some monoidal coefficients, starting with the lowest power of A:
-  F[A] = Z × A × ... × A + Y × A × ... × A + ... + Q × A + P is rewritten as P + A × (Q + A × (... + A × (Y + A × Z)...).
+  F[A] = Z × A × ... × A + Y × A × ... × A + ... + Q × A + P is rewritten as
+   P + A × (Q + A × (... + A × (Y + A × Z)...).
   
   Some steps may contain more than one A, e.g. P + A × A × (Q + A × ...) 
   
@@ -458,7 +467,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   
   Now let's look at defining `zip` for F[A]. It is sufficient to look at zip of two terms, say 
   
-  zip(R × A × A, S × A × A × A × A)
+  zip(R × A × A, S × B × B × B × B)
   
   Construction 7 says that the result must be of type R × A × A. We zip together the two common elements of the two monomials, but discard S and the rest of the S term.
   

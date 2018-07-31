@@ -29,8 +29,8 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
       override def zip[A, B](fa: Either[G[A], H[A]], fb: Either[G[B], H[B]]): Either[G[(A, B)], H[(A, B)]] = (fa, fb) match {
         case (Left(ga), Left(gb)) ⇒ Left(ga zip gb)
-        case (Left(ga), Right(hb)) ⇒ Right(hb contramap { case (x, y) ⇒ y }) // Since the wrapped unit is a `Left()`, we need to create a `Right()` in the product.
-        case (Right(ha), Left(gb)) ⇒ Right(ha contramap { case (x, y) ⇒ x })
+        case (Left(_), Right(hb)) ⇒ Right(hb contramap { case (x, y) ⇒ y }) // Since the wrapped unit is a `Left()`, we need to create a `Right()` in the product.
+        case (Right(ha), Left(_)) ⇒ Right(ha contramap { case (x, y) ⇒ x })
         case (Right(ha), Right(hb)) ⇒ Right(ha zip hb)
       }
     }
@@ -43,8 +43,8 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     This is associative.
     
     If some of (fa, fb, fc) are Left() while others are Right(), all the Left() ones are ignored,
-    and the remaining Right() ones are converted to Right[(A, B, C)] using contramap on the function
-    such as { case (a, b, c) ⇒ (a, b) } as required.
+    and the remaining Right() ones are converted to Right[H[(A, B, C)]] using contramap on the function
+    such as { case (a, b, c) ⇒ zipH(a, b) } as required.
     This is also associative.
     
     Identity laws: Assuming that G's identity law works - and not using H's identity laws - we find: 
@@ -69,8 +69,8 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
       override def wu: H[Unit] ⇒ G[Unit] = { _ ⇒ wU[G] }
 
       override def zip[A, B](fa: H[A] ⇒ G[A], fb: H[B] ⇒ G[B]): H[(A, B)] ⇒ G[(A, B)] = { hab ⇒
-        val ha = hab map { case (a, b) ⇒ a }
-        val hb = hab map { case (a, b) ⇒ b }
+        val ha: H[A] = hab map { case (a, b) ⇒ a }
+        val hb: H[B] = hab map { case (a, b) ⇒ b }
         fa(ha) zip fb(hb)
       }
     }
@@ -113,14 +113,15 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
       import WuZip.WuZipSyntax
 
-      override def zip[A, B](gha: G[H[A]], ghb: G[H[B]]): G[H[(A, B)]] = (gha zip ghb).map { case (ha, hb) ⇒ ha zip hb }
+      override def zip[A, B](gha: G[H[A]], ghb: G[H[B]]): G[H[(A, B)]] =
+        (gha zip ghb).map { case (ha, hb) ⇒ ha zip hb }
     }
 
     /* Check the laws:
     
     Follow the same proof as in construction 8 for applicative functors.
     We use `map2` and `pureG` for G, but we never use `map2` or `pure` for `H` in that proof.
-    We only use the laws of H's `zip`. Therefore, the same proof goes through here.
+    We only use the laws of H's `zip` and `wu`. Therefore, the same proof goes through here.
     
      */
   }
@@ -142,8 +143,8 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
       override def zip[A, B](fa: H[A] ⇒ A, fb: H[B] ⇒ B): H[(A, B)] ⇒ (A, B) = { hab ⇒
         // The plan: we can get `(A, B)` only if we somehow compute some values of types `H[A]` and `H[B]`.
-        // The trick: Obtain a value of type A ⇒ (A, B).
-        // This will allow us to map `hab` into the type `H[A]`.
+        // The trick: First obtain a value of type A ⇒ (A, B).
+        // This will allow us to map `hab` into a value of type `H[A]`.
         val aab: A ⇒ (A, B) = { a ⇒
           // Obtain a value of type H[B], then use `fb` on it to get a `B`.
           val hb: H[B] = hab.imap(_._2)(b ⇒ (a, b))
@@ -152,7 +153,8 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
         }
         val ha: H[A] = hab.imap(_._1)(aab)
 
-        // Do the same with B instead of A. Obtain a value of type B ⇒ (A, B) and get an `H[B]`. 
+        // Do the same with B instead of A:
+        // Obtain a value of type B ⇒ (A, B) and get an `H[B]`.
         val bab: B ⇒ (A, B) = { b ⇒
           // Obtain a value of type H[A], then use `fa` on it to get an `A`.
           val ha: H[A] = hab.imap(_._1)(a ⇒ (a, b))
@@ -160,12 +162,39 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
           (a, b)
         }
         val hb: H[B] = hab.imap(_._2)(bab)
+
         (fa(ha), fb(hb))
       }
 
       /* Check the laws:
-      
-      
+
+      First, refactor the implementation of the `zip` method as:
+
+      zip(fa, fb) = { hab ⇒
+        val ha = left(fb, hab)
+        val hb = right(fa, hab)
+
+        (fa(ha), fb(hb))
+      }
+
+      where we defined the auxiliary functions,
+
+      def left(fb, hab)  = hab.imap(_._1){ a ⇒ (a, fb(hab.imap(_._2)(a, _)) }
+      def right(fa, hab) = hab.imap(_._2){ b ⇒ (fa(hab.imap(_._1)(_, b), a) }
+
+      Note how the implementation uses ha and hb completely symmetrically.
+      We expect this to be the correct implementation (as opposed to reusing `ha`
+      when defining `bab`, say).
+
+      Associativity:
+
+      zip(zip(fa, fb), fc) = zip(
+       { hab ⇒ (fa(left(fb, hab), fb(right(fa, hab)) }
+       , fc)
+       = { habc ⇒ (left(fc, habc), right(
+        { hab ⇒ (fa(left(fb, hab), fb(right(fa, hab)) }
+        , habc)
+        ) }
        */
     }
   }
