@@ -1,13 +1,12 @@
 package example
 
-import cats.kernel.Monoid
-import cats.{Contravariant, ContravariantSemigroupal, Functor}
-import ContraWuZip._
 import cats.syntax.contravariant._
 import cats.syntax.functor._
-import cats.syntax.monoid._
-import org.scalatest.{FlatSpec, Matchers}
+import cats.syntax.invariant._
+import cats.{Contravariant, Functor, Invariant}
+import example.ContraWuZip._
 import io.chymyst.ch._
+import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
@@ -124,5 +123,69 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     We only use the laws of H's `zip`. Therefore, the same proof goes through here.
     
      */
+  }
+
+  it should "define construction 4 for profunctors" in {
+    // If H[A] is any profunctor then H[A] ⇒ A is an applicative profunctor.
+
+    // Profunctor instance:
+    implicit def profunctor4[H[_] : Invariant]: Invariant[Lambda[A ⇒ H[A] ⇒ A]] = new Invariant[Lambda[A ⇒ H[A] ⇒ A]] {
+      override def imap[A, B](fa: H[A] ⇒ A)(f: A ⇒ B)(g: B ⇒ A): H[B] ⇒ B = { hb ⇒
+        val ha: H[A] = hb.imap(g)(f)
+        f(fa(ha))
+      }
+    }
+
+    // Applicative instance:
+    implicit def proaplicative4[H[_] : Invariant]: ProWuZip[Lambda[A ⇒ H[A] ⇒ A]] = new ProWuZip[Lambda[A ⇒ H[A] ⇒ A]] {
+      override def wu: H[Unit] ⇒ Unit = { _ ⇒ () }
+
+      override def zip[A, B](fa: H[A] ⇒ A, fb: H[B] ⇒ B): H[(A, B)] ⇒ (A, B) = { hab ⇒
+        // The plan: we can get `(A, B)` only if we somehow compute some values of types `H[A]` and `H[B]`.
+        // The trick: Obtain a value of type A ⇒ (A, B).
+        // This will allow us to map `hab` into the type `H[A]`.
+        val aab: A ⇒ (A, B) = { a ⇒
+          // Obtain a value of type H[B], then use `fb` on it to get a `B`.
+          val hb: H[B] = hab.imap(_._2)(b ⇒ (a, b))
+          val b = fb(hb)
+          (a, b)
+        }
+        val ha: H[A] = hab.imap(_._1)(aab)
+
+        // Do the same with B instead of A. Obtain a value of type B ⇒ (A, B) and get an `H[B]`. 
+        val bab: B ⇒ (A, B) = { b ⇒
+          // Obtain a value of type H[A], then use `fa` on it to get an `A`.
+          val ha: H[A] = hab.imap(_._1)(a ⇒ (a, b))
+          val a = fa(ha)
+          (a, b)
+        }
+        val hb: H[B] = hab.imap(_._2)(bab)
+        (fa(ha), fb(hb))
+      }
+
+      /* Check the laws:
+      
+      
+       */
+    }
+  }
+
+  it should "verify that some profunctors are not applicative" in {
+    type F[A] = (Int ⇒ A) ⇒ Option[A] // Not applicative, breaks identity laws.
+    type G[A, R, S] = Either[A ⇒ R, S ⇒ A] // Mot applicative.
+    type H[A] = (A ⇒ A) ⇒ A // Applicative.
+
+    def zipsF[A, B] = allOfType[(F[A], F[B]) ⇒ F[(A, B)]]
+
+    def zipsG[A, B, R, S] = allOfType[(G[A, R, S], G[B, R, S]) ⇒ G[(A, B), R, S]]
+
+    def zipsH[A, B] = allOfType[(H[A], H[B]) ⇒ H[(A, B)]]
+
+    println(zipsF[Int, Int].map(_.lambdaTerm.prettyPrint))
+//    zipsF.length shouldEqual 1
+    // This function always returns `None`, and so fails the identity laws.
+//    zipsF.head.lambdaTerm.prettyPrint shouldEqual "a ⇒ b ⇒ (None() + 0)"
+    zipsG.length shouldEqual 1 // This is OK.
+    zipsH.length shouldEqual 1 // Have one implementation.
   }
 }

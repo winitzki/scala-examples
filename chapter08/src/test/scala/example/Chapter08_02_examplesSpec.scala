@@ -120,7 +120,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   }
 
   behavior of "applicative functor constructions"
-  
+
   it should "define construction 1 for applicative functors" in {
     // (a) Constant functor F[A] = 1.
     /*
@@ -200,14 +200,15 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     /* Check the laws:
     
     Associativity: To verify that, consider (A + G[A]) zip (B + G[B]) zip (C + G[C]).
-    If all 3 `Either`s are `Left`, we obtain the triple (A, B, C). This is associative.
-    Otherwise, the values are lifted into the functor `G` using G's `pure` and then zipped.
+    If all 3 `Either`s are `Left`, we compute the triple (A, B, C). This operation is associative.
+    Otherwise, the `Left()` values are lifted into the functor `G` using G's `pure`
+    and then zipped together with other values of type G[A].
     We know that G's `zip` is associative. Therefore, `zip` is associative for A + G[A].
     
     Identity: The wrapped unit is `1 + 0`. 
-    Consider the right identity law: (A + G[A]) zip (1 + 0).
-    If we have Left(a), the result will be Left( (a, 1) ). This is equivalent to Left(a).
-    If we have Right(G[A]), we will lift 1 into G using `pure`. The result is, by definition, G's `wu`.
+    Consider the right identity law: (fa: A + G[A]) zip (1 + 0).
+    If fa = Left(a), the result will be Left( (a, 1) ). This is equivalent to Left(a).
+    If fa = Right(ga), we will lift 1 into G using `pure`. The result is, by definition, G's `wu`.
     Hence we will have 
     zip(Right(ga), Left(())) = Right ( ga zip wU[G] ).
     Since the identity law holds for G, zipping ga with wu is equivalent to ga. Hence the identity laws hold. 
@@ -226,7 +227,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       override def map[A, B](fa: Z)(f: A ⇒ B): Z = fa
     }
 
-    implicit def construction1a[Z: Monoid]: WuZip[Lambda[A ⇒ Z]] = new WuZip[Lambda[A ⇒ Z]] {
+    implicit def construction6[Z: Monoid]: WuZip[Lambda[A ⇒ Z]] = new WuZip[Lambda[A ⇒ Z]] {
       override def wu: Z = Monoid[Z].empty
 
       override def zip[A, B](fa: Z, fb: Z): Z = fa |+| fb
@@ -238,15 +239,17 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Note that this is not a monad because monadic identity laws fail:
     implicit def badMonad[Z: Monoid]: CatsMonad[Lambda[A ⇒ Z]] = new CatsMonad[Lambda[A ⇒ Z]] {
-      // No choice here: can't use `x` to compute a `Z`.
-      override def pure[A](x: A): Z = Monoid[Z].empty
+      override def pure[A](x: A): Z = Monoid[Z].empty // No choice here: can't use `x: A` to compute a `Z`.
 
-      // We don't have an `A`, so can't use `f` at all (we are losing information!).
-      // The choice here is between returning `fa` and returning `empty`.
+      // We don't have an `A`, so can't use `f` at all (yes, we are losing information!).
+      // The choice here is between returning `fa` and returning `Z.empty`. In any case, we can't return anything that depends on `f`.
       override def flatMap[A, B](fa: Z)(f: A ⇒ Z): Z = fa
     }
     // The left identity law: `pure andThen flatMap(f) = f`.
-    // This law cannot hold because flatMap does not use its argument `f`, i.e. it loses information.
+    // This law cannot hold: `flatMap` does not use its argument `f`, because information about `f` was lost.
+    // Thus, no function of `flatMap(f)` could possibly recover `f`.
+    
+    // If we defined `flatMap` by always returning `Z.empty`, we also wouldn't be able to recover `f`, for the same reason.
   }
 
   it should "define construction 7 for applicative functors" in {
@@ -394,10 +397,10 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Zipping testList2 and testList3 should yield a list of length 2.
     toList(testList2 zip testList3) shouldEqual List((10, "A"), (20, "B"))
-    
+
     // The `wu` value should act as an identity for zipping:
     toList(testList3 zip wU[F]).map(_._1) shouldEqual toList(testList3)
-    
+
     /* How it works:
     The `wu` represents an unterminated list, while testList3 is finite:
 
@@ -418,8 +421,9 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
      */
   }
 
-  it should "fail to define zippable for some functors" in {
-    type F[A, P] = (A ⇒ P) ⇒ Option[A] // Not applicative.
+  it should "verify that some functors are not applicative" in {
+    
+    type F[A, P] = (A ⇒ P) ⇒ Option[A] // Not applicative, breaks identity laws.
     type G[A, P, Q] = Either[A ⇒ P, A ⇒ Q] // This is an applicative contrafunctor.
     type H[A, P, Q] = Either[P ⇒ A, Q ⇒ A] // Not applicative.
     type K[A, P, Q] = (A ⇒ P) ⇒ Q // Not applicative.
@@ -439,7 +443,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     zipsH.length shouldEqual 0 // No implementations.
     zipsK.length shouldEqual 0 // No implementations.
   }
-  
+
   /* How to define an applicative instance for any polynomial functor with monoidal coefficients:
   
   Any polynomial functor can be rewritten as a "Horner scheme" in A with some monoidal coefficients, starting with the lowest power of A:

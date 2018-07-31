@@ -1,6 +1,6 @@
 package example
 
-import cats.{Applicative, Contravariant, Functor}
+import cats.{Applicative, Contravariant, Functor, Invariant}
 
 // Define the Applicative type class in a simpler way using `wu` and `zip`.
 abstract class WuZip[F[_]](implicit val functorF: Functor[F]) {
@@ -44,7 +44,7 @@ abstract class ContraWuZip[F[_]](implicit val contrafunctorF: Contravariant[F]) 
 
 object ContraWuZip {
   def apply[F[_] : ContraWuZip]: ContraWuZip[F] = implicitly[ContraWuZip[F]]
-  
+
   def wU[F[_] : ContraWuZip]: F[Unit] = apply[F].wu
 
   // Syntax: infix `zip`.
@@ -53,4 +53,26 @@ object ContraWuZip {
   }
 
   // The `cats` library has `ContravariantSemigroupal` but not `ContraApplicative`.
+}
+
+abstract class ProWuZip[F[_]](implicit val profunctorF: Invariant[F]) {
+  def wu: F[Unit]
+
+  def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)]
+
+  // Define `pure`: F[A] through `wu`.
+  def pure[A](a: A): F[A] = profunctorF.imap(wu)(_ ⇒ a)(_ ⇒ ())
+}
+
+object ProWuZip {
+  def apply[F[_] : ProWuZip]: ProWuZip[F] = implicitly[ProWuZip[F]]
+
+  def wU[F[_] : ProWuZip]: F[Unit] = apply[F].wu
+
+  // Syntax: infix `zip`.
+  implicit class ProWuZipSyntax[F[_] : ProWuZip, A](fa: F[A]) {
+    def zip[B](fb: F[B]): F[(A, B)] = ProWuZip[F].zip(fa, fb)
+  }
+
+  // The `cats` library has `InvariantSemigroupal` but not `ProApplicative`.
 }
