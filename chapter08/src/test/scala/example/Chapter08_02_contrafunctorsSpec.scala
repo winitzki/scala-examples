@@ -3,9 +3,11 @@ package example
 import cats.syntax.contravariant._
 import cats.syntax.functor._
 import cats.syntax.invariant._
+import cats.syntax.profunctor
 import cats.{Contravariant, Functor, Invariant}
 import example.ContraWuZip._
-import io.chymyst.ch._
+import example.ProWuZip.ProWuZipSyntax
+import javax.jws.soap.SOAPBinding.Use
 import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
@@ -37,7 +39,7 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
     /* Check the laws:
     
-    Associativity: Let's describe the computation of `zip` in a way that is clearly associative.
+    Associativity: Let's reformulate the computation of `zip` of 3 arguments in a way that is manifestly associative.
      
     (fa zip fb zip fc) is computed as G's `zip` or H's `zip` if all fa, fb, fc are on one side.
     This is associative.
@@ -79,14 +81,33 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     
     Associativity:
     
-    Consider (fa zip fb zip fc): H[(A, B, C)] ⇒ G[(A, B, C)].
-    This computation will proceed as
-      val ha = habc map { case (a, b, c) ⇒ a }
-      val hb = habc map { case (a, b, c) ⇒ b }
-      val hc = habc map { case (a, b, c) ⇒ c }
-      fa(ha) zip fb(hb) zip fc(hc)
-    The steps computing ha, hb, hc are associative because they are just deconstructing nested tuples, which are associative.
-    The last step is G's zip, so it is associative by assumption. 
+    Consider `(fa zip fb) zip fc: H[((A, B), C)] ⇒ G[((A, B), C)]`:
+    
+    fa zip fb = { hab ⇒ fa(hab map(_._1)) zip fb(hab map(_._2) }
+    (fa zip fb) zip fc
+     = { habc: H[((A, B), C)] ⇒ (fa zip fb)(habc map(_._1) zip fc(habc map (_._2))
+     = { habc: H[((A, B), C)] ⇒ (fa(habc map(_._1) map (_._1)) zip fb(habc map (_._1) map (_._2)) zip fc(habc map (_._2))
+    
+    To simplify the data structure, let's flatten the tuple type, from ((A, B), C) to (A, B, C):
+    
+    We will need to map h_abc: H[(A, B, C)] as h_abc map { case (a, b, c) ⇒ ((a, b), c) } and call that habc in the expression above.
+    Note that we have expressions such as `habc map (_._1) map (_._1)`.
+    These are simplified as h_abc map { case (a, b, c) ⇒ ((a, b), c)._1._1 } = h_abc map (_._1)
+    and so on. Thus:
+    
+    ((fa zip fb) zip fc) contramap { case (a, b, c) ⇒ ((a, b), c) } = { habc: H[(A, B, C)] ⇒
+      ((fa(h_abc map(_._1)) zip fb(h_abc map (_._2))) zip fc(h_abc map (_._3)) contramap { case (a, b, c) ⇒ ((a, b), c) }
+    }
+    
+    The last step is G's zip, which is associative by assumption, followed by an isomorphism transformation. 
+    
+    Similarly, starting with `fa zip (fb zip fc): H[(A, (B, C))] ⇒ G[(A, (B, C))]` and applying `contramap { case (a, b, c) ⇒ (a, (b, c)) }`, we will find:
+    
+    (fa zip (fb zip fc)) contramap { case (a, b, c) ⇒ (a, (b, c)) } = { habc: H[(A, B, C)] ⇒
+      (fa(h_abc map(_._1)) zip (fb(h_abc map (_._2)) zip fc(h_abc map (_._3))) contramap { case (a, b, c) ⇒ (a, (b, c)) }
+    }
+      
+    The associativity of G's zip shows that this is the same expression after the isomorphism.
       
     Identity:
     
@@ -127,75 +148,335 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
   }
 
   it should "define construction 4 for profunctors" in {
-    // If H[A] is any profunctor then H[A] ⇒ A is an applicative profunctor.
+    // If H[A] is any profunctor then F[A] ≡ H[A] ⇒ A is an applicative profunctor.
 
-    // Profunctor instance:
-    implicit def profunctor4[H[_] : Invariant]: Invariant[Lambda[A ⇒ H[A] ⇒ A]] = new Invariant[Lambda[A ⇒ H[A] ⇒ A]] {
-      override def imap[A, B](fa: H[A] ⇒ A)(f: A ⇒ B)(g: B ⇒ A): H[B] ⇒ B = { hb ⇒
-        val ha: H[A] = hb.imap(g)(f)
-        f(fa(ha))
+    // For convenience, introduce `H[_]` as a type parameter up front.
+    def construction4[H[_] : Invariant](): Unit = {
+
+      // This is the new profunctor.
+      type F[A] = H[A] ⇒ A
+
+      // Profunctor instance:
+      implicit def profunctor4: Invariant[F] = new Invariant[F] {
+        override def imap[A, B](fa: H[A] ⇒ A)(f: A ⇒ B)(g: B ⇒ A): H[B] ⇒ B = { hb ⇒
+          val ha: H[A] = hb.imap(g)(f)
+          f(fa(ha))
+        }
       }
-    }
 
-    // Applicative instance:
-    implicit def proaplicative4[H[_] : Invariant]: ProWuZip[Lambda[A ⇒ H[A] ⇒ A]] = new ProWuZip[Lambda[A ⇒ H[A] ⇒ A]] {
-      override def wu: H[Unit] ⇒ Unit = { _ ⇒ () }
+      // Applicative instance:
+      implicit def proaplicative4: ProWuZip[F] = new ProWuZip[F] {
+        override def wu: H[Unit] ⇒ Unit = { _ ⇒ () }
 
-      override def zip[A, B](fa: H[A] ⇒ A, fb: H[B] ⇒ B): H[(A, B)] ⇒ (A, B) = { hab ⇒
-        // The plan: we can get `(A, B)` only if we somehow compute some values of types `H[A]` and `H[B]`.
-        // The trick: First obtain a value of type A ⇒ (A, B).
-        // This will allow us to map `hab` into a value of type `H[A]`.
-        val aab: A ⇒ (A, B) = { a ⇒
-          // Obtain a value of type H[B], then use `fb` on it to get a `B`.
-          val hb: H[B] = hab.imap(_._2)(b ⇒ (a, b))
+        override def zip[A, B](fa: H[A] ⇒ A, fb: H[B] ⇒ B): H[(A, B)] ⇒ (A, B) = { hab ⇒
+          // The plan: we can get `(A, B)` only if we somehow compute some values of types `H[A]` and `H[B]`.
+          // The trick: First obtain a value of type A ⇒ (A, B).
+          // This will allow us to map `hab` into a value of type `H[A]`.
+          val aab: A ⇒ (A, B) = { a ⇒
+            // Obtain a value of type H[B], then use `fb` on it to get a `B`.
+            val hb: H[B] = hab.imap(_._2)(b ⇒ (a, b)) // Syntax: `b ⇒ (a, b)` is the same as `((a, _))`
           val b = fb(hb)
-          (a, b)
-        }
-        val ha: H[A] = hab.imap(_._1)(aab)
+            (a, b)
+          }
+          val ha: H[A] = hab.imap(_._1)(aab)
 
-        // Do the same with B instead of A:
-        // Obtain a value of type B ⇒ (A, B) and get an `H[B]`.
-        val bab: B ⇒ (A, B) = { b ⇒
-          // Obtain a value of type H[A], then use `fa` on it to get an `A`.
-          val ha: H[A] = hab.imap(_._1)(a ⇒ (a, b))
-          val a = fa(ha)
-          (a, b)
-        }
-        val hb: H[B] = hab.imap(_._2)(bab)
+          // Do the same with B instead of A:
+          // Obtain a value of type B ⇒ (A, B) and get an `H[B]`.
+          val bab: B ⇒ (A, B) = { b ⇒
+            // Obtain a value of type H[A], then use `fa` on it to get an `A`.
+            val ha: H[A] = hab.imap(_._1)(a ⇒ (a, b))
+            val a = fa(ha)
+            (a, b)
+          }
+          val hb: H[B] = hab.imap(_._2)(bab)
 
-        (fa(ha), fb(hb))
+          (fa(ha), fb(hb))
+        }
       }
 
       /* Check the laws:
 
+      Associativity:
+      
       First, refactor the implementation of the `zip` method as:
+      */
+      def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] = { hab ⇒ (fa(get1(fb, hab)), fb(get2(fa, hab))) }
 
-      zip(fa, fb) = { hab ⇒
-        val ha = left(fb, hab)
-        val hb = right(fa, hab)
+      // where we defined the auxiliary functions,
 
-        (fa(ha), fb(hb))
-      }
+      def get1[A, B](fb: F[B], hab: H[(A, B)]): H[A] = hab.imap(_._1) { a ⇒ (a, fb(hab.imap(_._2)((a, _)))) }
 
-      where we defined the auxiliary functions,
+      def get2[A, B](fa: F[A], hab: H[(A, B)]): H[B] = hab.imap(_._2) { b ⇒ (fa(hab.imap(_._1)((_, b))), b) }
 
-      def left(fb, hab)  = hab.imap(_._1){ a ⇒ (a, fb(hab.imap(_._2)(a, _)) }
-      def right(fa, hab) = hab.imap(_._2){ b ⇒ (fa(hab.imap(_._1)(_, b), a) }
-
+      /*
       Note how the implementation uses ha and hb completely symmetrically.
       We expect this to be the correct implementation (as opposed to reusing `ha`
       when defining `bab`, say).
+      
+      It is not easy to reason about the result of `fa zip fb zip fc` directly.
+      So we will need to perform a full symbolic computation.
 
-      Associativity:
+      However, the code for `zip(fa, fb)` is completely symmetric w.r.t. (fa, fb).
+      So, let us convert the result of  `(fa zip fb) zip fc : F[((A, B), C)]`
+      to the "flattened tuple" type `F[(A, B, C)]`. If the resulting code is symmetric in fa, fb, fc,
+      and does not show any dependence on computing zip(fa, fb) first,
+      we will have proven associativity.
 
-      zip(zip(fa, fb), fc) = zip(
-       { hab ⇒ (fa(left(fb, hab), fb(right(fa, hab)) }
-       , fc)
-       = { habc ⇒ (left(fc, habc), right(
-        { hab ⇒ (fa(left(fb, hab), fb(right(fa, hab)) }
-        , habc)
-        ) }
-       */
+      The conversion is done by applying an `imap{ case ((a, b), c) ⇒ (a, b, c) }{ case (a, b, c) ⇒ ((a, b), c) }`:
+      */
+      def zipzip[A, B, C](fa: F[A], fb: F[B], fc: F[C]): F[(A, B, C)] = {
+        val res1: F[(A, B, C)] = zip(zip(fa, fb), fc)
+          .imap { case ((a, b), c) ⇒ (a, b, c) } { case (a, b, c) ⇒ ((a, b), c) }
+
+        // The implementation of .imap()() is given above in the `Invariant` instance for `F`.
+        // But we will do this at the end, since a lot of other simplification needs to occur first.
+
+        // Substitute the definition of `zip`:
+        val zipzip1: F[((A, B), C)] = zip({ hab ⇒ (fa(get1(fb, hab)), fb(get2(fa, hab))) }, fc)
+        // Substitute again:
+        val zipzip2: F[((A, B), C)] = { h_ab_c: H[((A, B), C)] ⇒
+          (
+            (fa(get1(fb, get1(fc, h_ab_c))), fb(get2(fa, get1(fc, h_ab_c)))),
+            fc(get2({ hab: H[(A, B)] ⇒ (fa(get1(fb, hab)), fb(get2(fa, hab))) }, h_ab_c))
+          )
+        }
+        // Here `habc` is of type `H[((A, B), C)]`, so mapping it with say _._1 would yield an `H[(A, B)]`.
+
+        // Convert to a flattened tuple type: The result will be
+        /*
+        (
+          fa(get1(fb, get1(fc, h_ab_c))),
+          fb(get2(fa, get1(fc, h_ab_c))),
+          fc(get2({ hab: H[(A, B)] ⇒ (fa(get1(fb, hab)), fb(get2(fa, hab))) }, h_ab_c))
+        )
+        Let's simplify the arguments of fa, fb, fc here. Denote these arguments by ha, hb, hc.
+         */
+
+        val zipzip2a: F[(A, B, C)] = { h_abc: H[(A, B, C)] ⇒
+          val h_ab_c: H[((A, B), C)] = h_abc.imap { case (a, b, c) ⇒ ((a, b), c) } { case ((a, b), c) ⇒ (a, b, c) }
+          val hab: H[(A, B)] = // get1(fc, h_ab_c)
+          // h_ab_c.imap(_._1) { a ⇒ (a, fc(h_ab_c.imap(_._2)((a, _)))) }
+          //   Use the profunctor composition law to simplify:
+          // h_abc.imap { case (a, b, c) ⇒ ((a, b), c) } { case ((a, b), c) ⇒ (a, b, c) }
+          //      .imap(_._1) { a ⇒ (a, fc(h_ab_c.imap(_._2)((a, _)))) }
+            h_abc.imap { case (a, b, c) ⇒ (a, b) } { case (a, b) ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) }
+          val ha: H[A] = // get1(fb, hab)
+          // hab.imap(_._1) { a ⇒ (a, fb(hab.imap(_._2)((a, _)))) }
+
+          // h_abc.imap { case (a, b, c) ⇒ (a, b) } { case (a, b) ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) }
+          //      .imap(_._1) { a ⇒ (a, fb(h_abc.imap { case (a, b, c) ⇒ (a, b) } { case (a, b) ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) }.imap(_._2)((a, _)))) }
+
+          // h_abc.imap { case (a, b, c) ⇒ a }({ a ⇒
+          //   val b0 = fb(h_abc.imap { case (a, b, c) ⇒ (a, b) } { case (a, b) ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) }.imap(_._2)((a, _)))
+          //   (a, b0)
+          // } andThen { case (a, b) ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) })
+
+          // Simplify b0 = fb(h_abc.imap (_._2) { case b ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) })
+          // Hence ha =
+            h_abc.imap(_._1) { a ⇒
+              val b0 = fb(h_abc.imap(_._2) { b ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) })
+              (a, b0, fc(h_abc.imap(_._3)((a, b0, _))))
+            }
+          // Compute hb in the same way, just exchange a and b in ha above.
+          val hb: H[B] = // get2(fa, hab)
+            h_abc.imap(_._2) { b ⇒
+              val a0 = fa(h_abc.imap(_._1) { a ⇒ (a, b, fc(h_abc.imap(_._3)((a, b, _)))) })
+              (a0, b, fc(h_abc.imap(_._3)((a0, b, _))))
+            }
+          // The argument of fc is `get2({ hab: H[(A, B)] ⇒ (fa(get1(fb, hab)), fb(get2(fa, hab))) }, h_ab_c)`.
+          val hc: H[C] = // h_ab_c.imap(_._2) { c ⇒ ((fa(get1(fb, h_ab_c.imap(_._1)((_, c)))), fb(get2(fa, h_ab_c.imap(_._1)((_, c))))), c) }
+          //            h_abc.imap(_._3) { c ⇒ (fa(get1(fb, h_ab_c.imap(_._1)((_, c)))), fb(get2(fa, h_ab_c.imap(_._1)((_, c)))), c) }
+          // Compute get1(fb, h_ab_c.imap(_._1)((_, c))))
+          //  = h_ab_c.imap(_._1)((_, c))).imap(_._1) { a ⇒ (a, fb(h_ab_c.imap(_._1)((_, c))).imap(_._2)((a, _)) )) }
+          //                                                            simplify here to:
+          //                                                        h_abc.imap(_._2)((a, _, c))
+          //          simplify here to:
+          //  = h_abc.imap(_._1){ a ⇒ (a, fb(h_abc.imap(_._2)((a, _, c)) ), c) }
+          // Similarly get2(fa, h_ab_c.imap(_._1)((_, c)))
+          //  = h_abc.imap(_._2){ b ⇒ (fa(h_abc.imap(_._1)((_, b, c)) ), b, c) }
+          // Hence hc =
+            h_abc.imap(_._3) { c ⇒ (fa(h_abc.imap(_._1) { a ⇒ (a, fb(h_abc.imap(_._2)((a, _, c))), c) }), fb(h_abc.imap(_._2) { b ⇒ (fa(h_abc.imap(_._1)((_, b, c))), b, c) }), c) }
+
+          // Exchange a and c in ha:
+          val hc2: H[C] = h_abc.imap(_._3) { c ⇒
+            val b0 = fb(h_abc.imap(_._2) { b ⇒ (fa(h_abc.imap(_._1)((_, b, c))), b, c) })
+            (fa(h_abc.imap(_._1)((_, b0, c))), b0, c)
+          }
+
+          // Compare hc and hc2:
+          /*
+          (fa(h_abc.imap(_._1) { a ⇒ (a, fb(h_abc.imap(_._2){ b ⇒ (a, b, c)) }, c) }),
+              fb(h_abc.imap(_._2) { b ⇒ (fa(h_abc.imap(_._1)((_, b, c))), b, c) }),
+              c)
+          (fa(h_abc.imap(_._1) { a ⇒ (a, fb(h_abc.imap(_._2) { b ⇒ (fa(h_abc.imap(_._1)((_, b, c))), b, c) }), c) }),
+              fb(h_abc.imap(_._2) { b ⇒ (fa(h_abc.imap(_._1)((_, b, c))), b, c) }),
+              c)
+              
+              They don't look the same!!!
+           */
+          ???
+        }
+
+        // Now we need to simplify the expressions that occur after `habc ⇒`.
+        val zipzip3 = { habc: H[((A, B), C)] ⇒
+          // Simplify the last line:
+          val hc1: H[C] = get2({ hab: H[(A, B)] ⇒ (fa(get1(fb, hab)), fb(get2(fa, hab))) }, habc)
+
+          // Compute the term `get1(fc, habc)`, which is of type `H[(A, B)]`:
+          val xab1: H[(A, B)] = habc.imap(_._1) { ab ⇒ (ab, fc(habc.imap(_._2)((ab, _)))) }
+          /*
+      The mapping `habc.imap(_._2)(ab, _)` selects the `C` part of `H[((A, B), C)]`.
+      So let us denote it for brevity by `habc2c`. (It is still a function of a local value `ab`.)
+      Thus we can write `xab1` as
+           */
+
+          def habc2c(a: A, b: B): H[C] = habc.imap(_._2)(((a, b), _))
+
+          val xab2: H[(A, B)] = habc.imap(_._1) { case (a, b) ⇒ ((a, b), fc(habc2c(a, b))) }
+
+          // Define for convenience also some other functions for converting `habc`:
+
+          def habc2a_bc(b: A ⇒ B, c: (A, B) ⇒ C): H[A] = habc.imap(_._1._1)(a ⇒ ((a, b(a)), c(a, b(a))))
+
+          def habc2b_c(a: A, bc: B ⇒ C): H[B] = habc.imap(_._1._2)(b ⇒ ((a, b), bc(b)))
+
+          // Now compute the argument of `fa()`, which is `get_a(fb, left(fc, habc)) = get_a(fb, xab2)`:
+
+          val xa1: H[A] =
+          // left(fb, xab2)
+          // xab2.imap(_._1) { a ⇒ (a, fb(xab2.imap(_._2)((a, _)))) }
+
+          // habc
+          //   .imap(_._1) { case (a, b) ⇒ ((a, b), fc(habc2c(a, b))) }
+          //   .imap(_._1) { a ⇒ (a, fb(habc.imap(_._1) { case (a, b) ⇒ ((a, b), fc(habc2c(a, b))) }.imap(_._2)((a, _)))) }
+
+          // Use the profunctor composition law:
+          //      p.imap(f)(m).imap(g)(n) = p.imap(f andThen g)(n andThen m)
+          // to simplify the expressions with double .imap:
+          // habc
+          //   .imap(_._1) { case (a, b) ⇒ ((a, b), fc(habc2c(a, b))) }
+          //   .imap(_._1) { a ⇒ (a, fb(habc.imap(_._1._2) { b ⇒ ((a, b), fc(habc2c(a, b))) })) }
+          // Rewrite as
+          // habc
+          //   .imap(_._1) { case (a, b) ⇒ ((a, b), fc(habc2c(a, b))) }
+          //   .imap(_._1) { a ⇒ (a, fb(habc2b_c(a, { b ⇒ fc(habc2c(a, b)) }))) }
+
+          // habc
+          //   .imap(_._1._1) {
+          //     { a: A ⇒ (a, fb(habc2b_c(a, { b ⇒ fc(habc2c(a, b)) }))) } andThen { case (a, b) ⇒ ((a, b), fc(habc2c(a, b))) }
+          // }
+
+          // Rewrite more concisely as
+            habc2a_bc(a ⇒ fb(habc2b_c(a, { b ⇒ fc(habc2c(a, b)) })), (a, b) ⇒ fc(habc2c(a, b)))
+
+
+          // Compute the argument of `fb()`, which is `right(fa, left(fc, habc))`.
+          // This is just xa1 except we swap `a` and `b` everywhere:
+          val xb1: H[B] = ???
+
+        }
+
+
+        ???
+      }
+
+      /*    
+            
+            
+            left(fc, habc) 
+            
+            Compute the argument of `fc()`:
+             
+            right({ hab ⇒ (fa(left(fb, hab)), fb(right(fa, hab))) }, habc) : H[C] =
+              habc.imap(_._2){ c ⇒ ((fa(left(fb, habc.imap(_._1)(_, c)), fb(right(fa, habc.imap(_._1)(_, c)))), c) }
+            
+            First simplify the arguments of `fa()` and `fb()`.
+            
+            left(fb, habc.imap(_._1)(_, c)) : H[A] = habc.imap(_._1)(_, c).imap(_._1){ a ⇒ (a, fb(habc.imap(_._1)(_, c).imap(_._2)(a, _))) }
+            
+            Use the profunctor composition law to simplify: 
+            
+            habc.imap(_._1)(_, c).imap(_._2)(a, _) = habc.imap{ case ((a, b), c) ⇒ b }{ b ⇒ ((a, b), c) }
+            
+            This mapping selects the middle `B` out of `H[((A, B), C)]` to obtain an `H[B]`. Denote the result by `habc2b`.
+            
+            So
+            
+            left(fb, habc.imap(_._1)(_, c)) = habc.imap{ case ((a, b), c) ⇒ a }{ a ⇒ ((a, fb(habc2b)), c) }
+            
+            Similarly compute:
+            
+            right(fa, habc.imap(_._1)(_, c)): H[B] = habc.imap(_._1)(_, c).imap(_._2){ b ⇒ (fa(habc.imap(_._1)(_, c).imap(_._1)(_, b)), b) }
+            
+            Simplify using the profunctor composition law:
+            
+            right(fa, habc.imap(_._1)(_, c)) = habc.imap{ case ((a, b), c) ⇒ b }{ b ⇒ (fa(habc2a), b) }
+            
+            where habc2a = habc.imap(_._1)(_, c).imap(_._1)(_, b) = habc.imap{ case ((a, b), c) ⇒ a }{ a ⇒ ((a, b), c) } 
+            
+            Now substitute the simplified arguments of `fa()` and `fb()`:
+            
+            right({ hab ⇒ (fa(left(fb, hab)), fb(right(fa, hab))) }, habc) : H[C] =
+              habc.imap(_._2){ c ⇒ ((
+                fa(habc.imap{ case ((a, b), c) ⇒ a }{ a ⇒ ((a, fb(habc2b)), c) }),
+                fb(habc.imap{ case ((a, b), c) ⇒ b }{ b ⇒ (fa(habc2a), b) })
+               ), c) }
+            
+            So finally we have zip(zip(fa, fb), fc) : H[((A, B), C)] ⇒ ((A, B), C) =
+              { habc ⇒ (
+                    habc.imap(_._1){ ab ⇒ (ab, fc(habc2c)) },
+                    habc.imap(_._2){ c ⇒ ((
+                       fa(habc.imap{ case ((a, b), c) ⇒ a }{ a ⇒ ((a, fb(habc2b)), c) }),
+                       fb(habc.imap{ case ((a, b), c) ⇒ b }{ b ⇒ (fa(habc2a), b) })
+                      ), c) }
+                  )
+              }
+            
+            To find out whether this is associative, let us apply the required isomorphisms
+            in order to transform `zip(zip(fa, fb), fc)` into a value
+            of a "flattened tuple" type `H[(A, B, C)] ⇒ (A, B, C)`.
+            This is done by applying an `imap{ case ((a, b), c) ⇒ (a, b, c) }{ case (a, b, c) ⇒ ((a, b), c) }`:
+            
+            fabc.imap{ case ((a, b), c) ⇒ (a, b, c) }{ case (a, b, c) ⇒ ((a, b), c) } =
+            { (habcFlat: H[(A, B, C)]) ⇒
+              val habc: H[((A, B), C)] = habcFlat.imap{ case (a, b, c) ⇒ ((a, b), c) }{ case ((a, b), c) ⇒ (a, b, c) }
+              fa(habc) match { case ((a, b), c) ⇒ (a, b, c) }
+            } 
+            
+            Substitute the body of the function into fa(habc):
+            
+            zip(zip(fa, fb), fc).imap{ case ((a, b), c) ⇒ (a, b, c) }{ case (a, b, c) ⇒ ((a, b), c) } =
+            { (habcFlat: H[(A, B, C)]) ⇒
+              val habc: H[((A, B), C)] = habcFlat.imap{ case (a, b, c) ⇒ ((a, b), c) }{ case ((a, b), c) ⇒ (a, b, c) }
+              
+              (
+                habc.imap(_._1){ ab ⇒ (ab, fc(habc2c)) },
+                habc.imap(_._2){ c ⇒ ((
+                   fa(habc.imap{ case ((a, b), c) ⇒ a }{ a ⇒ ((a, fb(habc2b)), c) }),
+                   fb(habc.imap{ case ((a, b), c) ⇒ b }{ b ⇒ (fa(habc2a), b) })
+                  ), c) }
+              ) match { case ((a, b), c) ⇒ (a, b, c) }
+            }
+            
+            Now we can simplify by using the profunctor composition law:
+            
+            habc.imap(_._1){ ab ⇒ (ab, fc(habc2c)) } =
+              habcFlat.imap{ case (a, b, c) ⇒ ((a, b), c) }{ case ((a, b), c) ⇒ (a, b, c) }.imap(_._1){ ab ⇒ (ab, fc(habc2c)) } =
+              habcFlat.imap{ case (a, b, c) ⇒ (a, b) }{ case (a, b) ⇒ (a, b, fc(habc2c)) }
+      
+            
+              
+            Identity:
+            
+            zip(fa, wuF) = zip(fa, {_ ⇒ 1 }) = { ha1 ⇒ (fa(left(wuF, ha1)), wuF(...)) }
+             = { ha1 ⇒ (fa(left(wuF, ha1)), 1) }
+             
+            Compute left(wuF, ha1) = ha1.imap(_._1){ a ⇒ (a, wuF(...)) } = ha1.imap(_._1)(_, 1)
+            This is an equivalence transformation in the sense of `≅`, since we are just adding a unit to the type.
+            Hence zip(fa, wuF) ≅ { ha1 ⇒ fa(ha1) } up to equivalence. So zip(fa, wuF) ≅ fa.
+            
+            Since the code of `zip` is symmetric, it's sufficient to check just one identity law.
+             */
     }
   }
 
