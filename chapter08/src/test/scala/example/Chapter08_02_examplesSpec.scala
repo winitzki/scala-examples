@@ -123,6 +123,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
   it should "define construction 1 for applicative functors" in {
     // (a) Constant functor F[A] = 1.
+    // type F[A] = Unit
     /*
     All methods return `()`. All laws are trivially satisfied.
      */
@@ -154,7 +155,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
         (fa._1 map f, fa._2 map f)
     }
 
-    // Implement zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
+    // Implement zip:  (G[A] × H[A]) × (G[B] × H[B]) ⇒ G[A × B] × H[A × B].
 
     implicit def construction2[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
       new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
@@ -188,10 +189,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       }
     }
 
-    implicit def construction3[G[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
+    implicit def construction3[G[_] : WuZip]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
       override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(wU[G])` does not obey identity laws!
 
-      override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]]): Either[(A, B), G[(A, B)]] = (fa, fb) match {
+      override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]])
+      : Either[(A, B), G[(A, B)]] = (fa, fb) match {
         case (Left(a), Left(b)) ⇒ Left((a, b))
         // If we have an `a: A` and a `gb: G[B]`, we can't return Left[(A, B)], so we need to return Right[G[(A, B)]].
         // Lift `A` to `G[A]` using G's `pure`:
@@ -276,10 +278,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       }
     }
 
-    implicit def construction7[G[_] : WuZip : Functor, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
+    implicit def construction7[G[_] : WuZip, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
       override def wu: Either[Z, G[Unit]] = Right(wU[G]) // It turns out that `Left(Monoid[Z].empty)` does not obey the identity laws!
 
-      override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]]): Either[Z, G[(A, B)]] = (fa, fb) match {
+      override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]])
+      : Either[Z, G[(A, B)]] = (fa, fb) match {
         case (Left(za), Left(zb)) ⇒ Left(za |+| zb)
         // If we have an `z: Z` and a `gb: G[B]`, we can't return Right[G[(A, B)]], so we need to return Left[Z].
         case (Left(z), Right(_)) ⇒ Left(z)
@@ -328,11 +331,13 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     /* Check the laws:
 
-    Associativity: It is convenient to work in terms of G's `map2` because we will have many expressions of the kind `zip().map()`.
+    Associativity:
 
-    (gha zip ghb) = zipG(gha, ghb).map(zipH) = map2(gha, ghb)(zipH)
+    (gha zip ghb) = zipG(gha, ghb).map(zipH)
 
     (gha zip ghb) zip ghc = zipG(zipG(gha, ghb).map(zipH), hgc).map(zipH)
+
+    Shorthand: .map(zipH) = .map { case (ha, hb) ⇒ ha zipH hb }
 
     Use zip's naturality to pull .map(zipH) out:
 
@@ -348,7 +353,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     gha zip (ghb zip ghc) = zipG(gha, zipG(ghb, ghc))
       .map { case (ha, (hb, hc)) ⇒ ha zipH (hb zipH hc) }
 
-    Now, since G's `map2` satisfies associativity, and `zipH` also does, we see that these two expressions are equivalent in the sense of `≅`.
+    Now, since G's `zip` satisfies associativity, and `zipH` also does, we see that these two expressions are equivalent in the sense of `≅`.
 
     Identity:
 
@@ -442,6 +447,23 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     If we used the `List` monad's definition of `pure` in this applicative instance, we would have obtained
     
     wu = pure(()) = List( () ), i.e. a single-element list. This would not have given us an applicative instance represented by the standard `zip` function.
+
+    "zip" defined from the monad instance would do this:
+
+    "zip" ( List(1, 2), List(10, 20)) = List (
+      (1, 10),
+      (1, 20),
+      (2, 10),
+      (2, 20)
+     )
+
+     for {
+      x ← f
+      y ← g
+      } yield k(x, y)
+
+      map2(f, g)(k)
+
      */
   }
 
@@ -472,11 +494,11 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   
   Any polynomial functor can be rewritten as a "Horner scheme" in A with some monoidal coefficients, starting with the lowest power of A:
   F[A] = Z × A × ... × A + Y × A × ... × A + ... + Q × A + P is rewritten as
-   P + A × (Q + A × (... + A × (Y + A × Z)...).
+  F[A] = P + A × (Q + A × (... + A × (Y + A × Z)...).
   
   Some steps may contain more than one A, e.g. P + A × A × (Q + A × ...) 
   
-  Each step corresponds to construction 7 (i.e. `Z + H[A]`) and construction 2 (i.e. `A × H[A]`).
+  Each step corresponds to construction 7 (i.e. `Z + G[A]`) and construction 2 (i.e. `A × G[A]`).
   
   Since the wu for construction 7 is 0 + wuH and for construction 2 is 1 × wuH, we find that the wu for F[A] is 
    Z1 × 1 × ... × 1 as in the highest-power term of the polynomial.
