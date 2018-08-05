@@ -128,11 +128,13 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
      */
 
     // (b) Identity functor F[A] = A.
-    implicit def functorB: Functor[Lambda[A ⇒ A]] = new Functor[Lambda[A ⇒ A]] {
+    type F[A] = A
+
+    implicit def functorB: Functor[F] = new Functor[F] {
       override def map[A, B](fa: A)(f: A ⇒ B): B = f(fa)
     }
 
-    implicit def construction1b: WuZip[Lambda[A ⇒ A]] = new WuZip[Lambda[A ⇒ A]] {
+    implicit def construction1b: WuZip[F] = new WuZip[F] {
       override def wu: Unit = ()
 
       override def zip[A, B](fa: A, fb: B): (A, B) = (fa, fb)
@@ -145,13 +147,14 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
   it should "define construction 2 for applicative functors" in {
     // If G and H are applicative then G × H is also applicative.
-    // Define pure as G.pure ⊗ H.pure. Similarly, define zip and ap.
-    // E.g. zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
+    // The type constructor is `Lambda[A ⇒ (G[A], H[A])]`.
 
     implicit def functorProduct[G[_] : Functor, H[_] : Functor]: Functor[Lambda[A ⇒ (G[A], H[A])]] = new Functor[Lambda[A ⇒ (G[A], H[A])]] {
       override def map[A, B](fa: (G[A], H[A]))(f: A ⇒ B): (G[B], H[B]) =
         (fa._1 map f, fa._2 map f)
     }
+
+    // Implement zip:  G[A] × H[A] × G[B] × H[B] ⇒ G[A × B] × H[A × B].
 
     implicit def construction2[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
       new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
@@ -219,16 +222,21 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     Whatever the result, it's a `Right(...)`, which cannot be equivalent to `Left(a)`.
     So the `wu` must be defined as a `Left(())` as we did.
      */
-
-// How to implement zip for a monad, through its flatMap:
-//    zip(fa, fb) = for {
-//      x ← fa
-//      y ← fb
-//    } yield (a, b)
   }
+
+  // How to implement zip for a monad, through its flatMap:
+  //    zip(fa, fb) = for {
+  //      x ← fa
+  //      y ← fb
+  //    } yield (a, b)
 
   it should "define construction 6 for applicative functors" in {
     // Construction 6. Constant functor F[A] = Z where Z is a monoid.
+
+    // We would like to write
+    //    type F[A] = Z
+    // but we want to keep Z a type parameter.
+    // So we use the "kind projector" plugin to write Lambda[A ⇒ Z] instead.
 
     implicit def functorA[Z]: Functor[Lambda[A ⇒ Z]] = new Functor[Lambda[A ⇒ Z]] {
       override def map[A, B](fa: Z)(f: A ⇒ B): Z = fa
@@ -242,9 +250,9 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       // Note: We could have defined this to be `fb |+| fa`, it would still work.
     }
 
-    // The laws hold because the monoid laws hold for Z.
+    // The applicative laws hold because the monoid laws hold for Z.
 
-    // Note that this is not a monad because monadic identity laws fail:
+    // Note that Z is not a monad because monadic identity laws fail:
     implicit def badMonad[Z: Monoid]: CatsMonad[Lambda[A ⇒ Z]] = new CatsMonad[Lambda[A ⇒ Z]] {
       override def pure[A](x: A): Z = Monoid[Z].empty // No choice here: can't use `x: A` to compute a `Z`.
 
@@ -255,7 +263,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     // The left identity law: `pure andThen flatMap(f) = f`.
     // This law cannot hold: `flatMap` does not use its argument `f`, because information about `f` was lost.
     // Thus, no function of `flatMap(f)` could possibly recover `f`.
-    
+
     // If we defined `flatMap` by always returning `Z.empty`, we also wouldn't be able to recover `f`, for the same reason.
   }
 
@@ -293,7 +301,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     Identity: The wrapped unit is `0 + wuG`. 
     Consider the right identity law: (Z + G[A]) zip (0 + wuG).
     If we have Left(z), the result is Left(z).
-    If we have Right(ga), we will have ga zip wuG = ga since the identity law holds for G.  
+    If we have Right(ga), we will have ga zip wuG ≅ ga since the identity law holds for G.
     Hence in both cases the identity law holds for Z + G[A]. 
     
     On the other hand, if we defined the wrapped unit as `Left(Monoid[Z].empty)`, and we consider
@@ -319,28 +327,36 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     }
 
     /* Check the laws:
-    
+
     Associativity: It is convenient to work in terms of G's `map2` because we will have many expressions of the kind `zip().map()`.
-    
+
     (gha zip ghb) = zipG(gha, ghb).map(zipH) = map2(gha, ghb)(zipH)
-    
-    (gha zip ghb) zip ghc = map2 ( map2(gha, ghb)(zipH[A, B]), ghc)(zipH[(A, B), C])
-    
-    By the map2 naturality law, we can pull zipH[A, B] out:
-    
-    (gha zip ghb) zip ghc = map2 ( map2(gha, ghb)((_, _)), ghc) { case ((a,b),c) ⇒ zipH(zipH(a, b), c) }
-    
+
+    (gha zip ghb) zip ghc = zipG(zipG(gha, ghb).map(zipH), hgc).map(zipH)
+
+    Use zip's naturality to pull .map(zipH) out:
+
+    (gha zip ghb) zip ghc = zipG(zipG(gha, ghb), hgc)
+      .map { case ((ha, hb), hc) ⇒ (ha zipH hb, hc) }
+      .map { case (hab, hc) ⇒ hab zipH hc }
+
+    Combine two .map's together using the functor composition law:
+    (gha zip ghb) zip ghc = zipG(zipG(gha, ghb), hgc)
+      .map { case ((ha, hb), hc) ⇒ (ha zipH hb) zipH hc }
+
     Similarly we get
-    gha zip (ghb zip ghc) = map2 ( gha, map2(ghb, ghc)((_, _))) { case (a,(b,c)) ⇒ zipH(a, zipH(b, c)) }
-    
+    gha zip (ghb zip ghc) = zipG(gha, zipG(ghb, ghc))
+      .map { case (ha, (hb, hc)) ⇒ ha zipH (hb zipH hc) }
+
     Now, since G's `map2` satisfies associativity, and `zipH` also does, we see that these two expressions are equivalent in the sense of `≅`.
-    
+
     Identity:
-    
-    wu zip gha = map2(pureG(wuH), gha)(zipH)  // Now use the left identity law for G's `map2`:
+
+    wu zip gha = zipG(pureG(wuH), gha).map(zipH)
+      // Now use the left identity law for G's `zip`:
      = gha.map { ha ⇒ zipH(wuH, ha) } = gha.map { ha ⇒ ha } = gha // We assume identity laws for G and H.
-    
-    Similarly the right identity law holds.    
+
+    Similarly the right identity law holds.
     */
   }
 
@@ -354,7 +370,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     // List with some elements: F(Right{ () ⇒ ("first", F(Right{ () ⇒ ("second", F(Left(()))) }))})
     def list[A](as: List[A]): F[A] = as match {
       case Nil ⇒ empty
-      case head :: tl ⇒ F(Right { () ⇒ (head, list(tl)) })
+      case head :: tl ⇒ F[A](Right { () ⇒ (head, list(tl)) })
     }
 
     // It is "lazy": To get the next element, we need to call the closure each time.
@@ -379,7 +395,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Define a functor instance.
     implicit val functorF: Functor[F] = new Functor[F] {
-      override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = F(fa.value match {
+      override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = F[B](fa.value match {
         case Left(_) ⇒ Left(())
         case Right(g) ⇒ Right {
           () ⇒
@@ -391,7 +407,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Define a WuZip instance.
     implicit val wuZipF: WuZip[F] = new WuZip[F]() {
-      override def wu: F[Unit] = F(Right { () ⇒ ((), wu) }) // Never-ending sequence of `()`.
+      override def wu: F[Unit] = F[Unit](Right { () ⇒ ((), wu) }) // Never-ending sequence of `()`.
 
       override def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] = (fa.value, fb.value) match {
         case (Left(_), _) ⇒ empty
@@ -399,7 +415,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
         case (Right(ga), Right(gb)) ⇒
           val (a2, fa2) = ga()
           val (b2, fb2) = gb()
-          F(Right { () ⇒ ((a2, b2), zip(fa2, fb2)) })
+          F[(A, B)](Right { () ⇒ ((a2, b2), zip(fa2, fb2)) })
       }
     }
 
@@ -425,12 +441,12 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
     
     If we used the `List` monad's definition of `pure` in this applicative instance, we would have obtained
     
-    wu = pure(()) = List( () ), i.e. a single-element list. This would not have given us a good applicative instance.
+    wu = pure(()) = List( () ), i.e. a single-element list. This would not have given us an applicative instance represented by the standard `zip` function.
      */
   }
 
   it should "verify that some functors are not applicative" in {
-    
+
     type F[A, P] = (A ⇒ P) ⇒ Option[A] // Not applicative, breaks identity laws.
     type G[A, P, Q] = Either[A ⇒ P, A ⇒ Q] // This is an applicative contrafunctor.
     type H[A, P, Q] = Either[P ⇒ A, Q ⇒ A] // Not applicative.
