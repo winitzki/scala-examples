@@ -14,6 +14,9 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
   behavior of "applicative contrafunctor constructions"
 
+  // Convert C[((A, B), C)] ⇒ C[(A, (B, C))]
+  // need f: ( (A, (B, C)) ) ⇒ ((A, B), C)
+
   it should "define construction 3 for contrafunctors" in {
     // If G and H are applicative contrafunctors then G + H is also applicative.
 
@@ -31,8 +34,8 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
 
       override def zip[A, B](fa: Either[G[A], H[A]], fb: Either[G[B], H[B]]): Either[G[(A, B)], H[(A, B)]] = (fa, fb) match {
         case (Left(ga), Left(gb)) ⇒ Left(ga zip gb)
-        case (Left(_), Right(hb)) ⇒ Right(hb contramap { case (x, y) ⇒ y }) // Since the wrapped unit is a `Left()`, we need to create a `Right()` in the product.
-        case (Right(ha), Left(_)) ⇒ Right(ha contramap { case (x, y) ⇒ x })
+        case (Left(_), Right(hb)) ⇒ Right(hb contramap { case (a, b) ⇒ b }) // Since the wrapped unit is a `Left()`, we need to create a `Right()` in the product.
+        case (Right(ha), Left(_)) ⇒ Right(ha contramap { case (a, b) ⇒ a })
         case (Right(ha), Right(hb)) ⇒ Right(ha zip hb)
       }
     }
@@ -46,12 +49,12 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     
     If some of (fa, fb, fc) are Left() while others are Right(), all the Left() ones are ignored,
     and the remaining Right() ones are converted to Right[H[(A, B, C)]] using contramap on the function
-    such as { case (a, b, c) ⇒ zipH(a, b) } as required.
+    such as { case (a, b, c) ⇒ (a, b) } as required.
     This is also associative.
     
-    Identity laws: Assuming that G's identity law works - and not using H's identity laws - we find: 
+    Identity laws: Assuming that G's identity law works - and not using H's identity laws - we find:
     
-    (fa zip wu) = (fa zip Left(wU[G]) = (fa, Left(wU[G])) match {
+    (fa zip wu) = (fa zip Left(wU[G])) = (fa, Left(wU[G])) match {
       case (Left(ga), Left(gb)) ⇒ Left(ga zip gb) = Left(ga zip wU[G]) ≅ Left(ga)
       case (Right(ha), Left(gb)) ⇒ Right(ha contramap { case (x, ()) ⇒ x } ≅ Right(ha)
      }
@@ -67,11 +70,11 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     }
 
     // Applicative instance:
-    implicit def contraaplicative4[G[_] : ContraWuZip : Contravariant, H[_] : Functor]: ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] = new ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] {
+    implicit def contraaplicative4[G[_] : ContraWuZip, H[_] : Functor]: ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] = new ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] {
       override def wu: H[Unit] ⇒ G[Unit] = { _ ⇒ wU[G] }
 
       override def zip[A, B](fa: H[A] ⇒ G[A], fb: H[B] ⇒ G[B]): H[(A, B)] ⇒ G[(A, B)] = { hab ⇒
-        val ha: H[A] = hab map { case (a, b) ⇒ a }
+        val ha: H[A] = hab map { case (a, b) ⇒ a } // hab map (_._1)
         val hb: H[B] = hab map { case (a, b) ⇒ b }
         fa(ha) zip fb(hb)
       }
@@ -83,7 +86,7 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     
     Consider `(fa zip fb) zip fc: H[((A, B), C)] ⇒ G[((A, B), C)]`:
     
-    fa zip fb = { hab ⇒ fa(hab map(_._1)) zip fb(hab map(_._2) }
+    fa zip fb = { hab ⇒ fa(hab map(_._1)) zip fb(hab map(_._2)) }
     (fa zip fb) zip fc
      = { habc: H[((A, B), C)] ⇒ (fa zip fb)(habc map(_._1) zip fc(habc map (_._2))
      = { habc: H[((A, B), C)] ⇒ (fa(habc map(_._1) map (_._1)) zip fb(habc map (_._1) map (_._2)) zip fc(habc map (_._2))

@@ -322,7 +322,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Define zip as G[H[A]] × G[H[B]] ⇒ G[H[A × B]] using zip for G and zip for H.
 
-    implicit def wuzipGH[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
+    implicit def wuzipGH[G[_] : WuZip : Functor, H[_] : WuZip]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
       override def wu: G[H[Unit]] = WuZip[G].pure(wU[H])
 
       override def zip[A, B](gha: G[H[A]], ghb: G[H[B]]): G[H[(A, B)]] =
