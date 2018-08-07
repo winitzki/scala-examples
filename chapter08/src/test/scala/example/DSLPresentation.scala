@@ -1,10 +1,6 @@
 package example
 
-import java.time.LocalTime
-
 import org.scalatest.{FlatSpec, Matchers}
-
-import scala.collection.mutable.ArrayBuffer
 
 class DSLPresentation extends FlatSpec with Matchers {
 
@@ -114,6 +110,7 @@ class DSLPresentation extends FlatSpec with Matchers {
     
     Define the data structure:
      */
+    import java.time.LocalTime
     case class Subtitle(index: Int, beginTime: LocalTime, endTime: LocalTime, text: String)
 
     def ts(a: Int, b: Int, c: Int, d: Int): LocalTime = LocalTime.of(a, b, c, d * 1000000)
