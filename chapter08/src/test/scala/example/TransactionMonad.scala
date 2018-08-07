@@ -34,9 +34,14 @@ Drawbacks of this implementation:
 - Steps always return `Future`, cleanup actions always return `Try`.
  */
 
-// Define the trait `Tx[A]` for convenience.
-// The type `Tx[A]` is equivalent to `forall R: (A ⇒ Future[R]) ⇒ Future[R]`.
-// This type is the result of applying the continuation monad transformer to the `Future` monad.
+/* Define the trait `Tx[A]` for convenience.
+   The type `Tx[A]` is equivalent to `forall R: (A ⇒ Future[R]) ⇒ Future[R]`.
+   This type is the result of applying the continuation monad transformer to the `Future` monad.
+
+   For convenience, we have defined the type alias `type ContFut[R, X] = (X ⇒ Future[R]) ⇒ Future[R]`.
+   To define a value of this type, we will write `new Tx[A] { def run[R]: ContFut[R, A] = ??? }`.
+*/
+
 trait Tx[A] {
   self ⇒
   // This method needs to be overridden.
@@ -101,10 +106,12 @@ object Tx {
 
 class TransactionMonad extends FlatSpec with Matchers {
 
-  behavior of "transaction chain"
+  behavior of "asynchronous transactions with automatic rollback"
 
   // The tests will use the following fake API. Each API call may succeed or fail, according to `succeed`.
 
+  /**** BEGIN fake API for file manipulation ****/
+  
   // Create and write a temporary file whose name is unknown in advance. Returns file name and file size.
   def writeTmpFile(data: String, succeed: Boolean = true): Future[(String, Long)] = {
     if (succeed) Future.successful(("tempfile1", 12345L)) else Future.failed(new Exception(s"failed to create temp file"))
@@ -135,6 +142,8 @@ class TransactionMonad extends FlatSpec with Matchers {
       Success(())
     } else Failure(new Exception(s"failed to delete database entry ID $id"))
   }
+
+  /**** END fake API for file manipulation ****/
 
   // Convert some parts of this API into the transaction monad type.
   // We may use `stepWithCleanup` to define the cleanup together with an action,

@@ -157,7 +157,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Implement zip:  (G[A] × H[A]) × (G[B] × H[B]) ⇒ G[A × B] × H[A × B].
 
-    implicit def construction2[G[_] : WuZip, H[_] : WuZip]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
+    implicit def construction2[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ (G[A], H[A])]] =
       new WuZip[Lambda[A ⇒ (G[A], H[A])]] {
         override def wu: (G[Unit], H[Unit]) = (wU[G], wU[H])
 
@@ -189,7 +189,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       }
     }
 
-    implicit def construction3[G[_] : WuZip]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
+    implicit def construction3[G[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ Either[A, G[A]]]] = new WuZip[Lambda[A ⇒ Either[A, G[A]]]] {
       override def wu: Either[Unit, G[Unit]] = Left(()) // It turns out that `Right(wU[G])` does not obey identity laws!
 
       override def zip[A, B](fa: Either[A, G[A]], fb: Either[B, G[B]])
@@ -278,7 +278,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       }
     }
 
-    implicit def construction7[G[_] : WuZip, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
+    implicit def construction7[G[_] : WuZip : Functor, Z: Monoid]: WuZip[Lambda[A ⇒ Either[Z, G[A]]]] = new WuZip[Lambda[A ⇒ Either[Z, G[A]]]] {
       override def wu: Either[Z, G[Unit]] = Right(wU[G]) // It turns out that `Left(Monoid[Z].empty)` does not obey the identity laws!
 
       override def zip[A, B](fa: Either[Z, G[A]], fb: Either[Z, G[B]])
@@ -322,7 +322,7 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
 
     // Define zip as G[H[A]] × G[H[B]] ⇒ G[H[A × B]] using zip for G and zip for H.
 
-    implicit def wuzipGH[G[_] : WuZip : Functor, H[_] : WuZip]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
+    implicit def wuzipGH[G[_] : WuZip : Functor, H[_] : WuZip : Functor]: WuZip[Lambda[A ⇒ G[H[A]]]] = new WuZip[Lambda[A ⇒ G[H[A]]]] {
       override def wu: G[H[Unit]] = WuZip[G].pure(wU[H])
 
       override def zip[A, B](gha: G[H[A]], ghb: G[H[B]]): G[H[(A, B)]] =

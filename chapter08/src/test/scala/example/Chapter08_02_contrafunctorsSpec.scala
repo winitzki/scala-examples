@@ -70,7 +70,7 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     }
 
     // Applicative instance:
-    implicit def contraaplicative4[G[_] : ContraWuZip, H[_] : Functor]: ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] = new ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] {
+    implicit def contraaplicative4[G[_] : ContraWuZip : Contravariant, H[_] : Functor]: ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] = new ContraWuZip[Lambda[A ⇒ H[A] ⇒ G[A]]] {
       override def wu: H[Unit] ⇒ G[Unit] = { _ ⇒ wU[G] }
 
       override def zip[A, B](fa: H[A] ⇒ G[A], fb: H[B] ⇒ G[B]): H[(A, B)] ⇒ G[(A, B)] = { hab ⇒

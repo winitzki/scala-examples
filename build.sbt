@@ -88,6 +88,7 @@ lazy val chapter08 = (project in file("chapter08"))
       ,"org.typelevel" %% "cats-free" % "1.1.0"
       , "com.typesafe.akka" %% "akka-http-testkit" % "10.0.10" % Test
       , "com.typesafe.akka" %% "akka-http" % "10.0.10"
+      , "com.lihaoyi" %% "fastparse" % "1.0.0"
     )
   )
   .dependsOn(common)
