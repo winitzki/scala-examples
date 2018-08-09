@@ -1,5 +1,6 @@
 package example
 
+import fastparse.all
 import org.scalatest.{FlatSpec, Matchers}
 
 class DSLPresentation extends FlatSpec with Matchers {
@@ -8,13 +9,14 @@ class DSLPresentation extends FlatSpec with Matchers {
 
   /* Symbolic algebraic expressions with `Double` coefficients:
   
-  val c = Const(1.23)
-  val x = Var("x")
+  val c = Const(1.23) // or just 1.23
+  val x = Var("x") // or: val x = newVar
   val z = (x + c)*(x + c)*(x + c)
-  val zprime = z.diff(x)
+  val zprime = z.diff(x) // z %% x?
  
-  zprime.subs(x, Const(3.21)).value shouldEqual 123
-  zprime.print shouldEqual ""
+ // Substitution: zprime % (x -> 3.21)
+  zprime.subs(x, Const(3.21)).value shouldEqual ???
+  zprime.print shouldEqual "(x + ???)"
   
   Let's implement this DSL now.
   
@@ -124,7 +126,8 @@ class DSLPresentation extends FlatSpec with Matchers {
 
     val tStamp = P(d(2) ~ ":" ~ d(2) ~ ":" ~ d(2) ~ "," ~ d(3))
 
-    val timeLine = P(tStamp ~ " --> " ~ tStamp)
+    val timeLine: Parser[(Int, Int, Int, Int, (Int, Int, Int, Int))] = 
+      P(tStamp ~ " --> " ~ tStamp)
 
     val textLine = P(CharsWhile(_ != '\n').!)
 

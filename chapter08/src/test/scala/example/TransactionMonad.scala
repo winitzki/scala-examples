@@ -38,7 +38,8 @@ Drawbacks of this implementation:
    The type `Tx[A]` is equivalent to `forall R: (A ⇒ Future[R]) ⇒ Future[R]`.
    This type is the result of applying the continuation monad transformer to the `Future` monad.
 
-   For convenience, we have defined the type alias `type ContFut[R, X] = (X ⇒ Future[R]) ⇒ Future[R]`.
+   For convenience, we have defined the type alias
+    `type ContFut[R, X] = (X ⇒ Future[R]) ⇒ Future[R]`.
    To define a value of this type, we will write `new Tx[A] { def run[R]: ContFut[R, A] = ??? }`.
 */
 
@@ -158,6 +159,15 @@ class TransactionMonad extends FlatSpec with Matchers {
   def txCreateDBEntry(info: String, succeed: Boolean = true): Tx[Long] =
     Tx.step(createDatabaseEntry(info, succeed))
 
+  // DSL replaces:
+  /*
+  val (tmpFileName, tmpFileLength) = writeTmpFile("xyz")
+  
+  by 
+  (tmpFileName, tmpFileLength) ← txWriteTmpFile("xyz")
+  
+   */
+  
   it should "execute several actions that succeed" in {
     // Write temporary file, create database entry, write real file.
     val txSaga1: Tx[(String, Long, Long)] = for {
@@ -224,6 +234,7 @@ Deleting tempfile1
 
   it should "execute actions and fail due to failing `if` guard condition" in {
     val txSaga4 = for {
+      // x ← txSaga3
       (tmpFileName, _) ← txWriteTmpFile("xyz")
       versionId ← txCreateDBEntry(tmpFileName) withCleanup (deleteDatabaseEntry(_))
       if versionId > 0 // This passes.

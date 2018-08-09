@@ -23,7 +23,7 @@ val srtFile: Parser[Seq[Subtitle]] = P(srtBlock.rep(min = 1) ~ "\n".rep ~ End)
 
 @main
 def main(srcFile: String) = {
-  import scala.reflect.io._
+  import scala.reflect.io.{Streamable, File}
 
   val src = new String(Streamable.bytes(File(srcFile).inputStream), "UTF-8")
   val Success(result, _) = srtFile.parse(src)
