@@ -229,11 +229,11 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     })
   }
 
-  behavior of "code using continuation monad"
+  behavior of "the same code using continuation monad"
 
   // Define `Cont[R, A] = (A ⇒ R) ⇒ R` and use `Cont[Unit, A]` here. The parameter R will be useful later.
 
-  it should "read a file and copy its contents to another file, using NIO2 API" in {
+  it should "read a file and copy its contents to another file, using NIO2 API via Cont[Unit, A]" in {
     // Now rewrite this code using the continuation monad.
     // The type is (A ⇒ Unit) ⇒ Unit. Define this type constructor for convenience:
     type NioMonad[A] = Cont[Unit, A]
@@ -287,6 +287,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     }
 
     // Now run the monad and provide a continuation for the result value - the `status`.
+    // The monad gives direct and easy access to the last, deeply nested callback.
     statusMonad.run { status ⇒ println(s"After running the monad: Status is $status") }
   }
 
