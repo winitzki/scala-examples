@@ -3,11 +3,14 @@ package example
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousFileChannel, CompletionHandler}
 import java.nio.file.{Paths, StandardOpenOption}
-import scala.concurrent.Future
+
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import cats.syntax.functor._
 import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
+
+import scala.util.{Success, Try}
 
 class ContinuationMonadPresentation extends FlatSpec with Matchers {
 
@@ -183,21 +186,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     extractValue(result2) shouldEqual 43
   }
 
-  /*
-  "Solutions":
-  
-  - do not use callbacks
-  - for legacy APIs, implement adapters that convert callback API to a monadic DSL
-  
-  Main ideas of a monadic DSL:
-  
-  - a "DSL program" is a value of type F[A]; we will need to define the type constructor F
-  - values of type F[A] are combined using `flatMap : F[A] ⇒ (A ⇒ F[B]) ⇒ F[B]`
-  - actual computations are performed by "running" or "interpreting" the values of type F[A]
-  
-   */
-
-  it should "read a file and copy its contents to another file, using NIO2 API" in {
+  it should "read a file and copy its contents to another file, using NIO2 callback API" in {
     val fileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/src/test/resources/sample.txt"), StandardOpenOption.READ)
 
     // In this simple example, the file is shorter than 256 bytes.
@@ -241,6 +230,8 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
   }
 
   behavior of "code using continuation monad"
+
+  // Define `Cont[R, A] = (A ⇒ R) ⇒ R` and use `Cont[Unit, A]` here. The parameter R will be useful later.
 
   it should "read a file and copy its contents to another file, using NIO2 API" in {
     // Now rewrite this code using the continuation monad.
@@ -298,5 +289,85 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     // Now run the monad and provide a continuation for the result value - the `status`.
     statusMonad.run { status ⇒ println(s"After running the monad: Status is $status") }
   }
+
+  /*
+  There are still some important deficiencies of this code:
+
+  - we don't have a handle on the running operations, can't wait for them to finish, because .run() returns Unit
+  - so, Cont[Unit, A] works only with synchronous operations
+  - we can't catch any exceptions thrown in one of the callbacks
+
+  To rectify this, we need to make the .run() return a value rather than a Unit. Let that value be of type R.
+  Also, make the callbacks return a value of type R (it can then encapsulate errors or other information).
+
+  The result is a computation that first goes in the forward direction (into the nested callbacks)
+  and then unwinds, collecting the final value of type R.
+   */
+
+  it should "use the continuation monad to compute the total cost of computations" in {
+    final case class Cost[A](run: (A ⇒ Double) ⇒ Double) {
+      def map[B](f: A ⇒ B): Cost[B] = Cost { cb ⇒ run(a ⇒ cb(f(a))) }
+
+      def flatMap[B](f: A ⇒ Cost[B]): Cost[B] = Cost { cb ⇒
+        run(a ⇒ f(a).run(cb))
+      }
+
+      // Convenience method to add a cost value.
+      def addCost(c: Double): Cost[A] = Cost { ca ⇒ run(ca) + c }
+    }
+
+    // A constant computation with zero cost.
+    def pure[A](a: A): Cost[A] = Cost(cb ⇒ cb(a))
+
+    // Lift some computations into this monad.
+
+    // Addition costs $10.
+    def add3(x: Int): Cost[Int] = Cost[Int] { ca ⇒ ca(x + 3) }.addCost(10)
+
+    // Multiplication costs $50. We can specify that later.
+    def mul4(x: Int): Cost[Int] = Cost[Int] { ca ⇒ ca(x * 4) }
+
+    // Define the computation.
+
+    val result = for {
+      x ← pure(10)
+      y ← mul4(x).addCost(50) // Ad hoc assignment of cost.
+      z ← add3(y)
+    } yield z
+
+    // Run the computation and extract the value.
+
+    def interpret[A](cost: Cost[A]): (A, Double) = {
+      var result: A = null.asInstanceOf[A]
+      val finalCost = cost.run { x ⇒ result = x; 0 }
+      (result, finalCost)
+    }
+
+    interpret(result) shouldEqual ((43,60.0))
+  }
+
+  /*
+  Conclusions:
+
+  - we should avoid using callbacks unless we are forced to use a legacy API
+  - for legacy APIs, implement adapters that convert callback API to a monadic DSL using Future (for async) or Cont (for sync)
+
+  Main ideas of a monadic DSL:
+
+  - a "DSL program" is a value of type F[A]; we will need to define the type constructor F
+  - values of type F[A] are combined using `flatMap : F[A] ⇒ (A ⇒ F[B]) ⇒ F[B]`
+  - actual computations are performed by "running" or "interpreting" the values of type F[A]
+
+  Cost:
+
+  - all computations need to be "lifted into the monad type" before using them
+  - a "runner" or "interpreter" needs to be provided
+
+  Benefits:
+
+  - computations become values that can be stored and composed at will, before running them
+  - different interpreters may be provided for testing or other purposes
+
+   */
 
 }
