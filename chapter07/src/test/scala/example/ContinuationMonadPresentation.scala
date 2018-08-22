@@ -343,10 +343,13 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
       (result, finalCost)
     }
 
-    interpret(result) shouldEqual ((43,60.0))
+    interpret(result) shouldEqual ((43, 60.0))
   }
 
   /*
+
+  The return value R can also describe errors; see the "transaction monad" for an example of how that works.
+
   Conclusions:
 
   - we should avoid using callbacks unless we are forced to use a legacy API
