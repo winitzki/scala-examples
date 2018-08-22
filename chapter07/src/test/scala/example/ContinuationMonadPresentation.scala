@@ -3,13 +3,106 @@ package example
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousFileChannel, CompletionHandler}
 import java.nio.file.{Paths, StandardOpenOption}
-
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
 
 class ContinuationMonadPresentation extends FlatSpec with Matchers {
 
-  behavior of "code using callbacks"
+  behavior of "Programming with callbacks"
+
+  it should "define functions that pass results via callbacks, and perform calculations with them" in {
+    def add3(x: Int)(k: Int ⇒ Unit): Unit = {
+      val result = x + 3
+      k(result)
+      ()
+    }
+
+    def mul4(x: Int)(k: Int ⇒ Unit): Unit = {
+      val result = x * 4
+      k(result)
+      ()
+    }
+
+    def const(x: Int)(k: Int ⇒ Unit): Unit = {
+      val result = x
+      k(result)
+      ()
+    }
+
+    var res = 0
+
+    const(10) { r1 ⇒
+      mul4(r1) { r2 ⇒
+        add3(r2) { r3 ⇒
+          res = r3 // Store the result.
+        }
+      }
+    }
+    res shouldEqual 43
+  }
+  
+  it should "define functions that pass results via callbacks, and perform calculations asynchronously" in {
+    def add3(x: Int)(k: Int ⇒ Unit): Unit = {
+      Future {
+        val result = x + 3
+        k(result)
+      }
+      ()
+    }
+
+    def mul4(x: Int)(k: Int ⇒ Unit): Unit = {
+      Future {
+        val result = x * 4
+        k(result)
+      }
+      ()
+    }
+
+    def const(x: Int)(k: Int ⇒ Unit): Unit = {
+      Future {
+        val result = x
+        k(result)
+      }
+      ()
+    }
+
+    var res = 0
+
+    const(10) { r1 ⇒
+      mul4(r1) { r2 ⇒
+        add3(r2) { r3 ⇒
+          res = r3 // Store the result.
+        }
+      }
+    }
+    
+    Thread.sleep(100) // Uh... nothing else we could do here.
+    res shouldEqual 43
+  }
+  
+  /*
+  Problems with callbacks:
+  
+  - don't know when (and whether) the callback was actually called
+  - can't easily wait until something happens, unless our code is within the deepest callback
+  - code is deeply nested, it is difficult to pass values from one place to another
+  - callbacks are not composable: information is passed via side effects or mutable values 
+  - information flow is obscured once we start passing callbacks around ("callback hell")
+  
+  "Solutions":
+  
+  - do not use callbacks
+  - for legacy APIs, implement adapters that convert callback API to a monadic DSL
+  
+  Main ideas of a monadic DSL:
+  
+  - a "DSL program" is a value of type F[A]; we will need to define the type constructor F
+  - values of type F[A] are combined using `flatMap : F[A] ⇒ (A ⇒ F[B]) ⇒ F[B]`
+  - actual computations are performed by "running" or "interpreting" the values of type F[A]
+  
+   */
 
   it should "read a file and copy its contents to another file, using NIO2 API" in {
     val fileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/src/test/resources/sample.txt"), StandardOpenOption.READ)
