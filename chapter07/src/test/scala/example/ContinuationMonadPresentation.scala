@@ -4,13 +4,11 @@ import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousFileChannel, CompletionHandler}
 import java.nio.file.{Paths, StandardOpenOption}
 
-import scala.concurrent.{Future, Promise}
-import scala.concurrent.ExecutionContext.Implicits.global
 import cats.syntax.functor._
-import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
 
-import scala.util.{Success, Try}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
 class ContinuationMonadPresentation extends FlatSpec with Matchers {
 
@@ -84,7 +82,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
       }
     }
 
-    Thread.sleep(100) // Uh... nothing else we could do here.
+    Thread.sleep(200) // Uh... nothing else we could do here.
     res shouldEqual 43
   }
 
@@ -109,7 +107,16 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     def const(x: Int)(k: Int ⇒ Unit): Unit = k(x)
 
     // We would like to take `const(10)` and `mul4(_)` and "compose" them. How?
-    val c10: RC[Int] = const(10)
+    val c10: (Int ⇒ Unit) ⇒ Unit = const(10)
+
+    /*
+    Examine the types:
+    The function const(10) registers a callback:
+    c10 : (Int ⇒ Unit) ⇒ Unit
+
+    Denote for brevity the "register callback" type by RC:
+    */
+    type RC[A] = (A ⇒ Unit) ⇒ Unit
 
     val step1: Int ⇒ RC[Int] = (x: Int) ⇒ mul4(x)
 
@@ -128,16 +135,10 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     /*
     What is needed for us to be able to implement the operation `@@` ?
 
-    Look at the types: The function const(10) registers a callback:
-    c10 : (Int ⇒ Unit) ⇒ Unit
-
-    Denote for brevity the "register callback" type by RC:
+    We have c10 : RC[Int] and step1: Int ⇒ RC[Int]
+    So, the operation @@ should have type signature (RC[Int], Int ⇒ RC[Int]) ⇒ RC[Int]
+    Let's implement it slightly more generally, with type parameters A and B:
     */
-    type RC[A] = (A ⇒ Unit) ⇒ Unit
-
-    // Then we have c10 : RC[Int] and step1: Int ⇒ RC[Int]
-    // So, the operation @@ should have type signature (RC[Int], Int ⇒ RC[Int]) ⇒ RC[Int]
-    // Let's implement it slightly more generally, with type parameters A and B:
 
     implicit class C1[A](rc: RC[A]) {
       def @@[B](f: A ⇒ RC[B]): RC[B] = { (cb: B ⇒ Unit) ⇒
@@ -158,7 +159,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
 
     extractValue(result) shouldEqual 43
 
-    // The type signature of @@ is exactly the same as that of `flatMap`.
+    // The type signature of @@ is similar to that of `flatMap`.
     // We also have a function `const` of type `Int ⇒ RC[Int]`, but we can easily generalize to `A ⇒ RC[A]`.
     // This type signature is that of `pure`.
     // Therefore, `RC` is a monad. This is called the *continuation monad*.
@@ -186,6 +187,19 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     extractValue(result2) shouldEqual 43
   }
 
+  /*
+  What we gained:
+
+  - we can compose API calls for APIs that register callbacks
+  - we have easy access to the *innermost* callback
+
+  ((A ⇒ 1) ⇒ 1)  @@ (A ⇒ (B ⇒ 1) ⇒ 1) : (B ⇒ 1) ⇒ 1
+    |                ^    ^              |
+    |                |    |              |
+    \_______________/     \_____________/
+
+   */
+
   it should "read a file and copy its contents to another file, using NIO2 callback API" in {
     val fileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/src/test/resources/sample.txt"), StandardOpenOption.READ)
 
@@ -200,7 +214,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
         buffer1.rewind()
         buffer1.limit(result1)
         // Copy to another file.
-        val outputFileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy1.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+        val outputFileChannel = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
         outputFileChannel.write(buffer1, 0, null, new CompletionHandler[Integer, Object] {
           override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to write file: $exc")
 
@@ -208,7 +222,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
             println(s"Wrote $result2 bytes")
             outputFileChannel.close()
             // Now read from the file and check that we copied the contents correctly.
-            val inputChannel = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy1.txt"), StandardOpenOption.READ)
+            val inputChannel = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.READ)
             val buffer2 = ByteBuffer.allocate(256)
             inputChannel.read(buffer2, 0, null, new CompletionHandler[Integer, Object] {
               override def failed(exc: Throwable, attachment: Object): Unit = println(s"Failed to read new file: $exc")
@@ -274,11 +288,11 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     val statusMonad: NioMonad[Boolean] = for {
       (buffer1a, result1a) ← nioRead(channel1)
 
-      channel2 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+      channel2 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy3.txt"), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
 
       _ ← nioWrite(buffer1a, channel2)
 
-      channel3 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy2.txt"), StandardOpenOption.READ)
+      channel3 = AsynchronousFileChannel.open(Paths.get("chapter07/target/sample-copy3.txt"), StandardOpenOption.READ)
 
       (buffer2a, result3a) ← nioRead(channel3)
     } yield {
@@ -348,8 +362,8 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
   }
 
   /*
-
   The return value R can also describe errors; see the "transaction monad" for an example of how that works.
+  The required type is (A ⇒ Future[R]) ⇒ Future[R].
 
   Conclusions:
 
