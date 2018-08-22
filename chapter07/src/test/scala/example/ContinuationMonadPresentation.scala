@@ -34,7 +34,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     }
 
     var res = 0
-
+    // Computation: 10 * 4 + 3 = 43
     const(10) { r1 ⇒
       mul4(r1) { r2 ⇒
         add3(r2) { r3 ⇒
@@ -140,7 +140,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     Let's implement it slightly more generally, with type parameters A and B:
     */
 
-    implicit class C1[A](rc: RC[A]) {
+    implicit class C1[A](rc: RC[A]) {  // RC[A] = (A ⇒ Unit) ⇒ Unit
       def @@[B](f: A ⇒ RC[B]): RC[B] = { (cb: B ⇒ Unit) ⇒
         rc(a ⇒ f(a)(cb))
       }
@@ -160,7 +160,8 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     extractValue(result) shouldEqual 43
 
     // The type signature of @@ is similar to that of `flatMap`.
-    // We also have a function `const` of type `Int ⇒ RC[Int]`, but we can easily generalize to `A ⇒ RC[A]`.
+    // We also have a function `const` of type `Int ⇒ RC[Int]`, 
+    // but we can easily generalize to `A ⇒ RC[A]`.
     // This type signature is that of `pure`.
     // Therefore, `RC` is a monad. This is called the *continuation monad*.
     // Let us implement the standard type signatures:
@@ -183,6 +184,13 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
       y ← mul4(x) _
       z ← add3(y) _
     } yield z
+    
+    /*
+    val result3 = for {
+    x <- result2
+    y <- add3(x) _
+    } yield ...
+     */
 
     extractValue(result2) shouldEqual 43
   }
@@ -194,8 +202,8 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
   - we have easy access to the *innermost* callback
 
   ((A ⇒ 1) ⇒ 1)  @@ (A ⇒ (B ⇒ 1) ⇒ 1) : (B ⇒ 1) ⇒ 1
-    |                ^    ^              |
-    |                |    |              |
+    |                 ^    ^               |
+    |                |    |               |
     \_______________/     \_____________/
 
    */
@@ -337,7 +345,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     // Lift some computations into this monad.
 
     // Addition costs $10.
-    def add3(x: Int): Cost[Int] = Cost[Int] { ca ⇒ ca(x + 3) }.addCost(10)
+    def add3(x: Int): Cost[Int] = Cost[Int] { ca ⇒ ca(x + 3) }
 
     // Multiplication costs $50. We can specify that later.
     def mul4(x: Int): Cost[Int] = Cost[Int] { ca ⇒ ca(x * 4) }
@@ -345,7 +353,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     // Define the computation.
 
     val result = for {
-      x ← pure(10)
+      x ← pure(10).addCost(10)
       y ← mul4(x).addCost(50) // Ad hoc assignment of cost.
       z ← add3(y)
     } yield z
@@ -378,7 +386,7 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
 
   Cost:
 
-  - all computations need to be "lifted into the monad type" before using them
+  - all computations or API need to be "lifted into the monad type" before using them
   - a "runner" or "interpreter" needs to be provided
 
   Benefits:
