@@ -6,6 +6,7 @@ import java.nio.file.{Paths, StandardOpenOption}
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import cats.syntax.functor._
+import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
 
 class ContinuationMonadPresentation extends FlatSpec with Matchers {
@@ -42,7 +43,9 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
     }
     res shouldEqual 43
   }
-  
+
+  // A callback API may return immediately and schedule the callback to be run later (or not at all!).
+
   it should "define functions that pass results via callbacks, and perform calculations asynchronously" in {
     def add3(x: Int)(k: Int ⇒ Unit): Unit = {
       Future {
@@ -77,11 +80,11 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
         }
       }
     }
-    
+
     Thread.sleep(100) // Uh... nothing else we could do here.
     res shouldEqual 43
   }
-  
+
   /*
   Problems with callbacks:
   
@@ -90,7 +93,97 @@ class ContinuationMonadPresentation extends FlatSpec with Matchers {
   - code is deeply nested, it is difficult to pass values from one place to another
   - callbacks are not composable: information is passed via side effects or mutable values 
   - information flow is obscured once we start passing callbacks around ("callback hell")
-  
+
+  */
+
+  // How could we make the callback API "composable"?
+
+  it should "make callback API composable" in {
+    def add3(x: Int)(k: Int ⇒ Unit): Unit = k(x + 3)
+
+    def mul4(x: Int)(k: Int ⇒ Unit): Unit = k(x * 4)
+
+    def const(x: Int)(k: Int ⇒ Unit): Unit = k(x)
+
+    // We would like to take `const(10)` and `mul4(_)` and "compose" them. How?
+    val c10: RC[Int] = const(10)
+
+    val step1: Int ⇒ RC[Int] = (x: Int) ⇒ mul4(x)
+
+    // Can we write `c40 = c10 @@ step1` to "compose" them, and the result should be the same as c40 here:
+    val c40: RC[Int] = const(40)
+    // In other words, x ⇒ mul4(x) means that we take x = 10 and apply mul4(_) to it.
+    // The operation `@@` should know that a function such as x ⇒ mul4(x) needs to operate on the previously computed x.
+
+    // So that later we can write
+    val step2: Int ⇒ RC[Int] = (x: Int) ⇒ add3(x)
+
+    // c43 = c40 @@ step2
+
+    val c43: RC[Int] = const(43)
+
+    /*
+    What is needed for us to be able to implement the operation `@@` ?
+
+    Look at the types: The function const(10) registers a callback:
+    c10 : (Int ⇒ Unit) ⇒ Unit
+
+    Denote for brevity the "register callback" type by RC:
+    */
+    type RC[A] = (A ⇒ Unit) ⇒ Unit
+
+    // Then we have c10 : RC[Int] and step1: Int ⇒ RC[Int]
+    // So, the operation @@ should have type signature (RC[Int], Int ⇒ RC[Int]) ⇒ RC[Int]
+    // Let's implement it slightly more generally, with type parameters A and B:
+
+    implicit class C1[A](rc: RC[A]) {
+      def @@[B](f: A ⇒ RC[B]): RC[B] = { (cb: B ⇒ Unit) ⇒
+        rc(a ⇒ f(a)(cb))
+      }
+    }
+
+    // Now the syntax works:
+
+    val result: RC[Int] = c10 @@ step1 @@ step2
+
+    // To test this, extract the value:
+    def extractValue(rc: RC[Int]): Int = {
+      var result = 0
+      rc(result = _)
+      result
+    }
+
+    extractValue(result) shouldEqual 43
+
+    // The type signature of @@ is exactly the same as that of `flatMap`.
+    // We also have a function `const` of type `Int ⇒ RC[Int]`, but we can easily generalize to `A ⇒ RC[A]`.
+    // This type signature is that of `pure`.
+    // Therefore, `RC` is a monad. This is called the *continuation monad*.
+    // Let us implement the standard type signatures:
+
+    def pure[A](a: A): RC[A] = { (ca: A ⇒ Unit) ⇒ ca(a) }
+
+    implicit class C2[A](rc: RC[A]) {
+      def map[B](f: A ⇒ B): RC[B] = { (cb: B ⇒ Unit) ⇒
+        rc(a ⇒ cb(f(a)))
+      }
+
+      def flatMap[B](f: A ⇒ RC[B]): RC[B] = { (cb: B ⇒ Unit) ⇒
+        rc(a ⇒ f(a)(cb))
+      }
+    }
+
+    // Now we can use the for/yield syntax:
+    val result2: RC[Int] = for {
+      x ← pure(10)
+      y ← mul4(x) _
+      z ← add3(y) _
+    } yield z
+
+    extractValue(result2) shouldEqual 43
+  }
+
+  /*
   "Solutions":
   
   - do not use callbacks
