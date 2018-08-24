@@ -31,7 +31,7 @@ Drawbacks of this implementation:
 // Convenience class to hold cleanup procedures.
 final case class TxCleanup(run: Unit ⇒ Unit) {
   // TxCleanup is a monoid: it has `combine` and `empty`.
-  // The order of cleanups is determined here: `c1 |+| c2` first runs `c1.run` and then `c2.run`. 
+  // The order of cleanups is determined here: `c1 |+| c2` first runs `c2.run` and then `c1.run`. 
   def |+|(c: TxCleanup): TxCleanup = TxCleanup(this.run andThen c.run)
 
   // Run the cleanup but catch and log errors.
@@ -86,7 +86,8 @@ object TxF {
   def step[A](step: Future[A])(implicit executionContext: ExecutionContext) = TxF(step.map(a ⇒ (a, TxCleanup.empty)))
 
   // Convenience method: create a `Tx` step from a future value (that may fail) and a cleanup function (that may also fail).
-  def stepWithCleanup[A](step: Future[A])(undo: A ⇒ Try[Unit])(implicit executionContext: ExecutionContext): TxF[A] = TxF(step.map(a ⇒ (a, TxCleanup(_ ⇒ TxCleanup.logFailure(undo(a))))))
+  def stepWithCleanup[A](step: Future[A])(undo: A ⇒ Try[Unit])(implicit executionContext: ExecutionContext): TxF[A] = 
+    TxF(step.map(a ⇒ (a, TxCleanup(_ ⇒ TxCleanup.logFailure(undo(a))))))
 }
 
 // Unit tests.
