@@ -4,14 +4,16 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.reflect.Manifest
 
+// A single entry of the map. It keeps the type `N` (existentially quantified) as type member. 
 trait HetTMEntry[K[_], V[_]] {
   type N
   val k: K[N]
   val v: V[N]
 }
 
+// Helper method to create values of type `HetTMEntry`.
 object HetTMEntry {
-  def apply[K[_], V[_], A](key: K[A], value: V[A])(implicit manif: Manifest[A]): HetTMEntry[K, V] = new HetTMEntry[K, V] {
+  def apply[K[_], V[_], A](key: K[A], value: V[A]): HetTMEntry[K, V] = new HetTMEntry[K, V] {
     type N = A
     val k: K[N] = key
     val v: V[N] = value
@@ -19,7 +21,11 @@ object HetTMEntry {
 
 }
 
-final case class HetTMap[K[_], V[_]](data: Map[(K[_], Manifest[_]), HetTMEntry[K, V]] = Map[(K[_], Manifest[_]), HetTMEntry[K, V]]()) {
+// Immutable map from `K[A]` to `V[A]`, where the type parameter `A` can be different for different map entries.
+// Uses standard Map() as data structure, with type parameters `Map[(K[_], Manifest[_]), HetTMEntry[K, V]]`.
+final case class HetTMap[K[_], V[_]](
+  data: Map[(K[_], Manifest[_]), HetTMEntry[K, V]] = Map[(K[_], Manifest[_]), HetTMEntry[K, V]]()
+) {
   // Fetch entry.
   def get[A](key: K[A])(implicit manifest: Manifest[A]): Option[V[A]] = {
     val k: (K[_], Manifest[_]) = (key, manifest)
@@ -38,6 +44,7 @@ final case class HetTMap[K[_], V[_]](data: Map[(K[_], Manifest[_]), HetTMEntry[K
     HetTMap[K, V](data - k)
   }
 
+  // Some standard convenience methods.
   def size: Int = data.size
 
   def isEmpty: Boolean = data.isEmpty
