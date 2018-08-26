@@ -4,38 +4,21 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.reflect.Manifest
 
-// A single entry of the map. It keeps the type `N` (existentially quantified) as type member. 
-trait HetTMEntry[K[_], V[_]] {
-  type N
-  val k: K[N]
-  val v: V[N]
-}
-
-// Helper method to create values of type `HetTMEntry`.
-object HetTMEntry {
-  def apply[K[_], V[_], A](key: K[A], value: V[A]): HetTMEntry[K, V] = new HetTMEntry[K, V] {
-    type N = A
-    val k: K[N] = key
-    val v: V[N] = value
-  }
-
-}
-
 // Immutable map from `K[A]` to `V[A]`, where the type parameter `A` can be different for different map entries.
 // Uses standard Map() as data structure, with type parameters `Map[(K[_], Manifest[_]), HetTMEntry[K, V]]`.
 final case class HetTMap[K[_], V[_]](
-  data: Map[(K[_], Manifest[_]), HetTMEntry[K, V]] = Map[(K[_], Manifest[_]), HetTMEntry[K, V]]()
+  data: Map[(K[_], Manifest[_]), V[_]] = Map[(K[_], Manifest[_]), V[_]]()
 ) {
   // Fetch entry.
   def get[A](key: K[A])(implicit manifest: Manifest[A]): Option[V[A]] = {
     val k: (K[_], Manifest[_]) = (key, manifest)
-    data.get(k).map(_.v.asInstanceOf[V[A]])
+    data.get(k).map(_.asInstanceOf[V[A]]) // Since we have manifest: Manifest[A], we are guaranteed that the erased type is A.
   }
 
   // Add/replace entry in map.
   def updated[A](key: K[A], value: V[A])(implicit manifest: Manifest[A]): HetTMap[K, V] = {
     val k: (K[_], Manifest[_]) = (key, manifest)
-    HetTMap[K, V](data.updated(k, HetTMEntry[K, V, A](key, value)))
+    HetTMap[K, V](data.updated(k,  value))
   }
 
   // Remove key from map.
