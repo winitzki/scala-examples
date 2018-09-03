@@ -1,8 +1,10 @@
 package example
 
-import cats.Functor
+import cats.{Applicative, Bifunctor, Bitraverse, Functor}
 import org.scalatest.{FlatSpec, Matchers}
 import cats.syntax.functor._
+import cats.syntax.bifunctor._
+import cats.syntax.bitraverse._
 import WuZip.WuZipSyntax
 import Trav.TravSyntax
 
@@ -20,12 +22,12 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
 
       // Check laws:
 
-      // Identity law: fmapL(F.pure) ◦ seq = F.pure.
-      // Since fmapL is the identity function, and seq = F.pure, the law is satisfied.
+      // Identity law: fmap_L(F.pure) ◦ seq = F.pure.
+      // Since fmap_L is the identity function, and seq = F.pure, the law is satisfied.
 
-      // Composition law: seq[F] ◦ fmapF(seq[G]) = seq[FG] where we denote FG[A] = F[G[A]].
-      // Since seq[F] = F.pure, we need F.pure andThen fmapF(G.pure) = (FG).pure
-      // But the definition of pure for FG is exactly F.pure andThen fmapF(G.pure).
+      // Composition law: seq[F] ◦ fmap_F(seq[G]) = seq[FG] where we denote FG[A] = F[G[A]].
+      // Since seq[F] = F.pure, we need F.pure andThen fmap_F(G.pure) = (FG).pure
+      // But the definition of pure for FG is exactly F.pure andThen fmap_F(G.pure).
       // So the composition law holds.
     }
   }
@@ -38,10 +40,10 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
 
     // Check laws:
 
-    // Identity law: fmapL(F.pure) ◦ seq = F.pure.
-    // Since fmapL is the identity function, and seq = id, the law is satisfied.
+    // Identity law: fmap_L(F.pure) ◦ seq = F.pure.
+    // Since fmap_L is the identity function, and seq = id, the law is satisfied.
 
-    // Composition law: seq[F] ◦ fmapF(seq[G]) = seq[FG]
+    // Composition law: seq[F] ◦ fmap_F(seq[G]) = seq[FG]
     // Since seq[anything] = id, the law is about composition of identity functions being identity.
     // So the composition law holds.
   }
@@ -63,7 +65,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
 
       // Check laws:
 
-      // Identity law: fmapL(F.pure[A]) ◦ seq = F.pure[L[A]]
+      // Identity law: fmap_L(F.pure[A]) ◦ seq = F.pure[L[A]]
       /*
         Substitute the code of fmap_L:
         fmap_L(F.pure)((l1a, l2a)) = (fmap_L(F.pure)(l1a), fmap_L(F.pure)(l2a))  
@@ -140,7 +142,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       Substitute the code of fmap_L and apply to some Left(l1a) : L[A]
        -- it is enough to consider Left() since the code for Right(l2a) is symmetrically similar.
        
-      fmapL(F.pure)(Left(l1a)) = Left(l1a map F.pure): L[F[A]]
+      fmap_L(F.pure)(Left(l1a)) = Left(l1a map F.pure): L[F[A]]
       
       Then apply seq to this and get
       
@@ -189,5 +191,64 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
      */
   }
 
+  it should "derive traversable for recursive functor" in {
+    def withParam[S[_, _] : Bifunctor : Bitraverse](): Unit = {
+      final case class L[A](s: S[A, L[A]])
+
+      implicit val functorL: Functor[L] = new Functor[L] {
+        override def map[A, B](fa: L[A])(f: A ⇒ B): L[B] =
+          L(fa.s.bimap(f, map(_)(f)))
+      }
+
+      implicit val travL: Trav[L] = new Trav[L] {
+        override def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = {
+          // Adapt to cats.Applicative, so that we can use `bisequence`.
+          implicit val applicativeF: Applicative[F] = WuZip.toCatsApplicative[F]
+          // First, convert S[F[A], L[F[A]]] into S[F[A], F[L[A]]].
+          val f: S[F[A], F[L[A]]] = lfa.s.bimap(identity[F[A]], { xlfa: L[F[A]] ⇒ seq[F, A](xlfa) })
+          val g: F[S[A, L[A]]] = f.bisequence
+          // Convert to F[L[A]] by wrapping in the case class L.
+          g.map(L.apply)
+        }
+      }
+    }
+
+    // Check laws:
+
+    // Identity law: fmap_L(F.pure[A]) ◦ seq = F.pure[L[A]]
+    /*
+      Substitute the code of fmap_L and apply to some s: S[A, L[A]].
+       
+      fmap_L(F.pure)(s) = s.bimap(F.pure, fmap_L(F.pure)): L[F[A]]
+      
+      Then apply seq to this and get (omitting the wrapping and unwrapping in the case class L)
+      
+      s.bimap(F.pure, fmap_L(F.pure)).bimap(id, seq)
+        = s.bimap(F.pure, fmap_L(F.pure) andThen seq).biseq
+        
+      By the inductive assumption we already have map_L(F.pure) andThen seq = F.pure in the second argument of bimap.
+      So we have s.bimap(F.pure, F.pure).biseq and we assume that
+      the identity law holds for S[_, _], so this becomes F.pure(s),
+      i.e. the same as the right-hand side of the identity law.
+     */
+
+    // Composition law: seq_L[F] ◦ fmap_F(seq_L[G]) = seq_L[FG]
+    /*
+      Apply both sides to some s: S[F[G[A]], L[F[G[A]]]]. We get
+            
+      sfga.bimap(id, seq_L[F]).biseq.map_F(seq_L[G]) ?=? sfga.bimap(id, seq_L[FG]).biseq[FG]
+      
+      We assume that the composition law already holds for S[F[G[X]], F[G[Y]]]:
+      
+      sfgxy.biseq[F].map_F(biseq[G]) = sfgxy.biseq[FG]
+      
+      Substitute sfgxy = sfga.bimap(id, seq_L[F]) and get
+            
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(biseq[G]) = sfga.bimap(id, seq_L[F]).biseq[FG]
+      ???
+      
+      Therefore the composition law holds for L.
+     */
+  }
 
 }
