@@ -7,6 +7,7 @@ import cats.syntax.bifunctor._
 import cats.syntax.bitraverse._
 import WuZip.WuZipSyntax
 import Trav.TravSyntax
+import io.chymyst.ch._
 
 class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
 
@@ -265,7 +266,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       sfga.bimap(id, seq_L[F]).biseq[F].map_F(bimap(id, seq_L[G])) ?=? sfga.bimap(id, seq_L[F] ◦ fmap_F(seq_L[G])).biseq[F]
       
       We now need to interchange the order of bimap and biseq; for this,
-      we need to use the naturality of biseq: S[F[X], F[Y]] ⇒ F[S[X, Y]] as
+      we have to use the naturality of biseq: S[F[X], F[Y]] ⇒ F[S[X, Y]] as
       
       sfxy.biseq.map_F(bimap(f, g)) = sfxy.bimap(fmap_F(f), fmap_F(g)).biseq
       
@@ -281,4 +282,26 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
      */
   }
 
+  it should "show that contrafunctors cannot traverse contrafunctors" in {
+    def withParam[R, S](): Unit = {
+      type L1[A] = A ⇒ R // Non-traversable contrafunctor.
+      type L2[A] = Option[A] // Traversable functor.
+      type F1[A] = A ⇒ Option[S] // Applicative contrafunctor.
+      type F2[A] = (R ⇒ A) ⇒ Option[S] // Applicative contrafunctor.
+
+      def seqs1[A] = allOfType[L1[F1[A]] ⇒ F1[L1[A]]]()
+      
+      seqs1.length shouldEqual 1
+      // The only implementation ignores all effects and returns a pure F1.
+      seqs1.head.lambdaTerm.prettyPrint shouldEqual "a ⇒ b ⇒ (None() + 0)"
+
+      def seqs2[A] = allOfType[L2[F2[A]] ⇒ F2[L2[A]]]()
+
+      seqs2.length shouldEqual 1
+      // The only implementation ignores all effects and returns a pure F2.
+      seqs2.head.lambdaTerm.prettyPrint shouldEqual "a ⇒ b ⇒ (None() + 0)"
+    }
+
+    withParam()
+  }
 }
