@@ -65,35 +65,35 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
 
       // Identity law: fmapL(F.pure[A]) ◦ seq = F.pure[L[A]]
       /*
-        Substitute the code of fmapL:
-        fmapL(F.pure)((l1a, l2a)) = (fmapL(F.pure)(l1a), fmapL(F.pure)(l2a))  
+        Substitute the code of fmap_L:
+        fmap_L(F.pure)((l1a, l2a)) = (fmap_L(F.pure)(l1a), fmap_L(F.pure)(l2a))  
         Then apply seq to this:
         
-        fmapL(F.pure)(l1a).seq zip fmapL(F.pure)(l2a).seq
+        fmap_L1(F.pure)(l1a).seq zip fmap_L2(F.pure)(l2a).seq
         
-        Since the law holds for L1[_] and L2[_], we have fmapL(F.pure)(l1a).seq = F.pure[L1[A]]
+        Since the law holds for L1[_] and L2[_], we have
+          fmap_L1(F.pure)(l1a).seq = F.pure(l1a)
         and similarly for L2. Therefore we have F.pure(l1a) zip F.pure(l2a).
         The identity laws of applicative now say that this equals F.pure( (l1a, l2a) ).
-        This is the same as F.pure[L[A]].       
-        
+        This is the same as F.pure[L[A]]( (l1a, l2a) ).
        */
 
-      // Composition law: seq_L[F] ◦ fmapF(seq_L[G]) = seq_L[FG]
+      // Composition law: seq_L[F] ◦ fmap_F(seq_L[G]) = seq_L[FG]
       /*
         Apply both sides to some (l1fga, l2fga): L[F[G[A]]].
         After applying seq_L[F], this becomes
         
           l1fga.seq[F] zip_F l2fga.seq[F] : F[ (L1[G[A]], L2[G[A]]) ].
         
-        Now we need to apply fmapF(seq[G]) to that.
+        Now we need to apply fmap_F(seq[G]) to that.
         
         seq_L[G] acts on some (l1ga, l2ga) and gives l1ga.seq zip_G l2ga.seq
         
-        However, we need to lift this to act on F[L[G[A]]]. We use the definition of of zip_FG,
+        However, we need to lift this to act on F[L[G[A]]]. We use the definition of zip_FG:
         
         fmap_F( (gx, gy) ⇒ gx zip_G gy ) (fgx zip_F fgy) = fgx zip_FG fgy  
         
-        then use naturality of zip to transform gx and gy,
+        then use naturality of zip to transform gx and gy using some functions p and q:
         
         fmap_F( (gx, gy) ⇒ p(gx) zip_G q(gy)) ) (fgx zip_F fgy) = fgx.map(p) zip_FG fgy.map(q)  
          
@@ -109,10 +109,85 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
         We assume that the composition law already holds for L1: l1fga.seq[F].map(_.seq[G]) = l1fga.seq[FG].
         Similarly for L2.
         
-        Therefore the composition law holds for L.  
+        Therefore the composition law holds for L.
        */
-      
     }
   }
+
+  it should "derive traversable for functor disjunction" in {
+    def withParam[L1[_] : Trav : Functor, L2[_] : Trav : Functor](): Unit = {
+      type L[A] = Either[L1[A], L2[A]]
+
+      implicit val functorL: Functor[L] = new Functor[L] {
+        override def map[A, B](fa: L[A])(f: A ⇒ B): L[B] = fa match {
+          case Left(l1a) ⇒ Left(l1a map f)
+          case Right(l2a) ⇒ Right(l2a map f)
+        }
+      }
+
+      implicit val travL: Trav[L] = new Trav[L] {
+        override def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = lfa match {
+          case Left(l1fa) ⇒ l1fa.seq map Left.apply
+          case Right(l2fa) ⇒ l2fa.seq map Right.apply
+        }
+      }
+    }
+
+    // Check laws:
+
+    // Identity law: fmap_L(F.pure[A]) ◦ seq = F.pure[L[A]]
+    /*
+      Substitute the code of fmap_L and apply to some Left(l1a) : L[A]
+       -- it is enough to consider Left() since the code for Right(l2a) is symmetrically similar.
+       
+      fmapL(F.pure)(Left(l1a)) = Left(l1a map F.pure): L[F[A]]
+      
+      Then apply seq to this and get
+      
+      seq_L1(l1a map F.pure).map(Left.apply)
+      
+      Since the law holds for L1[_] , we have seq_L1(l1a map F.pure) = F.pure(l1a)
+      Therefore we have F.pure(l1a).map(Left.apply) = F.pure[L[A]](Left(l1a)).
+      
+      This is the same as the right-hand side of the identity law.
+     */
+
+    // Composition law: seq_L[F] ◦ fmap_F(seq_L[G]) = seq_L[FG]
+    /*
+      Apply both sides to some Left(l1fga): L[F[G[A]]].
+      After applying seq_L[F], this becomes
+      
+        seq_L1(l1fga) map Left.apply: F[L[G[A]]]
+      
+      Now we need to apply fmap_F(seq_L[G]) to that; we can combine the two .map_F() calls:
+      
+        seq_L1(l1fga).map_F(l1ga ⇒ seq_L[G](Left(l1ga)))
+      
+      seq_L[G] acts on Left(l1ga) and gives l1ga.seq map_G Left.apply
+      
+      So we get
+        seq_L1(l1fga).map_F(l1ga ⇒ l1ga.seq map_G Left.apply)
+      
+      We assume that the composition law already holds for L1, so
+      
+        seq_L1[F] ◦ fmap_F(seq_L1[G]) = seq_L1[FG]
+      
+      in other words
+      
+        seq_L1[F](l1fga) map_F (l1ga ⇒ l1ga.seq) = seq_L1[FG](l1fga)
+      
+      However, we need to lift this to act on F[L[G[A]]]. We use naturality of seq_L and
+      apply fmap_FG(Left.apply) at the right-hand side, to get seq_L[FG](Left(l1fga)).
+      By definition of fmap_FG, it is fmap_F(fmap_G(Left.apply)); so, put this into the left-hand side:
+      
+        seq_L1[F](l1fga) map_F (l1ga ⇒ l1ga.seq) map_F(gl1a ⇒ gl1a.map_G(Left.apply))
+        = seq_L1[F](l1fga) map_F (l1ga ⇒ l1ga.seq map_G Left.apply)
+      
+      This is exactly our left-hand side of the composition law computed previously.
+      The code is symmetric with respect to L1 or L2.
+      Therefore the composition law holds for L.
+     */
+  }
+
 
 }
