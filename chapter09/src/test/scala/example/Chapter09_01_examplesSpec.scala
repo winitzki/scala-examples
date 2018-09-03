@@ -97,7 +97,7 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
     the[java.lang.StackOverflowError] thrownBy seq[F, Int](infList) should have message null
   }
 
-  it should "show that we cannot have an inverse to `seq`" in {
+  it should "show that we cannot have `unseq`: F[L[A]] ⇒ L[F[A]]" in {
     type L[A] = Either[Int, A] // Traversable.
     type F[A] = Int ⇒ A // Applicative.
     
@@ -105,4 +105,15 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
     
     unseqs.length shouldEqual 0 // No implementations for this type signature.
   }
+  
+  it should "implement seq in another way for A × A × A" in{
+    type L[A] = (A, A, A)
+
+    def seq[F[_] : WuZip : Functor, A]: L[F[A]] ⇒ F[L[A]] = {
+      case (fa1, fa2, fa3) ⇒
+        // Arbitrarily select the zipping order as (2, 3, 1).
+        fa2 zip fa1 zip fa1 map { case ((x, y), z) ⇒ (x, y, z) }
+    }
+  }
+  
 }
