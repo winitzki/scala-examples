@@ -1,5 +1,8 @@
 package example
 
+import WuZip.WuZipSyntax
+import cats.Functor
+import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
 import io.chymyst.ch._
 
@@ -7,15 +10,44 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
 
   behavior of "traversable functors"
 
+  it should "implement `sequence` for A × A × A" in {
+    type L[A] = (A, A, A)
+
+    def seq[F[_] : WuZip : Functor, A]: L[F[A]] ⇒ F[L[A]] = {
+      case (fa1, fa2, fa3) ⇒
+        fa1 zip fa2 zip fa3 map { case ((x, y), z) ⇒ (x, y, z) }
+    }
+  }
+
+  it should "implement `sequence` for Either" in {
+    def seq[F[_] : WuZip : Functor, A, Z](t: Either[Z, F[A]]): F[Either[Z, A]] = t match {
+      case Right(fa) ⇒ fa.map(Right.apply)
+      case Left(z) ⇒ WuZip[F].pure(Left(z))
+    }
+  }
+
+  it should "implement `sequence` for a tree" in {
+    sealed trait Tree[A]
+    final case class Leaf[A](x: A) extends Tree[A]
+    final case class Branch[A](left: Tree[A], right: Tree[A]) extends Tree[A]
+
+    def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
+      case Leaf(fa) ⇒ fa.map(Leaf.apply)
+      case Branch(left, right) ⇒
+        seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
+    }
+  }
+
   it should "show that non-polynomial functors are not traversable" in {
     def useTypeParams[E, R](): Unit = {
-
       type L[A] = E ⇒ A // Non-polynomial functor.
       type F[A] = Option[A] // Applicative functor.
 
       def seqs[A] = allOfType[L[F[A]] ⇒ F[L[A]]]
 
-      seqs.length shouldEqual 1 // There are no implementations of this type signature.
+      seqs.length shouldEqual 1
+      // There is one implementation of this type signature,
+      // but it always returns `None`.
       seqs.head.lambdaTerm.prettyPrint shouldEqual "a ⇒ (None() + 0)"
 
       type F2[A] = (A, A) // Another applicative functor.
@@ -37,5 +69,40 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     useTypeParams()
+  }
+
+  it should "show that infinite list is not traversable" in {
+    final case class InfList[A](head: A, tail: () ⇒ InfList[A]) // `tail` is lazy
+
+    // Try to define `seq` for `InfList`:
+    def seq[F[_] : WuZip : Functor, A](infList: InfList[F[A]]): F[InfList[A]] = {
+      infList.head zip seq[F, A](infList.tail()) map { case (head, tail) ⇒ InfList(head, () ⇒ tail) }
+    }
+    // But this is infinite recursion!
+
+    type F[A] = A
+    implicit val functorId: Functor[F] = new Functor[F] {
+      override def map[A, B](fa: F[A])(f: A => B): F[B] = f(fa)
+    }
+
+    implicit val wuZipId: WuZip[F] = new WuZip[F]() {
+      override def wu: F[Unit] = ()
+
+      override def zip[A, B](fa: F[A], fb: F[B]): (A, B) = (fa, fb)
+    }
+
+    def infList: InfList[Int] = InfList(123, () ⇒ infList) // Infinite list: 123, 123, 123, ...
+
+    // Try using `seq` on this value, get a stack overflow exception:
+    the[java.lang.StackOverflowError] thrownBy seq[F, Int](infList) should have message null
+  }
+
+  it should "show that we cannot have an inverse to `seq`" in {
+    type L[A] = Either[Int, A] // Traversable.
+    type F[A] = Int ⇒ A // Applicative.
+    
+    def unseqs[A] = allOfType[F[L[A]] ⇒ L[F[A]]]
+    
+    unseqs.length shouldEqual 0 // No implementations for this type signature.
   }
 }
