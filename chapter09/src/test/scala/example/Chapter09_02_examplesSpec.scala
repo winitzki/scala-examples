@@ -236,16 +236,46 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
     /*
       Apply both sides to some s: S[F[G[A]], L[F[G[A]]]]. We get
             
-      sfga.bimap(id, seq_L[F]).biseq.map_F(seq_L[G]) ?=? sfga.bimap(id, seq_L[FG]).biseq[FG]
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(sga ⇒ sga.bimap(id, seq_L[G]).biseq[G])) ?=? sfga.bimap(id, seq_L[FG]).biseq[FG]   (*)
       
-      We assume that the composition law already holds for S[F[G[X]], F[G[Y]]]:
+      We assume that the composition law already holds for the bitraversable bifunctor S,
+      so with any sfgxy : S[F[G[X]], F[G[Y]]],
       
-      sfgxy.biseq[F].map_F(biseq[G]) = sfgxy.biseq[FG]
+        sfgxy.biseq[F].map_F(biseq[G]) = sfgxy.biseq[FG]
       
-      Substitute sfgxy = sfga.bimap(id, seq_L[F]) and get
+      To get a value of the type S[F[G[X]], F[G[Y]]] out of s: S[F[G[A]], L[F[G[A]]]], we need
+      to use some bimap and also use seq_L recursively with respect to the second type argument of S.  
+      
+      So, substitute sfgxy := sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])) with X = A and Y = L[A], and get
             
-      sfga.bimap(id, seq_L[F]).biseq[F].map_F(biseq[G]) = sfga.bimap(id, seq_L[F]).biseq[FG]
-      ???
+      sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[F].map_F(biseq[G]) = sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[FG]
+      
+      We may assume, by induction, that the composition law for seq_L already holds
+      with respect to the second type argument of S. So we can rewrite the r.h.s. of the above equation,
+
+      sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[F].map_F(biseq[G]) = sfga.bimap(id, seq_L[FG]).biseq[FG]
+      
+      The r.h.s. is the same as the r.h.s. of eq. (*) above.
+      So, to demontrate eq.(*), it remains to show that
+      
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(sga ⇒ sga.bimap(id, seq_L[G]).biseq[G]) ?=? sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[F].map_F(biseq[G])
+      
+      We can omit the trailing .map_F(biseq[G]) from both sides of the equation:
+
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(bimap(id, seq_L[G])) ?=? sfga.bimap(id, seq_L[F] ◦ fmap_F(seq_L[G])).biseq[F]
+      
+      We now need to interchange the order of bimap and biseq; for this,
+      we need to use the naturality of biseq: S[F[X], F[Y]] ⇒ F[S[X, Y]] as
+      
+      sfxy.biseq.map_F(bimap(f, g)) = sfxy.bimap(fmap_F(f), fmap_F(g)).biseq
+      
+      This gives
+      
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(bimap(id, seq_L[G]))
+        = sfga.bimap(id, seq_L[F]).bimap(id, fmap_F(seq_L[G])).biseq[F]
+        = sfga.bimap(id, seq_L[F] ◦ fmap_F(seq_L[G])).biseq[F]
+      
+      Now both parts of the equation are the same.
       
       Therefore the composition law holds for L.
      */
