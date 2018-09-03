@@ -13,6 +13,7 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
   it should "implement `sequence` for A × A × A" in {
     type L[A] = (A, A, A)
 
+    // seq: (F[A], F[A], F[A]) ⇒ F[(A, A, A)]
     def seq[F[_] : WuZip : Functor, A]: L[F[A]] ⇒ F[L[A]] = {
       case (fa1, fa2, fa3) ⇒
         fa1 zip fa2 zip fa3 map { case ((x, y), z) ⇒ (x, y, z) }
@@ -20,6 +21,7 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
   }
 
   it should "implement `sequence` for Either" in {
+    // seq: Either[Z, F[A]] ⇒ F[Either[Z, A]]
     def seq[F[_] : WuZip : Functor, A, Z](t: Either[Z, F[A]]): F[Either[Z, A]] = t match {
       case Right(fa) ⇒ fa.map(Right.apply)
       case Left(z) ⇒ WuZip[F].pure(Left(z))
@@ -104,11 +106,13 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
     def unseqs[A] = allOfType[F[L[A]] ⇒ L[F[A]]]
     
     unseqs.length shouldEqual 0 // No implementations for this type signature.
+    // Can't map Int ⇒ Z + A into Z + (Int ⇒ A) because we can't extract a Z out of Int ⇒ Z + A.
   }
   
   it should "implement seq in another way for A × A × A" in{
     type L[A] = (A, A, A)
 
+    // seq: (F[A], F[A], F[A]) ⇒ F[(A, A, A)]
     def seq[F[_] : WuZip : Functor, A]: L[F[A]] ⇒ F[L[A]] = {
       case (fa1, fa2, fa3) ⇒
         // Arbitrarily select the zipping order as (2, 3, 1).
