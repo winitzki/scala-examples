@@ -56,7 +56,8 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       implicit val functorL: Functor[L] = new Functor[L] {
         override def map[A, B](fa: (L1[A], L2[A]))(f: A ⇒ B): (L1[B], L2[B]) = (fa._1 map f, fa._2 map f)
       }
-
+      
+      // L1[F[A]] × L2[F[A]] ⇒ F[L1[A]] × F[L2[A]]) ⇒ F[L1[A] × L2[A]]
       implicit val travL: Trav[L] = new Trav[L] {
         override def seq[F[_] : WuZip : Functor, A](lfa: (L1[F[A]], L2[F[A]])): F[(L1[A], L2[A])] = {
           Trav[L1].seq[F, A](lfa._1) zip Trav[L2].seq[F, A](lfa._2)
@@ -128,6 +129,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
         }
       }
 
+      // L1[F[A]] + L2[F[A]] ⇒ F[L1[A]] + F[L2[A]]) ⇒ F[L1[A] + L2[A]]
       implicit val travL: Trav[L] = new Trav[L] {
         override def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = lfa match {
           case Left(l1fa) ⇒ l1fa.seq map Left.apply
@@ -201,6 +203,8 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
           L(fa.s.bimap(f, map(_)(f)))
       }
 
+      // L[A] = S[A, L[A]]
+      // S[F[A], L[F[A]] ⇒ S[F[A], F[L[A]]] ⇒ F[S[A, L[A]]
       implicit val travL: Trav[L] = new Trav[L] {
         override def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = {
           // Adapt to cats.Applicative, so that we can use `bisequence`.
@@ -282,7 +286,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
      */
   }
 
-  it should "show that contrafunctors cannot traverse contrafunctors" in {
+  it should "show that contrafunctors can traverse contrafunctors but must ignore effects" in {
     def withParam[R, S](): Unit = {
       type L1[A] = A ⇒ R // Non-traversable contrafunctor.
       type L2[A] = Option[A] // Traversable functor.
