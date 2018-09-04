@@ -6,6 +6,8 @@ import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
 import io.chymyst.ch._
 
+import scala.annotation.tailrec
+
 class Chapter_02_exercises extends FlatSpec with Matchers {
 
   behavior of "exercises"
@@ -16,12 +18,16 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
       var resultB: B = null.asInstanceOf[B]
 
       val threadA = new Thread {
-        resultA = a
+        override def run(): Unit = {
+          resultA = a
+        }
       }
       threadA.start()
 
       val threadB = new Thread {
-        resultB = b
+        override def run(): Unit = {
+          resultB = b
+        }
       }
       threadB.start()
 
@@ -37,20 +43,30 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
   }
 
   it should "implement exercise 2" in {
-    def periodically(duration: Long)(b: ⇒ Unit): Unit = {
-      new Thread {
-        while (true) {
-          b
-          Thread.sleep(duration)
+    def periodically(duration: Long)(b: ⇒ Unit): Thread = {
+      val t = new Thread {
+        override def run(): Unit = {
+          while (true) {
+            b
+            Thread.sleep(duration)
+          }
         }
-      }.start()
+      }
+      t.start()
+      t
     }
 
     var x = 0
-    periodically(100) {
+    var time = System.currentTimeMillis()
+    val t = periodically(100) {
       x += 1
-      println(s"new value is $x")
+      val currentTime = System.currentTimeMillis()
+      val elapsed = currentTime - time
+      time = currentTime
+      println(s"new value is $x after time $elapsed")
     }
+    Thread.sleep(1000)
+    t.interrupt()
   }
 
   class SyncVar[A] {
@@ -65,14 +81,16 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     }
 
     def put(a: A): Unit = this.synchronized {
-      if (x != null) throw new Exception("cannot put because x is not empty") 
-      else if (a == null) throw new Exception("cannot put a null value") 
+      if (x != null) throw new Exception("cannot put because x is not empty")
+      else if (a == null) throw new Exception("cannot put a null value")
       else x = a
     }
 
-    def isEmpty: Boolean = (x == null)
+    def isEmpty: Boolean =
+      x == null
 
-    def nonEmpty: Boolean = (x != null)
+    def nonEmpty: Boolean =
+      x != null
   }
 
   it should "implement exercise 3" in {
@@ -83,6 +101,37 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     s.get shouldEqual 1
     the[Exception] thrownBy s.get should have message "cannot get because x is empty"
   }
+
+  // Helper functions to work with a SyncVar, using busy wait.
+  @tailrec
+  final def busyPut[A](s: SyncVar[A], x: A): Unit =
+    try s.put(x) catch {
+      case e: Exception ⇒ busyPut(s, x)
+    }
+
+  @tailrec
+  final def busyGet[A](s: SyncVar[A]): A =
+    try s.get catch {
+      case e: Exception ⇒ busyGet(s)
+    }
+
   it should "implement exercise 4" in {
+    val s = new SyncVar[Int]
+
+    val producerThread = new Thread {
+      override def run(): Unit = {
+        (0 until 15).foreach(busyPut(s, _))
+      }
+    }
+
+    val consumerThread = new Thread {
+      override def run(): Unit = {
+        while (true) println(s"Got value: ${busyGet(s)}")
+      }
+    }
+    consumerThread.start() // Threads can start in any order.
+    producerThread.start()
+    Thread.sleep(1000)
   }
+
 }
