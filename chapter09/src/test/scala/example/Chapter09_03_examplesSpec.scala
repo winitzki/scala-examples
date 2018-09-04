@@ -124,21 +124,6 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     result.run(1).value._2 shouldEqual Branch(Branch(Leaf(("a", 1)), Branch(Leaf(("b", 2)), Leaf(("c", 3)))), Leaf(("d", 4)))
   }
 
-  it should "decorate a tree with level labels" in {
-
-    implicit val travTree: Trav[Tree] = new Trav[Tree] {
-      override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
-        case Leaf(fa) ⇒ fa.map(Leaf.apply)
-        case Branch(left, right) ⇒
-          seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
-      }
-    }
-
-    val result: S[Tree[(String, Int)]] = t2.trav[S, (String, Int)](label ⇒ makeLabel.map((label, _)))
-    // Run the State monad.
-    result.run(1).value._2 shouldEqual Branch(Branch(Leaf(("a", 1)), Branch(Leaf(("b", 2)), Leaf(("c", 3)))), Leaf(("d", 4)))
-  }
-
   it should "implement scanMap and scanLeft for traversable" in {
     // A method analogous to foldMap.
     def scanMap[L[_] : Trav : Functor, Z: Monoid, A](la: L[A])(f: A ⇒ Z): L[Z] = {
