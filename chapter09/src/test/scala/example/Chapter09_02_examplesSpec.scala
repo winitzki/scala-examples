@@ -18,15 +18,16 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       type L[A] = Z
 
       // Constant functor: L[A] = Z; L[F[A]] = Z; F[L[A]] = F[Z];
-      // need Z ⇒ F[Z], which is F.pure.
+      // need Z ⇒ F[Z], which is F.pure
       def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = WuZip[F].pure(lfa)
 
       // Check laws:
 
-      // Identity law: fmap_L(F.pure) ◦ seq = F.pure.
+      // Identity law: fmap_L(F.pure) ◦ seq = F.pure
       // Since fmap_L is the identity function, and seq = F.pure, the law is satisfied.
 
-      // Composition law: seq[F] ◦ fmap_F(seq[G]) = seq[FG] where we denote FG[A] = F[G[A]].
+      // Composition law: seq[F] ◦ fmap_F(seq[G]) = seq[FG]
+      // where we denote FG[A] = F[G[A]].
       // Since seq[F] = F.pure, we need F.pure andThen fmap_F(G.pure) = (FG).pure
       // But the definition of pure for FG is exactly F.pure andThen fmap_F(G.pure).
       // So the composition law holds.
@@ -37,11 +38,11 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
     type L[A] = A
 
     // Identity functor: Id[F[A]] ⇒ F[Id[A]] is the identity function.
-    def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = lfa
+    def seq[F[_] : WuZip : Functor, A]: L[F[A]] ⇒ F[L[A]] = identity
 
     // Check laws:
 
-    // Identity law: fmap_L(F.pure) ◦ seq = F.pure.
+    // Identity law: fmap_L(F.pure) ◦ seq = F.pure
     // Since fmap_L is the identity function, and seq = id, the law is satisfied.
 
     // Composition law: seq[F] ◦ fmap_F(seq[G]) = seq[FG]
@@ -70,7 +71,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       // Identity law: fmap_L(F.pure[A]) ◦ seq = F.pure[L[A]]
       /*
         Substitute the code of fmap_L:
-        fmap_L(F.pure)((l1a, l2a)) = (fmap_L(F.pure)(l1a), fmap_L(F.pure)(l2a))  
+        fmap_L(F.pure)((l1a, l2a)) = (fmap_L1(F.pure)(l1a), fmap_L2(F.pure)(l2a))
         Then apply seq to this:
         
         fmap_L1(F.pure)(l1a).seq zip fmap_L2(F.pure)(l2a).seq
@@ -78,7 +79,8 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
         Since the law holds for L1[_] and L2[_], we have
           fmap_L1(F.pure)(l1a).seq = F.pure(l1a)
         and similarly for L2. Therefore we have F.pure(l1a) zip F.pure(l2a).
-        The identity laws of applicative now say that this equals F.pure( (l1a, l2a) ).
+        The identity laws of applicative now say that
+        this equals F.pure( (l1a, l2a) ).
         This is the same as F.pure[L[A]]( (l1a, l2a) ).
        */
 
@@ -89,28 +91,30 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
         
           l1fga.seq[F] zip_F l2fga.seq[F] : F[ (L1[G[A]], L2[G[A]]) ].
         
-        Now we need to apply fmap_F(seq[G]) to that.
+        Now we need to apply fmap_F(seq_L[G]) to that.
         
         seq_L[G] acts on some (l1ga, l2ga) and gives l1ga.seq zip_G l2ga.seq
         
-        However, we need to lift this to act on F[L[G[A]]]. We use the definition of zip_FG:
+        However, we need to lift this to act on F[L[G[A]]]. We use the definition of zip_FG: for any fgx: F[G[X]], fgy: F[G[Y]],
         
         fmap_F( (gx, gy) ⇒ gx zip_G gy ) (fgx zip_F fgy) = fgx zip_FG fgy  
         
         then use naturality of zip to transform gx and gy using some functions p and q:
         
-        fmap_F( (gx, gy) ⇒ p(gx) zip_G q(gy)) ) (fgx zip_F fgy) = fgx.map(p) zip_FG fgy.map(q)  
+        fmap_F( (gx, gy) ⇒ p(gx) zip_G q(gy)) ) (fgx zip_F fgy) = fgx.map(p) zip_FG fgy.map(q)
          
         and finally obtain
         
-        fmap_F(seq_L[G]) ( l1fga.seq[F] zip_F l2fga.seq[F] ) = l1fga.seq[F].map(_.seq[G]) zip_FG l2fga.seq[F].map(_.seq[G])
+        fmap_F(seq_L[G]) ( l1fga.seq[F] zip_F l2fga.seq[F] )
+          = l1fga.seq[F].map(_.seq[G]) zip_FG l2fga.seq[F].map(_.seq[G])
         
         This is the left-hand side of the composition law. The right-hand side is
         
         l1fga.seq[FG] zip_FG l2fga.seq[FG]
         
         The definition of seq[FG] on L1 is the code of seq applied to the applicative functor FG.
-        We assume that the composition law already holds for L1: l1fga.seq[F].map(_.seq[G]) = l1fga.seq[FG].
+        We assume that the composition law already holds for L1:
+          l1fga.seq[F].map(_.seq[G]) = l1fga.seq[FG]
         Similarly for L2.
         
         Therefore the composition law holds for L.
@@ -129,7 +133,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
         }
       }
 
-      // L1[F[A]] + L2[F[A]] ⇒ F[L1[A]] + F[L2[A]]) ⇒ F[L1[A] + L2[A]]
+      // L1[F[A]] + L2[F[A]] ⇒ F[L1[A]] + F[L2[A]] ⇒ F[L1[A] + L2[A]]
       implicit val travL: Trav[L] = new Trav[L] {
         override def seq[F[_] : WuZip : Functor, A](lfa: L[F[A]]): F[L[A]] = lfa match {
           case Left(l1fa) ⇒ l1fa.seq map Left.apply
@@ -189,7 +193,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
         = seq_L1[F](l1fga) map_F (l1ga ⇒ l1ga.seq map_G Left.apply)
       
       This is exactly our left-hand side of the composition law computed previously.
-      The code is symmetric with respect to L1 or L2.
+      The code is symmetric with respect to L1 <-> L2.
       Therefore the composition law holds for L.
      */
   }
@@ -228,7 +232,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       
       Then apply seq to this and get (omitting the wrapping and unwrapping in the case class L)
       
-      s.bimap(F.pure, fmap_L(F.pure)).bimap(id, seq)
+      s.bimap(F.pure, fmap_L(F.pure)).bimap(id, seq).biseq
         = s.bimap(F.pure, fmap_L(F.pure) andThen seq).biseq
         
       By the inductive assumption we already have map_L(F.pure) andThen seq = F.pure in the second argument of bimap.
@@ -240,7 +244,7 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
     // Composition law: seq_L[F] ◦ fmap_F(seq_L[G]) = seq_L[FG]
     /*
       Apply both sides to some s: S[F[G[A]], L[F[G[A]]]]. We get
-            
+
       sfga.bimap(id, seq_L[F]).biseq[F].map_F(sga ⇒ sga.bimap(id, seq_L[G]).biseq[G])) ?=? sfga.bimap(id, seq_L[FG]).biseq[FG]   (*)
       
       We assume that the composition law already holds for the bitraversable bifunctor S,
@@ -261,13 +265,15 @@ class Chapter09_02_examplesSpec extends FlatSpec with Matchers {
       sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[F].map_F(biseq[G]) = sfga.bimap(id, seq_L[FG]).biseq[FG]
       
       The r.h.s. is the same as the r.h.s. of eq. (*) above.
-      So, to demontrate eq.(*), it remains to show that
+      So, to demontrate eq. (*), it remains to show that
       
-      sfga.bimap(id, seq_L[F]).biseq[F].map_F(sga ⇒ sga.bimap(id, seq_L[G]).biseq[G]) ?=? sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[F].map_F(biseq[G])
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(sga ⇒ sga.bimap(id, seq_L[G]).biseq[G]) ?=?
+      sfga.bimap(id, lfga ⇒ lfga.seq_L[F].map_F(seq_L[G])).biseq[F].map_F(biseq[G])
       
       We can omit the trailing .map_F(biseq[G]) from both sides of the equation:
 
-      sfga.bimap(id, seq_L[F]).biseq[F].map_F(bimap(id, seq_L[G])) ?=? sfga.bimap(id, seq_L[F] ◦ fmap_F(seq_L[G])).biseq[F]
+      sfga.bimap(id, seq_L[F]).biseq[F].map_F(bimap(id, seq_L[G])) ?=?
+       sfga.bimap(id, seq_L[F] ◦ fmap_F(seq_L[G])).biseq[F]
       
       We now need to interchange the order of bimap and biseq; for this,
       we have to use the naturality of biseq: S[F[X], F[Y]] ⇒ F[S[X, Y]] as

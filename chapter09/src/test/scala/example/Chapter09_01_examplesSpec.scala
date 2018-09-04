@@ -22,9 +22,10 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement `sequence` for Either" in {
     // seq: Either[Z, F[A]] ⇒ F[Either[Z, A]]
+    // seq: Z + F[A] ⇒ F[Z + A]
     def seq[F[_] : WuZip : Functor, A, Z](t: Either[Z, F[A]]): F[Either[Z, A]] = t match {
-      case Right(fa) ⇒ fa.map(Right.apply)
       case Left(z) ⇒ WuZip[F].pure(Left(z))
+      case Right(fa) ⇒ fa.map(Right.apply)
     }
   }
 
@@ -77,6 +78,7 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
     final case class InfList[A](head: A, tail: () ⇒ InfList[A]) // `tail` is lazy
 
     // Try to define `seq` for `InfList`:
+    // seq : (F[A], F[A], ...) ⇒ F[ (A, A, A, ...) ]
     def seq[F[_] : WuZip : Functor, A](infList: InfList[F[A]]): F[InfList[A]] = {
       infList.head zip seq[F, A](infList.tail()) map { case (head, tail) ⇒ InfList(head, () ⇒ tail) }
     }
@@ -116,7 +118,7 @@ class Chapter09_01_examplesSpec extends FlatSpec with Matchers {
     def seq[F[_] : WuZip : Functor, A]: L[F[A]] ⇒ F[L[A]] = {
       case (fa1, fa2, fa3) ⇒
         // Arbitrarily select the zipping order as (2, 3, 1).
-        fa2 zip fa1 zip fa1 map { case ((x, y), z) ⇒ (x, y, z) }
+        fa2 zip fa3 zip fa1 map { case ((x, y), z) ⇒ (x, y, z) }
     }
   }
   
