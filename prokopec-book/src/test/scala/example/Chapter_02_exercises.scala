@@ -86,12 +86,6 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
       else if (a == null) throw new Exception("cannot put a null value")
       else x = a
     }
-
-    def isEmpty: Boolean =
-      x == null
-
-    def nonEmpty: Boolean =
-      x != null
   }
 
   it should "implement exercise 3" in {
