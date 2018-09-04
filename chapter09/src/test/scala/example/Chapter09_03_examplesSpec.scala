@@ -16,10 +16,10 @@ import io.chymyst.ch._
 
 class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
 
-  behavior of "usage examples"
+  behavior of "examples of using traversals"
 
   it should "convert a traversable functor to List" in {
-    def toList[L[_] : Trav : Functor, C](fa: L[C]): List[C] = {
+    def toList[L[_] : Trav : Functor, C](lc: L[C]): List[C] = {
       // Define List[A] as a monoid type and a constant functor.
       type Z[B] = List[C]
       implicit val functorZ: Functor[Z] = new Functor[Z] {
@@ -30,7 +30,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
 
         override def zip[A, B](fa: Z[A], fb: Z[B]): Z[(A, B)] = fb ++ fa // Note opposite order!
       }
-      fa.trav[Z, C](c ⇒ List(c))
+      lc.trav[Z, C](c ⇒ List(c))
     }
 
     // Check that this works.
@@ -92,6 +92,8 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     t1.foldMap(x ⇒ x * x) shouldEqual 36
   }
 
+  // Visualize the traversal of t2: f(a) zip f(b) zip f(c) zip f(d), ⇒ F[Tree[B]]
+
   // Use a state monad as the applicative effect.
   type S[X] = State[Int, X]
   val makeLabel: S[Int] = for {
@@ -111,15 +113,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
   implicit val wuzipState: WuZip[S] = wuzipFromState[Int]
 
   it should "decorate a tree with depth-first traversal order labels" in {
-    implicit val travTree: Trav[Tree] = new Trav[Tree] {
-      override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
-        case Leaf(fa) ⇒ fa.map(Leaf.apply)
-        case Branch(left, right) ⇒
-          seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
-      }
-    }
-
-    val result: S[Tree[(String, Int)]] = t2.trav[S, (String, Int)](label ⇒ makeLabel.map((label, _)))
+    val result: S[Tree[(String, Int)]] = t2.trav[S, (String, Int)](leaf ⇒ makeLabel.map((leaf, _)))
     // Run the State monad.
     result.run(1).value._2 shouldEqual Branch(Branch(Leaf(("a", 1)), Branch(Leaf(("b", 2)), Leaf(("c", 3)))), Leaf(("d", 4)))
   }
