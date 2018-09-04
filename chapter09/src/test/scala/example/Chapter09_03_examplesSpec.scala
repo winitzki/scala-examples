@@ -7,6 +7,7 @@ import cats.syntax.functor._
 import cats.instances._
 import cats.syntax.bifunctor._
 import cats.syntax.traverse._
+import cats.syntax.monoid._
 import cats.syntax.bitraverse._
 import WuZip.WuZipSyntax
 import Trav._
@@ -61,6 +62,14 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     }
   }
 
+  // Depth-first traversal.
+  implicit val travTree: Trav[Tree] = new Trav[Tree] {
+    override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
+      case Leaf(fa) ⇒ fa.map(Leaf.apply)
+      case Branch(left, right) ⇒
+        seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
+    }
+  }
 
   val t1: Tree[Int] = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
   val t2: Tree[String] = Branch(Branch(Leaf("a"), Branch(Leaf("b"), Leaf("c"))), Leaf("d"))
@@ -74,17 +83,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
    */
 
   it should "fold a tree to aggregate data" in {
-
-    implicit val travTree: Trav[Tree] = new Trav[Tree] {
-      override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
-        case Leaf(fa) ⇒ fa.map(Leaf.apply)
-        case Branch(left, right) ⇒
-          seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
-      }
-    }
-
     // Product of squares of all integers in the tree.
-
     implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
       override def empty: Int = 1
 
@@ -101,17 +100,18 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     _ ← State.set(s + 1)
   } yield s
 
-  implicit val wuzipState: WuZip[S] = new WuZip[S]() {
-    override def wu: S[Unit] = State.pure(())
+  def wuzipFromState[St]: WuZip[State[St, ?]] = new WuZip[State[St, ?]] {
+    override def wu: State[St, Unit] = State.pure(())
 
-    override def zip[A, B](fa: S[A], fb: S[B]): S[(A, B)] = for {
+    override def zip[A, B](fa: State[St, A], fb: State[St, B]): State[St, (A, B)] = for {
       x ← fa
       y ← fb
     } yield (x, y)
   }
 
+  implicit val wuzipState: WuZip[S] = wuzipFromState[Int]
+
   it should "decorate a tree with depth-first traversal order labels" in {
-    // Depth-first traversal.
     implicit val travTree: Trav[Tree] = new Trav[Tree] {
       override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
         case Leaf(fa) ⇒ fa.map(Leaf.apply)
@@ -119,14 +119,14 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
           seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
       }
     }
-    
+
     val result: S[Tree[(String, Int)]] = t2.trav[S, (String, Int)](label ⇒ makeLabel.map((label, _)))
     // Run the State monad.
     result.run(1).value._2 shouldEqual Branch(Branch(Leaf(("a", 1)), Branch(Leaf(("b", 2)), Leaf(("c", 3)))), Leaf(("d", 4)))
   }
 
-  it should "decorate a tree with breadth-first traversal order labels" in {
-    // Breadth-first traversal.
+  it should "decorate a tree with level labels" in {
+
     implicit val travTree: Trav[Tree] = new Trav[Tree] {
       override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
         case Leaf(fa) ⇒ fa.map(Leaf.apply)
@@ -138,5 +138,44 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     val result: S[Tree[(String, Int)]] = t2.trav[S, (String, Int)](label ⇒ makeLabel.map((label, _)))
     // Run the State monad.
     result.run(1).value._2 shouldEqual Branch(Branch(Leaf(("a", 1)), Branch(Leaf(("b", 2)), Leaf(("c", 3)))), Leaf(("d", 4)))
+  }
+
+  it should "implement scanMap and scanLeft for traversable" in {
+    // A method analogous to foldMap.
+    def scanMap[L[_] : Trav : Functor, Z: Monoid, A](la: L[A])(f: A ⇒ Z): L[Z] = {
+      // Use the State monad with the monoid Z as the state.
+      type S[X] = State[Z, X]
+      implicit val wuzipS: WuZip[S] = wuzipFromState[Z]
+
+      def accumulate(z: Z): S[Z] = for {
+        s ← State.get
+        _ ← State.set(s |+| z)
+        newS ← State.get
+      } yield newS
+
+      la.trav[S, Z](f andThen accumulate)
+        .run(Monoid[Z].empty).value._2
+    }
+
+    // Use String as a standard monoid.
+    import cats.instances.string._
+    scanMap[Tree, String, String](t2)(identity) shouldEqual Branch(Branch(Leaf("a"), Branch(Leaf("ab"), Leaf("abc"))), Leaf("abcd"))
+    
+    def scanLeft[L[_] : Trav : Functor, A, Z](la: L[A])(init: Z)(f: (A, Z) ⇒ Z): L[Z] = {
+      // Use the State monad with the type Z as the state (not necessarily a monoid).
+      type S[X] = State[Z, X]
+      implicit val wuzipS: WuZip[S] = wuzipFromState[Z]
+
+      def accumulate(a: A): S[Z] = for {
+        s ← State.get
+        _ ← State.set(f(a, s))
+        newS ← State.get
+      } yield newS
+
+      la.trav[S, Z](accumulate)
+        .run(init).value._2
+    }
+
+    scanLeft(t2)(0){ (s, i) ⇒ i + s.length} shouldEqual Branch(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))), Leaf(4))
   }
 }
