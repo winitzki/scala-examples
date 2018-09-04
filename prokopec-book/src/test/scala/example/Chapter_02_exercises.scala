@@ -70,7 +70,8 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
   }
 
   class SyncVar[A] {
-    @volatile var x: A = null.asInstanceOf[A]
+    // Probably don't need @volatile here.
+    var x: A = null.asInstanceOf[A]
 
     def get: A = this.synchronized {
       if (x != null) {
