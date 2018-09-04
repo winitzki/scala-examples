@@ -54,7 +54,6 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
 
   final case class Branch[A](left: Tree[A], right: Tree[A]) extends Tree[A]
 
-
   implicit val functorTree: Functor[Tree] = new Functor[Tree] {
     override def map[A, B](fa: Tree[A])(f: A ⇒ B): Tree[B] = fa match {
       case Leaf(x) ⇒ Leaf(f(x))
@@ -160,7 +159,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     // Use String as a standard monoid.
     import cats.instances.string._
     scanMap[Tree, String, String](t2)(identity) shouldEqual Branch(Branch(Leaf("a"), Branch(Leaf("ab"), Leaf("abc"))), Leaf("abcd"))
-    
+
     def scanLeft[L[_] : Trav : Functor, A, Z](la: L[A])(init: Z)(f: (A, Z) ⇒ Z): L[Z] = {
       // Use the State monad with the type Z as the state (not necessarily a monoid).
       type S[X] = State[Z, X]
@@ -176,6 +175,36 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
         .run(init).value._2
     }
 
-    scanLeft(t2)(0){ (s, i) ⇒ i + s.length} shouldEqual Branch(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))), Leaf(4))
+    scanLeft(t2)(0) { (s, i) ⇒ i + s.length } shouldEqual Branch(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))), Leaf(4))
+  }
+
+  it should "implement traversal for a non-monadic rigid tree" in {
+    sealed trait BTree[A]
+
+    final case class BLeaf[A](x: A) extends BTree[A]
+
+    final case class BBranch[A](baa: BTree[(A, A)]) extends BTree[A]
+
+    implicit val functorBTree: Functor[BTree] = new Functor[BTree] {
+      override def map[A, B](fa: BTree[A])(f: A ⇒ B): BTree[B] = fa match {
+        case BLeaf(x) ⇒ BLeaf(f(x))
+        case BBranch(baa) ⇒ BBranch(map[(A, A), (B, B)](baa) { case (x, y) ⇒ (f(x), f(y)) })
+      }
+    }
+
+    // Depth-first traversal.
+    implicit val travBTree: Trav[BTree] = new Trav[BTree] {
+      override def seq[F[_] : WuZip : Functor, A](t: BTree[F[A]]): F[BTree[A]] = t match {
+        case BLeaf(fa) ⇒ fa.map(BLeaf.apply)
+        case BBranch(bfafa) ⇒ // Have B[(F[A], F[A])], but need F[B[(A, A)]]. Use zip for F.
+          seq[F, (A, A)](bfafa.map { case (fa1, fa2) ⇒ fa1 zip fa2 })
+            .map(BBranch.apply)
+      }
+    }
+
+    val t3: BTree[Int] = BBranch(BBranch(BLeaf(((1, 2), (3, 4)))))
+
+    import cats.instances.int._
+    t3.foldMap(identity) shouldEqual 10
   }
 }
