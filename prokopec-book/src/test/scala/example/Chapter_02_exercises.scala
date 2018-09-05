@@ -139,6 +139,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     val t3 = producerThread0(2 * n + 1 to 3 * n)
     t3.start()
     consumerThread0(print = false).start()
+    consumerThread1(print = true).start()
     t1.join()
     t2.join()
     t3.join()
@@ -151,11 +152,9 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     val monitorPut = new AnyRef
     val monitorGet = new AnyRef
 
-    def getWait: A = {
-      /* This is a deadlock.
-      monitorPut.synchronized {
-        while (x == null) monitorPut.wait()
-
+    def getWait: A = monitorPut.synchronized {
+      while (x == null) monitorPut.wait()
+      monitor.synchronized {
         monitorGet.synchronized {
           val result = x
           x = null.asInstanceOf[A]
@@ -163,8 +162,40 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
           result
         }
       }
-      */
-      /* This is also a deadlock.
+    }
+
+    def putWait(a: A): Unit = monitorGet.synchronized {
+      while (x != null) monitorGet.wait()
+      monitor.synchronized {
+        monitorPut.synchronized {
+          x = a
+          monitorPut.notify()
+        }
+      }
+    }
+
+    /* This is a deadlock.
+    def getWait: A = monitorPut.synchronized {
+      while (x == null) monitorPut.wait()
+      monitorGet.synchronized {
+        val result = x
+        x = null.asInstanceOf[A]
+        monitorGet.notify()
+        result
+      }
+    }
+
+    def putWait(a: A): Unit = monitorGet.synchronized {
+      while (x != null) monitorGet.wait()
+      monitorPut.synchronized {
+        x = a
+        monitorPut.notify()
+      }
+    }
+    */
+
+    /* This is a deadlock.
+    def getWait: A = {
       println("DEBUG: entering getWait")
       monitor.synchronized {
         println(s"DEBUG: getWait acquired monitor; have x = $x")
@@ -175,36 +206,9 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
         monitor.notify()
         result
       }
-      */
-      /* This is also a deadlock.
-      monitorGet.synchronized {
-        monitorPut.synchronized {
-          while (x == null) monitorPut.wait()
-          val result = x
-          x = null.asInstanceOf[A]
-          monitorGet.notify()
-          result
-        }
-      }
-      */
-
-      /* This does not work.
-      while (maybeGet()) waitForPut()
-      getResult
-      */
     }
 
     def putWait(a: A): Unit = {
-      /* This is a deadlock.
-            monitorGet.synchronized {
-              while (x != null) monitorGet.wait()
-              monitorPut.synchronized {
-                x = a
-                monitorPut.notify()
-              }
-            }
-            */
-      /* This is also a deadlock.
       println(s"DEBUG: entering putWait($a)")
       monitor.synchronized {
         println(s"DEBUG: putWait($a) acquired monitor; have x = $x")
@@ -213,13 +217,41 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
         x = a
         monitor.notify()
       }
-      */
-      /* This does not work.
-      while (maybePut(a)) waitForGet()
-      */
     }
-/* None of this works.
+
+    */
+    /* This is also a deadlock.
+    def getWait: A = monitorPut.synchronized {
+      while (x == null) monitorPut.wait()
+      monitorGet.synchronized {
+        val result = x
+        x = null.asInstanceOf[A]
+        monitorGet.notify()
+        result
+      }
+    }
+
+    def putWait(a: A): Unit = monitorGet.synchronized {
+      monitorPut.synchronized {
+        while (x == null) monitorPut.wait()
+        val result = x
+        x = null.asInstanceOf[A]
+        monitorGet.notify()
+        result
+      }
+    }
+    */
+    /* This is also a deadlock.
     @volatile var getResult: A = null.asInstanceOf[A]
+
+    def getWait: A = {
+      while (maybeGet()) waitForPut()
+      getResult
+    }
+
+    def putWait(a: A): Unit = {
+      while (maybePut(a)) waitForGet()
+    }
 
     def maybeGet(): Boolean = monitorGet.synchronized {
       if (x != null) {
@@ -244,7 +276,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     def waitForPut(): Unit = monitorPut.synchronized {
       while (x == null) monitorPut.wait()
     }
-*/
+    */
   }
 
   val s1 = new SyncVar1[Int]
@@ -269,7 +301,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
   }
 
   it should "perform stress test for SyncVar1 with idle wait" in {
-    val n = 10
+    val n = 500000 // 16 seconds; this means 10µs per put/get
     val init = System.currentTimeMillis()
     val t1 = producerThread1(1 to n)
     t1.start()
@@ -277,7 +309,8 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     t2.start()
     val t3 = producerThread1(2 * n + 1 to 3 * n)
     t3.start()
-    consumerThread1(print = true).start()
+    consumerThread1(print = false).start()
+    consumerThread1(print = false).start()
     t1.join()
     t2.join()
     t3.join()
