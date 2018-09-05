@@ -12,6 +12,21 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
 
   behavior of "exercises"
 
+  it should "time benchmark" in {
+
+    val n = 10000000
+    val timings = (1 to n).map { _ ⇒
+      //      val x = System.nanoTime()
+      //      System.nanoTime()
+      //      val y = System.nanoTime() 
+      //      y - x
+      System.nanoTime() - System.nanoTime()
+    }
+
+    println(s"First 10 results: ${timings.take(10)}")
+    println(s"Last 10 results: ${timings.drop(n - 10).take(10)}")
+  }
+
   it should "implement exercise 1" in {
     def parallel[A, B](a: ⇒ A, b: ⇒ B): (A, B) = {
       var resultA: A = null.asInstanceOf[A]
@@ -19,6 +34,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
 
       val threadA = new Thread {
         override def run(): Unit = {
+          //          val x : A = a
           resultA = a
         }
       }
@@ -30,15 +46,17 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
         }
       }
       threadB.start()
-
+      val x = resultA
       threadA.join()
       threadB.join()
 
       (resultA, resultB)
     }
 
-    (0 to 100).foreach { i ⇒
-      parallel(s"first thread $i", s"second thread $i") shouldEqual ((s"first thread $i", s"second thread $i"))
+    (0 to 2).foreach { i ⇒
+      parallel({
+        println(s"first thread $i"); s"first thread $i"
+      }, s"second thread $i") shouldEqual ((s"first thread $i", s"second thread $i"))
     }
   }
 
@@ -67,6 +85,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     }
     Thread.sleep(1000)
     t.interrupt()
+    Thread.sleep(1000)
   }
 
   class SyncVar0[A] {
@@ -139,7 +158,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     val t3 = producerThread0(2 * n + 1 to 3 * n)
     t3.start()
     consumerThread0(print = false).start()
-    consumerThread1(print = true).start()
+    consumerThread0(print = false).start()
     t1.join()
     t2.join()
     t3.join()
@@ -152,6 +171,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     val monitorPut = new AnyRef
     val monitorGet = new AnyRef
 
+    /* 
     def getWait: A = monitorPut.synchronized {
       while (x == null) monitorPut.wait()
       monitor.synchronized {
@@ -173,14 +193,15 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
         }
       }
     }
-
-    /* This is a deadlock.
+    
+     */
+    /* This is a deadlock? Shouldn't be. */
     def getWait: A = monitorPut.synchronized {
       while (x == null) monitorPut.wait()
       monitorGet.synchronized {
+        monitorGet.notify()
         val result = x
         x = null.asInstanceOf[A]
-        monitorGet.notify()
         result
       }
     }
@@ -188,13 +209,13 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
     def putWait(a: A): Unit = monitorGet.synchronized {
       while (x != null) monitorGet.wait()
       monitorPut.synchronized {
-        x = a
         monitorPut.notify()
+        x = a
       }
     }
-    */
+    /* */
 
-    /* This is a deadlock.
+    /* This is a deadlock. 
     def getWait: A = {
       println("DEBUG: entering getWait")
       monitor.synchronized {
@@ -301,7 +322,7 @@ class Chapter_02_exercises extends FlatSpec with Matchers {
   }
 
   it should "perform stress test for SyncVar1 with idle wait" in {
-    val n = 500000 // 16 seconds; this means 10µs per put/get
+    val n = 100000 // 16 seconds; this means 10µs per put/get
     val init = System.currentTimeMillis()
     val t1 = producerThread1(1 to n)
     t1.start()
