@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 class Chapter_03_exercises extends FlatSpec with Matchers {
@@ -32,6 +32,13 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
     println("step 3")
   }
 
+  it should "blocking wait" in {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    import scala.concurrent.blocking
+    Future { blocking { Thread.sleep(1000000) } }
+    // The `global` execution context will now add 1 more thread, to improve parallelism.
+  }
+  
   it should "implement exercise 2" in {
     class TreiberStack[T] {
       private val stack = new AtomicReference[List[T]](Nil)
@@ -57,7 +64,7 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
     // Test: simultaneous push and pop many times, must not lose any data.
 
     val s = new TreiberStack[Int]
-    val n = 1000
+    val n = 10000
     // Prepare with n initial elements.
     (1 to n).foreach(s.push)
     // First thread will quickly push `n` elements.
@@ -91,13 +98,35 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
       @tailrec
       final def add(x: T): Unit = {
         val old = list.get
-        if (list.compareAndSet(old, old + x)) () // Allocate 1 new object.
+        val newList = old + x
+        if (list.compareAndSet(old, newList)) () // Allocate 1 new object.
         else add(x)
       }
 
       def iterator: Iterator[T] = list.get.iterator
     }
+    val s = new ConcurrentSortedList[Int]
+    val n = 1000
+    // Prepare with n initial elements.
+    (1 to n).foreach(s.add)
+    // First thread will quickly push `n` elements.
+    val t1 = new Thread {
+      override def run(): Unit = (n + 1 to n * 2).foreach(s.add)
+    }
+    // Second thread will quickly pop `n` elements.
+    val t2 = new Thread {
+      override def run(): Unit = (n*2+1 to n*3).foreach(s.add)
+    }
 
+    // Run them until completion.
+    t2.start() // Start popping.
+    Thread.sleep(1) // Give it some time to start.
+    t1.start() // Start pushing.
+    t1.join()
+    t2.join()
+    val result = s.iterator.toList
+    result.length shouldEqual n*3
+    println(result)
   }
 
   it should "implement exercise 5" in {
@@ -114,7 +143,7 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
 
   it should "implement exercise 6" in {
     class PureLazyCell[T](initialization: ⇒ T) {
-      private var value = new AtomicReference[T]()
+      private val value = new AtomicReference[T]()
 
       @tailrec
       final def apply(): T = {
@@ -162,12 +191,12 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
         }
       }
 
-      override def +=(kv: (K, V)): SyncConcurrentMap[K, V] = synchronized {
+      override def +=(kv: (K, V)): SyncConcurrentMap.this.type = synchronized {
         data.update(kv._1, kv._2)
         this
       }
 
-      override def -=(key: K): SyncConcurrentMap[K, V] = synchronized {
+      override def -=(key: K): SyncConcurrentMap.this.type = synchronized {
         data.remove(key)
         this
       }
