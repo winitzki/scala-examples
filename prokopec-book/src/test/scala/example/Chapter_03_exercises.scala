@@ -3,10 +3,8 @@ package example
 import java.util.concurrent.atomic.AtomicReference
 
 import org.scalatest.{FlatSpec, Matchers}
-import shapeless.T
 
 import scala.annotation.tailrec
-import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
@@ -145,7 +143,16 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
         data.remove(k).nonEmpty
       }
 
-      override def replace(k: K, oldvalue: V, newvalue: V): Boolean = ???
+      override def replace(k: K, oldvalue: V, newvalue: V): Boolean = synchronized {
+        data.get(k) match {
+          case Some(oldV) ⇒
+            (oldV == oldvalue) && {
+              data.update(k, newvalue)
+              true
+            }
+          case None ⇒ false
+        }
+      }
 
       override def replace(k: K, v: V): Option[V] = synchronized {
         data.get(k) map {
