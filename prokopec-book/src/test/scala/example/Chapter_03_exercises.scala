@@ -6,6 +6,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import shapeless.T
 
 import scala.annotation.tailrec
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
@@ -124,6 +125,49 @@ class Chapter_03_exercises extends FlatSpec with Matchers {
         else if (value.compareAndSet(old, initialization)) value.get
         else apply()
       }
+    }
+  }
+
+  it should "implement exercise 7" in {
+    class SyncConcurrentMap[K, V] extends scala.collection.concurrent.Map[K, V] {
+      private val data = scala.collection.mutable.Map[K, V]()
+
+      override def putIfAbsent(k: K, v: V): Option[V] = synchronized {
+        data.get(k) match {
+          case Some(_) ⇒ None
+          case None ⇒
+            data.update(k, v)
+            Some(v)
+        }
+      }
+
+      override def remove(k: K, v: V): Boolean = synchronized {
+        data.remove(k).nonEmpty
+      }
+
+      override def replace(k: K, oldvalue: V, newvalue: V): Boolean = ???
+
+      override def replace(k: K, v: V): Option[V] = synchronized {
+        data.get(k) map {
+          oldV ⇒
+            data.update(k, v)
+            oldV
+        }
+      }
+
+      override def +=(kv: (K, V)): SyncConcurrentMap[K, V] = synchronized {
+        data.update(kv._1, kv._2)
+        this
+      }
+
+      override def -=(key: K): SyncConcurrentMap[K, V] = synchronized {
+        data.remove(key)
+        this
+      }
+
+      override def get(key: K): Option[V] = data.get(key)
+
+      override def iterator: Iterator[(K, V)] = data.iterator // Not much we can do to synchronize.
     }
   }
 }
