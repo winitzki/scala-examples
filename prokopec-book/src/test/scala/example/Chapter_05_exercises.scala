@@ -96,7 +96,7 @@ class Chapter_05_exercises extends FlatSpec with Matchers {
     val r = randomString(n, p)
 
     println(s"Count spaces with futures: ${timingsWithVolatileNs(n, Await.result(countSpacesFut(r), Duration.Inf))}")
-    // 3626342
+    // Count spaces with futures: 4074458
   }
 
 }
