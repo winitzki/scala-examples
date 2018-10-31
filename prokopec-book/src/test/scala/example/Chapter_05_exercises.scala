@@ -65,14 +65,15 @@ class Chapter_05_exercises extends FlatSpec with Matchers {
   def countSpacesPar(s: String): Int = s.par.count(_ == ' ')
 
   it should "exercise 2" in {
-    val n = 1000
+    val n = 1
     val p = 0.01f
+    val len = 1000000
 
-    println(s"Generate random string: sequential ${timingsWithVolatileNs(n, randomString(n, p))}, parallel ${timingsWithVolatileNs(n, randomStringPar(n, p))}")
+    println(s"Generate random string: sequential ${timingsWithVolatileNs(n, randomString(len, p))}, parallel ${timingsWithVolatileNs(n, randomStringPar(len, p))}")
     // Generate random string: sequential 57675, parallel 220061 
 
-    val result1 = timingsWithVolatileNs(n, countSpaces(randomString(n, p)))
-    val result2 = timingsWithVolatileNs(n, countSpacesPar(randomString(n, p)))
+    val result1 = timingsWithVolatileNs(n, countSpaces(randomString(len, p)))
+    val result2 = timingsWithVolatileNs(n, countSpacesPar(randomString(len, p)))
 
     println(s"Count spaces: sequential $result1, parallel $result2")
     // Count spaces: sequential 48411, parallel 120573

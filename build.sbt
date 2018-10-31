@@ -72,7 +72,7 @@ lazy val chapter08 = (project in file("chapter08"))
         , ExclusionRule(organization = "org.apache.zookeeper")
         , ExclusionRule(organization = "com.sun.jersey")
         // Replaced by a later version of commons-beanutils, see comment below.
-        ,ExclusionRule(organization = "commons-beanutils", name = "commons-beanutils-core")
+        , ExclusionRule(organization = "commons-beanutils", name = "commons-beanutils-core")
       )
       /*
        * See http://commons.apache.org/proper/commons-beanutils/#BeanUtils_Core_And_Modules
@@ -83,9 +83,9 @@ lazy val chapter08 = (project in file("chapter08"))
        * was all resolved in 1.9.0 which reverted to a single jar, commons-beanutils, without any copies of collections
        * classes. So here we explicitly use the new jar, and above, exclude the older commons-beanutils-core.
        */
-      ,"commons-beanutils" % "commons-beanutils" % "1.9.3"
-      ,"org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0"
-      ,"org.typelevel" %% "cats-free" % "1.1.0"
+      , "commons-beanutils" % "commons-beanutils" % "1.9.3"
+      , "org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0"
+      , "org.typelevel" %% "cats-free" % "1.1.0"
       , "com.typesafe.akka" %% "akka-http-testkit" % "10.0.10" % Test
       , "com.typesafe.akka" %% "akka-http" % "10.0.10"
       , "com.lihaoyi" %% "fastparse" % "1.0.0"
@@ -99,4 +99,10 @@ lazy val chapter09 = (project in file("chapter09"))
 
 lazy val prokopecBook = (project in file("prokopec-book"))
   .settings(commonSettings)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.netflix.rxjava" % "rxjava-scala" % "0.20.7"
+      , "com.lihaoyi" %% "scalarx" % "0.4.0"
+    )
+  )
   .dependsOn(common)
