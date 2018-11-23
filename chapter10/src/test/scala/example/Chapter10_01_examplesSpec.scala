@@ -2,9 +2,11 @@ package example
 
 import WuZip.WuZipSyntax
 import cats.Functor
+import cats.derived.pure
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers, run}
 import io.chymyst.ch._
+import shapeless.ops.record.Extractor
 import spire.math.Algebraic.Expr.Mul
 
 class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
@@ -152,4 +154,69 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     run(prg) shouldEqual "text"
   }
 
+  it should "implement monadic DSL as a type constructor parameterized by operations" in {
+    sealed trait DSL[F[_], A] 
+    case class Bind[F[_], A, B](p: DSL[F, A], f: A ⇒ DSL[F, B]) extends DSL[F, B]
+    case class Literal[F[_], A](a: A) extends DSL[F, A]
+    case class Ops[F[_], A](f: F[A]) extends DSL[F, A]
+
+    object DSL {
+      def pure[F[_], A](a: A): DSL[F, A] = Literal(a)
+    }
+
+    implicit class DSLOps[F[_], A](prg: DSL[F, A]) {
+      def flatMap[B](f: A ⇒ DSL[F, B]): DSL[F, B] = Bind(prg, f)
+
+      def map[B](f: A ⇒ B): DSL[F, B] = prg.flatMap(f andThen DSL.pure)
+    }
+
+    // Extract values of type A from an F[A], for all A.
+    trait Extractor[F[_]] {
+      def apply[A](fa: F[A]): A
+    }
+
+    def run[F[_], A](extract: Extractor[F])(prg: DSL[F, A]): A = prg match {
+      case b: Bind[F, _, A] ⇒ b match {
+        case Bind(p, f) ⇒ run(extract)(f(run(extract)(p)))
+      }
+      case Literal(x) ⇒ x
+      case Ops(f) ⇒ extract(f)
+    }
+
+    // Now use this code to define a monadic DSL for file operations.
+
+    // Mock file path.
+    final case class FPath(s: String)
+    // Mock filesystem: file paths and file contents are strings.
+    val mockFs: Map[String, String] = Map("/file1" → "/file2", "/file2" → "text")
+
+    sealed trait FileOps[A]
+    case class Path(s: String) extends FileOps[FPath]
+    case class Read(p: FPath) extends FileOps[String]
+
+    // Extractor can only produce String or FPath values.
+    // Needs type casts.
+    val fileOpsExtractor: Extractor[FileOps] = new Extractor[FileOps] {
+      override def apply[A](fa: FileOps[A]): A = fa match {
+        case Path(s) ⇒ FPath(s).asInstanceOf[A]
+        case Read(p) ⇒ mockFs(p.s).asInstanceOf[A]
+      }
+    }
+
+    // Write a DSL program as before.
+    type Prg[A] = DSL[FileOps, A]
+    def readPath(p: String): Prg[String] = for {
+      path ← Ops(Path(p))
+      str ← Ops(Read(path))
+    } yield str
+
+    val prg: Prg[String] = for {
+      str ← readPath("/file1")
+      result ← if (str.nonEmpty)
+        readPath(str)
+      else DSL.pure[FileOps, String]("Error: empty path") // Type parameters `[FileOps, String]` are required here! Otherwise Scala does not know that DSL.pure uses the type constructor `FileOps`.
+    } yield result
+
+    run(fileOpsExtractor)(prg) shouldEqual "text"
+  }
 }
