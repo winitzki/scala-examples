@@ -1,13 +1,14 @@
 package example
 
 import WuZip.WuZipSyntax
-import cats.Functor
+import cats.{Functor, Monoid}
 import cats.derived.pure
+import cats.syntax.monoid._
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers, run}
 import io.chymyst.ch._
-import shapeless.ops.record.Extractor
-import spire.math.Algebraic.Expr.Mul
+
+import scala.util.Try
 
 class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
@@ -155,7 +156,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
   }
 
   it should "implement monadic DSL as a type constructor parameterized by operations" in {
-    sealed trait DSL[F[_], A] 
+    sealed trait DSL[F[_], A]
     case class Bind[F[_], A, B](p: DSL[F, A], f: A ⇒ DSL[F, B]) extends DSL[F, B]
     case class Literal[F[_], A](a: A) extends DSL[F, A]
     case class Ops[F[_], A](f: F[A]) extends DSL[F, A]
@@ -171,6 +172,8 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Extract values of type A from an F[A], for all A.
+    // Important: The trait is parameterized by F, but not by A. The `apply` method is parameterized by A.
+    // This is similar to a natural transformation between F and Id, except that F is not a functor, so there are no laws with fmap.
     trait Extractor[F[_]] {
       def apply[A](fa: F[A]): A
     }
@@ -205,6 +208,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Write a DSL program as before.
     type Prg[A] = DSL[FileOps, A]
+
     def readPath(p: String): Prg[String] = for {
       path ← Ops(Path(p))
       str ← Ops(Read(path))
@@ -218,5 +222,127 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     } yield result
 
     run(fileOpsExtractor)(prg) shouldEqual "text"
+
+    // Map to Either[Throwable, A] to catch errors.
+    trait Ex[F[_]] {
+      def apply[A](fa: F[A]): Either[Throwable, A]
+    }
+
+    def runE[F[_], A](extract: Ex[F])(prg: DSL[F, A]): Either[Throwable, A] = prg match {
+      case b: Bind[F, _, A] ⇒ b match {
+        case Bind(p, f) ⇒ runE(extract)(p).flatMap(f andThen runE[F, A](extract)) // The type parameters `[F, A]` are required here!
+      }
+      case Literal(x) ⇒ Right(x)
+      case Ops(f) ⇒ extract(f)
+    }
+
+    val fileOpsErrExtractor: Ex[FileOps] = new Ex[FileOps] {
+      override def apply[A](fa: FileOps[A]): Either[Throwable, A] = fa match {
+        case Path(s) ⇒ Right(FPath(s).asInstanceOf[A])
+        case Read(p) ⇒ Try(mockFs(p.s).asInstanceOf[A]).toEither
+      }
+    }
+
+    // Run the same DSL program `prg` with a different target monad.
+    runE(fileOpsErrExtractor)(prg) shouldEqual Right("text")
+  }
+  /*
+  To prove that the monad laws hold after evaluating a DSL program into a (lawful) monad M:
+  
+  Take an arbitrary DSL program `prg: DSL[F, A]`, which is being interpreted into a monad M, and denote for brevity run(prg) = m: M[A].
+  
+  First, show that any monadic operation on `prg` is translated into the same monadic operation on `m`.
+  
+  If prg = DSL.pure(x) then prg = Literal(x) and then run(prg) = M.pure(x). So, run(DSL.pure(x)) = M.pure(x)
+  
+  If prg2 = prg.map(f) where f: A ⇒ B, then prg2 = Bind(prg, f andThen DSL.pure) and so
+  
+    run(prg2) = run(prg).flatMap(f andThen DSL.pure andThen run)
+              = m.flatMap(f andThen M.pure)
+              = m.map(f)
+  
+  and now `.map` is directly in the monad M.
+  
+  If prg2 = prg.flatMap(f) where f: A ⇒ DSL[F, B], then we need to interpret the result value of f into the monad M;
+  this gives a function g : A ⇒ M[B] = { x ⇒ run(f(x)) }
+  then we get prg2 = Bind(prg, f) and so
+
+    run(prg2) = run(prg).flatMap(f andThen run)
+              = m.flatMap(a ⇒ run(f(a))) = m.flatMap(g).
+
+  Here `.flatMap` is in M.
+
+  Since g is the function of type A ⇒ M[B] that corresponds to `f` after interpreting the result of `f` into the monad M,
+  we find that the result of flatMap on `prg` and `f` is interpreted into the result of M.flatMap on `m` and `g`.
+  
+  Now consider various laws.
+
+  Right identity law: flatMap(pure) = id; verified in the slides.
+  
+  Left identity law: pure(x).flatMap(f) = f(x)
+  Apply run() to both sides; need to show that run(pure(x).flatMap(f)) = run(f(x)):
+  
+  run(pure(x).flatMap(f)) = run(Bind(Literal(x), f)) =  run(Literal(x)).flatMap(f andThen run)
+     = M.pure(x).flatMap(f andThen run) = run(f(x)) since M.pure(x).flatMap(g) = g.
+  
+  Naturality for pure: DSL.pure(f(x)) = DSL.fmap(f)(DSL.pure(x))
+  
+  Apply run() to both sides: M.pure(f(x)) = M.fmap(f)(M.pure(x)) which holds. 
+  
+  Associativity for flatMap: flm(f andThen flm g) = (flm f) andThen (flm g)
+  Apply both sides to some `prg`, and then apply run() to both sides:
+  
+  run(prg.flatMap(f andThen flm g)) = run( prg.flatMap(f).flatMap(g) ) 
+  
+  m.flatMap(f andThen (flm g) andThen run) = run ( prg.flatMap(f) ).flatMap(g andThen run) = m.flatMap(f andThen run).flatMap(g andThen run)
+
+  Now we need to rewrite this into the associativity law for M.
+  
+  Rewrite (f andThen (flm g) andThen run) as a ⇒ run(f(a).flatMap(g)) or a ⇒ run(f(a)).flatMap(g andThen run)  or 
+  equivalently a ⇒ (f andThen run)(a).flatMap(g andThen run)   or (f andThen run) andThen M.flm(g andThen run)
+  
+  Now consider the associativity law for M[A]:
+  
+  m.flatMap(fm andThen M.flm gm) = m.flatMap(fm).flatMap(gm)
+  
+  We see that the associativity law holds after interpreting.
+  
+  We do not need to verify naturality laws since naturality follows from the fact that we use purely type-parametric code.
+   */
+
+  it should "implement free monoid in the tree encoding" in {
+    sealed trait FM[Z] // tree encoding
+    case class Empty[Z]() extends FM[Z]
+    case class Wrap[Z](z: Z) extends FM[Z]
+    case class Mul[Z](x: FM[Z], y: FM[Z]) extends FM[Z]
+
+    object FM {
+      def empty[Z]: FM[Z] = Empty()
+    }
+
+    implicit class FMOps[Z](x: FM[Z]) {
+      def |+|(y: FM[Z]): FM[Z] = Mul(x, y)
+    }
+
+    def run[M: Monoid, Z](extract: Z ⇒ M)(fm: FM[Z]): M = fm match {
+      case Empty() ⇒ Monoid[M].empty
+      case Wrap(z) ⇒ extract(z)
+      case Mul(x, y) ⇒ run(extract)(x) |+| run(extract)(y)
+    }
+    
+    // Example: A free monoid over Either[Int, String], reduced to the standard Int monoid.
+    
+    implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
+      override def empty: Int = 0
+
+      override def combine(x: Int, y: Int): Int = x+y
+    }
+    type Z = Either[Int, String]
+    val extract: Z ⇒ Int = {
+      case Left(i) ⇒ i
+      case Right(str) ⇒ str.length
+    }
+    val freeMonoidValue: FM[Z] = Wrap[Z](Left(12)) |+| Wrap(Right("abc")) |+| Empty()  |+| Wrap(Right("q"))
+    run[Int, Z](extract)(freeMonoidValue) shouldEqual 16
   }
 }
