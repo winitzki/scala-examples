@@ -325,6 +325,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     implicit class FMOps[Z](x: FM[Z]) {
       def |+|(y: FM[Z]): FM[Z] = Mul(x, y)
+      // We could also make the encoding less redundant by checking whether x or y are `Empty`, or whether one of them is a `Mul`.
     }
 
     def run[M: Monoid, Z](extract: Z ⇒ M)(fm: FM[Z]): M = fm match {
