@@ -7,7 +7,10 @@ import cats.syntax.monoid._
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers, run}
 import io.chymyst.ch._
+import spire.math.Algebraic.Expr
+import spire.math.Algebraic.Expr.Mul
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
@@ -329,20 +332,59 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       case Wrap(z) ⇒ extract(z)
       case Mul(x, y) ⇒ run(extract)(x) |+| run(extract)(y)
     }
-    
+
     // Example: A free monoid over Either[Int, String], reduced to the standard Int monoid.
-    
+
     implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
       override def empty: Int = 0
 
-      override def combine(x: Int, y: Int): Int = x+y
+      override def combine(x: Int, y: Int): Int = x + y
     }
+
     type Z = Either[Int, String]
+
     val extract: Z ⇒ Int = {
       case Left(i) ⇒ i
       case Right(str) ⇒ str.length
     }
-    val freeMonoidValue: FM[Z] = Wrap[Z](Left(12)) |+| Wrap(Right("abc")) |+| Empty()  |+| Wrap(Right("q"))
-    run[Int, Z](extract)(freeMonoidValue) shouldEqual 16
+
+    val freeMonoidValue: FM[Z] = Wrap[Z](Left(12)) |+| Wrap(Right("abc")) |+| Empty() |+| Wrap(Right("q"))
+    run(extract)(freeMonoidValue) shouldEqual 16
   }
+
+  it should "implement free monoid in the reduced encoding" in {
+    type FM[Z] = List[Z]
+
+    object FM {
+      def empty[Z]: FM[Z] = Nil
+    }
+
+    implicit class FMOps[Z](x: FM[Z]) {
+      def |+|(y: FM[Z]): FM[Z] = x ++ y
+    }
+
+
+    def run[M: Monoid, Z](extract: Z ⇒ M)(fm: FM[Z]): M = fm.foldLeft(Monoid[M].empty) { (m, z) ⇒ m |+| extract(z) }
+
+    // Example: A free monoid over Either[Int, String], reduced to the standard Int monoid.
+
+    implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
+      override def empty: Int = 0
+
+      override def combine(x: Int, y: Int): Int = x + y
+    }
+
+    def wrap[Z](z: Z): FM[Z] = List(z)
+
+    type Z = Either[Int, String]
+
+    val extract: Z ⇒ Int = {
+      case Left(i) ⇒ i
+      case Right(str) ⇒ str.length
+    }
+
+    val freeMonoidValue: FM[Z] = wrap[Z](Left(12)) |+| wrap(Right("abc")) |+| List() |+| wrap(Right("q"))
+    run(extract)(freeMonoidValue) shouldEqual 16
+  }
+
 }
