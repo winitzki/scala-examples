@@ -3,7 +3,7 @@ package example
 import WuZip.WuZipSyntax
 import cats.Functor
 import cats.syntax.functor._
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers, run}
 import io.chymyst.ch._
 import spire.math.Algebraic.Expr.Mul
 
@@ -45,7 +45,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     sealed trait Prg
     case class Bind(p: Prg, f: String ⇒ Prg) extends Prg
     case class Literal(s: String) extends Prg
-    case class Path(s: Prg) extends Prg
+    case class Path(p: Prg) extends Prg
     case class Read(p: Prg) extends Prg
 
     // Mock filesystem: file paths and file contents are strings.
@@ -54,8 +54,8 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     def run(prg: Prg): String = prg match {
       case Bind(p, f) ⇒ run(f(run(p)))
       case Literal(s) ⇒ s
-      case Path(s) ⇒ run(s)
-      case Read(p) ⇒ mockFs(run(p))
+      case Path(p) ⇒ run(p)
+      case Read(p) ⇒ mockFs(run(p)) // Cannot guarantee that p is a Path.
     }
 
     val prg: Prg = Bind(Read(Path(Literal("/file1"))), { str ⇒ // Should read value "/file2".
@@ -63,6 +63,91 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
         Read(Path(Literal(str)))
       else Literal("Error: empty path")
     })
+
+    run(prg) shouldEqual "text"
+
+    // The DSL is not type-safe: it allows us to write nonsensical programs.
+
+    val wrongPrg: Prg = Read(Read(Read(Literal("/file1"))))
+
+    the[Exception] thrownBy run(wrongPrg) should have message "key not found: text"
+  }
+
+  it should "implement a type-safe DSL for file operations" in {
+    // Mock file path.
+    final case class FPath(s: String)
+    // Mock filesystem: file paths and file contents are strings.
+    val mockFs: Map[String, String] = Map("/file1" → "/file2", "/file2" → "text")
+
+    sealed trait Prg[A]
+    case class Bind(p: Prg[String], f: String ⇒ Prg[String]) extends Prg[String]
+    case class Literal(s: String) extends Prg[String]
+    case class Path(s: Prg[String]) extends Prg[FPath]
+    case class Read(p: Prg[FPath]) extends Prg[String]
+
+    def run(prg: Prg[String]): String = prg match {
+      case Bind(p, f) ⇒ run(f(run(p)))
+      case Literal(s) ⇒ s
+      // Impossible to have Path(p) here since it is not of type Prg[String]. The only way of having a Read() is a Read(Path()).
+      case Read(Path(p)) ⇒ mockFs(run(p))
+    }
+
+    val prg: Prg[String] = Bind(Read(Path(Literal("/file1"))), { str ⇒ // Should read value "/file2".
+      if (str.nonEmpty)
+        Read(Path(Literal(str)))
+      else Literal("Error: empty path")
+    })
+
+    run(prg) shouldEqual "text"
+
+    // The DSL is type-safe: nonsensical programs fail to compile.
+
+    """val wrongPrg: Prg[String] = Read(Read(Read(Literal("/file1"))))""" shouldNot compile
+  }
+
+  it should "implement a monadic DSL for file operations" in {
+    // Mock file path.
+    final case class FPath(s: String)
+    // Mock filesystem: file paths and file contents are strings.
+    val mockFs: Map[String, String] = Map("/file1" → "/file2", "/file2" → "text")
+
+    sealed trait Prg[A]
+    case class Bind[A, B](p: Prg[A], f: A ⇒ Prg[B]) extends Prg[B]
+    case class Literal[A](a: A) extends Prg[A]
+    case class Path(s: String) extends Prg[FPath]
+    case class Read(p: FPath) extends Prg[String]
+
+    object Prg {
+      def pure[A](a: A): Prg[A] = Literal(a)
+    }
+
+    implicit class PrgOps[A](prg: Prg[A]) {
+      def flatMap[B](f: A ⇒ Prg[B]): Prg[B] = Bind(prg, f)
+
+      def map[B](f: A ⇒ B): Prg[B] = prg.flatMap(f andThen Prg.pure)
+    }
+
+    // Ugliness with type casts!
+    def run[A](prg: Prg[A]): A = prg match {
+      case b: Bind[_, A] ⇒ b match {
+        case Bind(p, f) ⇒ run(f(run(p)))
+      }
+      case Literal(s) ⇒ s
+      case Path(p) ⇒ FPath(p).asInstanceOf[A]
+      case Read(p) ⇒ mockFs(p.s).asInstanceOf[A]
+    }
+
+    def readPath(p: String): Prg[String] = for {
+      path ← Path(p)
+      str ← Read(path)
+    } yield str
+
+    val prg: Prg[String] = for {
+      str ← readPath("/file1")
+      result ← if (str.nonEmpty)
+        readPath(str)
+      else Prg.pure("Error: empty path")
+    } yield result
 
     run(prg) shouldEqual "text"
   }
