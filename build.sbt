@@ -97,6 +97,10 @@ lazy val chapter09 = (project in file("chapter09"))
   .settings(commonSettings)
   .dependsOn(common)
 
+lazy val chapter10 = (project in file("chapter10"))
+  .settings(commonSettings)
+  .dependsOn(common)
+
 lazy val prokopecBook = (project in file("prokopec-book"))
   .settings(commonSettings)
   .settings(
