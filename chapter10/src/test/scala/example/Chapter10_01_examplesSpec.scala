@@ -174,10 +174,11 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Important: The trait is parameterized by F, but not by A. The `apply` method is parameterized by A.
     // This is important because we need to extract values from F[A] for any A, since the DSL program may have values of arbitrary types before computing the final value,
     // so that run[A]:DSL[A] ⇒ A may need to call Extractor.apply[B] several times with different types B.
-    // The type of `apply: F[A] ⇒ A` is similar to a natural transformation between F and the Id functor,
+    // The type of `apply: F[X] ⇒ X` is similar to a natural transformation between F and the Id functor,
     // except that F is not a functor, so there are no laws with fmap that the transformation would have to satisfy.
+    // In the cats library: trait ~>[F,G] { def apply[X]: F[X] ⇒ G[X] }
     trait Extractor[F[_]] {
-      def apply[A](fa: F[A]): A
+      def apply[X](fa: F[X]): X
     }
 
     def run[F[_], A](extract: Extractor[F])(prg: DSL[F, A]): A = prg match {
@@ -303,7 +304,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
   Rewrite (f andThen (flm g) andThen run) as a ⇒ run(f(a).flatMap(g)) or a ⇒ run(f(a)).flatMap(g andThen run)  or 
   equivalently a ⇒ (f andThen run)(a).flatMap(g andThen run)   or (f andThen run) andThen M.flm(g andThen run)
   
-  Now consider the associativity law for M[A]:
+  Now consider the associativity law for M:
   
   m.flatMap(fm andThen M.flm gm) = m.flatMap(fm).flatMap(gm)
   
@@ -353,7 +354,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     run(extract)(freeMonoidValue) shouldEqual 16
 
     /*
-    Verify that the monoid laws hold after run(), interpreting into a lawful monoid M:
+    Verify that the monoid laws hold after run(), interpreting into a lawful target monoid M:
 
     For brevity, write run(x) rather than run(extract)(x). - Assume that `extract` is made into an implicit argument.
     
