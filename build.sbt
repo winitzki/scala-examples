@@ -107,6 +107,9 @@ lazy val prokopecBook = (project in file("prokopec-book"))
     libraryDependencies ++= Seq(
       "com.netflix.rxjava" % "rxjava-scala" % "0.20.7"
       , "com.lihaoyi" %% "scalarx" % "0.4.0"
+      , "com.typesafe.akka" %% "akka-http-testkit" % "10.0.10" % Test
+      , "com.typesafe.akka" %% "akka-http" % "10.0.10"
+      , "io.chymyst" %% "chymyst-core" % "0.2.0"
     )
   )
   .dependsOn(common)
