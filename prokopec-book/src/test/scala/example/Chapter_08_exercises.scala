@@ -7,7 +7,6 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import akka.actor._
-import akka.event.Logging
 import io.chymyst.jc._
 
 class Chapter_08_exercises extends FlatSpec with Matchers {
@@ -44,7 +43,7 @@ class Chapter_08_exercises extends FlatSpec with Matchers {
       val helloM = m[String]
       val enabled = m[Unit]
       val pool = FixedPool()
-      site(pool) {
+      site(pool)(
         go { case helloM(str) + enabled(_) ⇒
           str match {
             case `hello` ⇒
@@ -54,7 +53,7 @@ class Chapter_08_exercises extends FlatSpec with Matchers {
               println(s"Unexpected message '$msg'")
           }
         }
-      }
+      )
       enabled()
       helloM
     }
@@ -177,5 +176,91 @@ Account Person_2 changes balance to 1500
     Await.result(ourSystem.terminate(), Duration.Inf)
   }
 
+  it should "exercise 3" in {
+    lazy val ourSystem = ActorSystem("OurExampleSystem")
+    final case class StartSession(password: String)
+    case object EndSession
 
+    class SessionActor(password: String, r: ActorRef) extends Actor {
+      override def receive: Receive = {
+        case StartSession(pwd) ⇒ if (pwd == password) {
+          context.become {
+            case EndSession ⇒ context.become(PartialFunction.empty)
+            case msg ⇒ r ! msg
+          }
+        }
+      }
+    }
+
+    class TestActor extends Actor {
+      override def receive: Receive = {
+        case x ⇒ println(s"TestActor received $x")
+      }
+    }
+
+    val testActor = ourSystem.actorOf(Props(new TestActor))
+    val sessionActor = ourSystem.actorOf(Props(new SessionActor("abcde", testActor)))
+
+    sessionActor ! "1"
+    sessionActor ! StartSession("xyz")
+    sessionActor ! "2"
+    sessionActor ! StartSession("abcde")
+    sessionActor ! "3"
+    sessionActor ! "4"
+    sessionActor ! EndSession
+    sessionActor ! "5"
+    sessionActor ! "6"
+    /* Output:
+TestActor received 3
+TestActor received 4
+    */
+    Await.result(ourSystem.terminate(), Duration.Inf)
+  }
+
+  it should "exercise 3 in chymyst" in {
+    val pool = FixedPool()
+
+    sealed trait Wrapped[A]
+    final case class Data[A](x: A) extends Wrapped[A]
+    final case class StartSession[A](password: String) extends Wrapped[A]
+    final case class EndSession[A]() extends Wrapped[A]
+
+    def makeFilter[A](password: String, r: M[A]): M[Wrapped[A]] = {
+      val filter = m[Wrapped[A]]
+      val enabled = m[Boolean]
+      site(pool)(
+        go { case filter(wrapped) + enabled(status) ⇒
+          wrapped match {
+            case Data(x) ⇒ enabled(status); if (status) r(x)
+            case StartSession(str) ⇒ enabled((str == password) || status)
+            case EndSession() ⇒
+          }
+        }
+      )
+      assert(filter.isPipelined)
+      enabled(false)
+      filter
+    }
+
+    val testM = m[Long]
+    site(pool)(go { case testM(x) ⇒ println(s"TestM received $x") })
+
+    val session = makeFilter("abcde", testM)
+
+    session(Data(1))
+    session(StartSession("xyz"))
+    session(Data(2))
+    session(StartSession("abcde"))
+    session(Data(3))
+    session(Data(4))
+    session(EndSession())
+    session(Data(5))
+    session(Data(6))
+    Thread.sleep(1000)
+    /* Output:
+TestM received 3
+TestM received 4
+     */
+    pool.shutdownNow()
+  }
 }
