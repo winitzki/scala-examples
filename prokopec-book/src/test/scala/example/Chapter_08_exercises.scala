@@ -7,9 +7,11 @@ import org.scalatest.{FlatSpec, Matchers}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import akka.actor._
+import akka.util.Timeout
 import io.chymyst.jc._
 
 class Chapter_08_exercises extends FlatSpec with Matchers {
+  
   behavior of "actors"
 
   it should "run hello actor" in {
@@ -19,21 +21,31 @@ class Chapter_08_exercises extends FlatSpec with Matchers {
       def props(hello: String) = Props(new HelloActor(hello))
     }
     class HelloActor(val hello: String) extends Actor {
-      def receive = {
+      override def receive: Receive = {
         case `hello` ⇒
           println(s"Received a '$hello'... $hello!")
         case msg ⇒
           println(s"Unexpected message '$msg'")
+          sender ! msg
           context.stop(self)
       }
     }
     val hiActor: ActorRef = ourSystem.actorOf(HelloActor.props("hi"), name = "greeter")
+/* The "ask" pattern gets an answer even if called outside any actor code.
+    import akka.pattern._
+    implicit val timeout = Timeout(2 seconds)
+
+    val x: Future[Any] = hiActor ? "1"
+    import scala.concurrent.ExecutionContext.Implicits.global
+    x foreach (x ⇒ println(x))
+  */
     hiActor ! "hi"
     Thread.sleep(1000)
     hiActor ! "hola"
     Thread.sleep(1000)
     hiActor ! "hi"
     Thread.sleep(1000)
+    
     Await.result(ourSystem.terminate(), Duration.Inf)
   }
 
@@ -69,9 +81,11 @@ class Chapter_08_exercises extends FlatSpec with Matchers {
 
   it should "exercise 1" in {
     lazy val ourSystem = ActorSystem("OurExampleSystem")
+    
     final case class Register(t: Long)
     final case class Begin(t: Long, ta: ActorRef)
     final case class Timeout(t: Long)
+    
     class TimerActor extends Actor {
       val timer = new Timer // java.util.Timer
 
