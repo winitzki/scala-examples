@@ -579,6 +579,8 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Church encoding: FF[F, X] =  [G[_]] ⇒ ( [A, B] ⇒ F[A] + G[B] × (B ⇒ A) ⇒ G[A] ) ⇒ G[X]
 
     val n = 5000 // Stack overflow with n = 10000.
+    // See https://typelevel.org/cats-tagless/ for mitigation.
+    // We would need to interpret an FF into a special stack-safe Free monad rather than into an Option.
 
     // Encode [X, Y] ⇒ F[X] + G[Y] × (Y ⇒ X) ⇒ G[X] as a trait FFC parameterized by F and G.
     // It turns to be convenient if we separate the parts of the disjunction into methods of the trait.
