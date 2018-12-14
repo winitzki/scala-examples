@@ -15,7 +15,7 @@ lazy val commonSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "3.0.4"
     , "org.scalacheck" %% "scalacheck" % "1.14.0"
-    , "org.typelevel" %% "cats-core" % "1.1.0"
+    , "org.typelevel" %% "cats-core" % "1.5.0"
     , "org.typelevel" %% "kittens" % "1.0.0-RC2" // 1.0.0-RC3 has an API change for derive.functor
     //    , "org.scalaz" %% "scalaz-core" % "7.2.24"
     , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test

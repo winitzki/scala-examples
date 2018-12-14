@@ -8,10 +8,13 @@ object Utils extends GeneratorDrivenPropertyChecks with Matchers {
   def funcEq[A: Arbitrary, B](f: A ⇒ B, g: A ⇒ B)(dataEqual: (B, B) ⇒ Assertion = (x: B, y: B) ⇒ x shouldEqual y): Assertion =
     forAll { (x: A) ⇒ dataEqual(f(x), g(x)) }
 
-  def time[A](x: ⇒ A): (A, Double) = {
+  val timeReps = 20000
+
+  def time[A](x: ⇒ A): (A, Double) = (1 to timeReps).foldLeft((null.asInstanceOf[A], 0.0)) { case ((_, c), _)  ⇒
     val initTime = System.nanoTime()
     val result = x
     val elapsedTime = System.nanoTime() - initTime
-    (result, elapsedTime / 1000000000.0)
+    (result, c + elapsedTime / 1000000000.0 / timeReps)
   }
+
 }
