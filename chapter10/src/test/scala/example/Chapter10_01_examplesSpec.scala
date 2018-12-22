@@ -522,10 +522,10 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     result4 shouldEqual largeN
     println(s"Composing $largeN functions using SafeCompose took $time4 s")
     // Composing 1000000 functions using SafeCompose took 0.353282745 s
-    
+
     val n = 5000
     // This works without stack overflow even for n = 1000000.
-    
+
     sealed trait FF[F[_], A]
     final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
     final case class Map[F[_], A, B](ffa: FF[F, A], f: A ⇒ B) extends FF[F, B]
@@ -605,21 +605,23 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     result2 shouldEqual Some(n + 1)
   }
 
-  it should "benchmark free functor over UnF in Church encoding" in {
+  it should "benchmark free functor over UnF in Church/tree encoding" in {
 
-    // Church encoding: FF[F, X] =  [G[_]] ⇒ ( [A, B] ⇒ F[A] + G[B] × (B ⇒ A) ⇒ G[A] ) ⇒ G[X]
+    // Church/tree encoding: FF[F, X] =  ∀G[_]. ( ∀A.∀B. F[A] + G[B] × (B ⇒ A) ⇒ G[A] ) ⇒ G[X]
 
-    val n = 50000 // Stack overflow with n = 10000.
+    val n = 5000
+    // Stack overflow with n = 10000.
     // See https://typelevel.org/cats-tagless/ for mitigation.
     // We would need to interpret an FF into a special stack-safe Free monad rather than into an Option.
 
-    // Encode [X, Y] ⇒ F[X] + G[Y] × (Y ⇒ X) ⇒ G[X] as a trait FFC parameterized by F and G.
-    // It turns to be convenient if we separate the parts of the disjunction into methods of the trait.
-    abstract class FFC[F[_], G[_] : Functor] {
-      def wrapC[X](fa: F[X]): G[X]
-
-      def mapC[X, Y](fb: G[Y])(f: Y ⇒ X): G[X]
-    }
+    // Encode ∀X.∀Y. F[X] + G[Y] × (Y ⇒ X) ⇒ G[X] as a trait FFC parameterized by F and G.
+    // It turns to be convenient if we separate the parts of the disjunction into methods of the trait:
+    // F[X] + G[Y] × (Y ⇒ X) ⇒ G[X]  =  ( F[X] ⇒ G[X] ) × ( G[Y] × (Y ⇒ X) ⇒ G[X] )
+    // Note that X.∀Y. G[Y] × (Y ⇒ X) ⇒ G[X] is the same as `map` for the functor G.
+    // So, we don't need that value if we impose a Functor typeclass on G.
+    // The only value we still need is ∀X. F[X] ⇒ G[X], which is
+    // the "generic transformation" type constructor, F ~> G, from `cats.~>`.
+    case class FFC[F[_], G[_] : Functor](transform: F ~> G)
 
     // Encode FF now, using FFC:   FF[F, X] = ∀G[_]. FFC[F, G] ⇒ G[X]
     trait FF[F[_], X] {
@@ -641,18 +643,15 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Create an FF[F, A] from an F[A].
     def wrap[F[_], A](fa: F[A]): FF[F, A] = new FF[F, A] {
-      def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = _.wrapC(fa)
+      def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = _.transform(fa)
     }
 
     // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
     // This needs to be stack-safe.
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
-      val ffc: FFC[F, G] = new FFC[F, G] {
-        override def wrapC[X](fx: F[X]): G[X] = ex(fx) // We have this transformation already.
+      val ffc: FFC[F, G] = FFC[F, G](ex)
 
-        override def mapC[X, Y](gy: G[Y])(f: Y ⇒ X): G[X] = gy.map(f) // Just use the Functor instance for G.
-      }
       ffa.run[G].apply(ffc)
     }
 
