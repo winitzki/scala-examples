@@ -22,6 +22,7 @@ lazy val commonSettings = Seq(
     , "io.chymyst" %% "curryhoward" % "0.3.7"
     , "com.eed3si9n.expecty" %% "expecty" % "0.11.0" % Test
     , "org.typelevel" %% "spire" % "0.16.0"
+//    , "co.fs2" %% "fs2-core" % "1.0.2"
   )
 )
 

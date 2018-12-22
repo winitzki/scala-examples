@@ -6,7 +6,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 object Utils extends GeneratorDrivenPropertyChecks with Matchers {
   def funcEq[A: Arbitrary, B](f: A ⇒ B, g: A ⇒ B)(dataEqual: (B, B) ⇒ Assertion = (x: B, y: B) ⇒ x shouldEqual y): Assertion =
-    forAll { (x: A) ⇒ dataEqual(f(x), g(x)) }
+    forAll { x: A ⇒ dataEqual(f(x), g(x)) }
 
   val timeReps = 20000
 
@@ -15,6 +15,13 @@ object Utils extends GeneratorDrivenPropertyChecks with Matchers {
     val result = x
     val elapsedTime = System.nanoTime() - initTime
     (result, c + elapsedTime / 1000000000.0 / timeReps)
+  }
+
+  def elapsed[A](x: ⇒ A): (A, Double) = {
+    val initTime = System.nanoTime()
+    val result = x
+    val elapsedTime = System.nanoTime() - initTime
+    (result, elapsedTime / 1000000000.0)
   }
 
 }

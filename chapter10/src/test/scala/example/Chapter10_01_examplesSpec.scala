@@ -475,7 +475,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     result shouldEqual "abc ok"
   }
 
-  // Unfunctor: add a name; fetch name by id. 
+  // Unfunctor describing two operations: add a name; get name by id. 
   sealed trait UnF[A]
 
   final case class AddName(name: String) extends UnF[Long]
@@ -489,12 +489,13 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
   }
 
-  import Utils.time
+  import Utils._
   import cats.instances.option._
+
+  import SafeCompose._
 
   it should "benchmark free functor over UnF in tree encoding" in {
 
-    val n = 5000
     val largeN = 1000000
 
     // Composing a large number of functions and then calling the resulting function results in a stack overflow.
@@ -504,10 +505,27 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     val f2: Int ⇒ Int = (1 to largeN).foldLeft(identity[Int] _) { case (b, _) ⇒ x ⇒ 1 + b(x) }
     the[StackOverflowError] thrownBy f2(0) should have message null
 
-    // Mitigation: use `cats.data.AndThen`
-    val f3: AndThen[Int, Int] = (1 to largeN).foldLeft(AndThen(identity[Int])) { case (b, _) ⇒ b andThen (_ + 1) }
-    f3(0) shouldEqual largeN
+    // Mitigation: use `cats.data.AndThen`.
+    val (result3, time3) = elapsed {
+      val f3: AndThen[Int, Int] = (1 to largeN).foldLeft(AndThen(identity[Int])) { case (b, _) ⇒ b andThen (_ + 1) }
+      f3(0)
+    }
+    result3 shouldEqual largeN
+    println(s"Composing $largeN functions using cats.data.AndThen took $time3 s")
+    // Composing 1000000 functions using cats.data.AndThen took 1.188624424 s
 
+    // Mitigation: use `SafeCompose`.
+    val (result4, time4) = elapsed {
+      val f4 = (1 to largeN).foldLeft(identity[Int] _) { case (b, _) ⇒ b before (_ + 1) }
+      f4(0)
+    }
+    result4 shouldEqual largeN
+    println(s"Composing $largeN functions using SafeCompose took $time4 s")
+    // Composing 1000000 functions using SafeCompose took 0.353282745 s
+    
+    val n = 5000
+    // This works without stack overflow even for n = 1000000.
+    
     sealed trait FF[F[_], A]
     final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
     final case class Map[F[_], A, B](ffa: FF[F, A], f: A ⇒ B) extends FF[F, B]
@@ -521,9 +539,20 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
-      // A value of type FF[F, A] is typically Map(Map(...Map(Wrap(fb), f), ...), g), h). 
+      // A value of type FF[F, A] is of the form Map(Map(...Map(Wrap(fb), f), ...), g), h). 
       // In order to produce a stack-safe implementation, we need to do two things:
-      // 1. Use tail recursion. 2. Avoid chaining functions with `andThen` many times.
+      // 1. Use tail recursion. 2. Avoid composing functions with `andThen` many times: use a stack-safe `before` from `SafeCompose`.
+
+      @tailrec def unfold[Z, T](ff: FF[F, Z], result: Z ⇒ A): G[A] = {
+        ff match {
+          case Wrap(fa) ⇒ ex(fa).map(result)
+          case Map(ffz, f) ⇒ unfold(ffz, f before result)
+        }
+      }
+
+      unfold(ffa, identity[A])
+      /*
+      // A simple implementation without using `AndThen` would look like this:
       // We first convert the nested case classes to a List(f, ..., g, h)
       // and then fold through the list, applying .map(f) ... .map(g).map(h) to the wrapped value of type F[_].
       @tailrec def toList(ff: FF[F, _], result: List[Function1[_, _]]): (F[_], List[Function1[_, _]]) = ff match {
@@ -533,27 +562,29 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
       val (first, funcs) = toList(ffa, Nil)
       funcs.foldLeft(ex(first.asInstanceOf[F[Any]]): G[Any]) { case (b, func) ⇒ b.map(func.asInstanceOf[Function1[Any, Any]]) }.asInstanceOf[G[A]]
+      */
     }
 
     println("Benchmark: tree encoding of free functor")
     val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
-    println(s"Creating $n nested maps took $time1 s") // 0.076 ms 
+    println(s"Creating $n nested maps took $time1 s") // 0.08 ms 
     val (result2, time2) = time(runFF(UnF2Option, result1))
-    println(s"Interpreting into Option[_] took $time2 s") // 0.1 ms
+    println(s"Interpreting into Option[_] took $time2 s") // 0.17 ms
     result2 shouldEqual Some(n + 1)
   }
 
   it should "benchmark free functor over UnF in reduced encoding" in {
     val n = 5000
+    // This works without stack overflow even for n = 1000000.
 
     sealed trait FF[F[_], A]
     final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
-    final case class Map[F[_], B, A](fb: F[B], funcs: List[Function1[_, _]]) extends FF[F, A]
+    final case class Map[F[_], B, A](fb: F[B], f: B ⇒ A) extends FF[F, A]
 
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
       override def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = ffa match {
-        case Wrap(fa) ⇒ Map(fa, List(f))
-        case Map(fb, g) ⇒ Map(fb, f :: g)
+        case Wrap(fa) ⇒ Map(fa, f)
+        case Map(fz, g) ⇒ Map(fz, f after g)
       }
     }
 
@@ -561,16 +592,16 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       (1 to iterations).foldLeft(Wrap(fa): FF[F, A]) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
     }
 
-    def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = ffa match {
+    def runFF[F[_], G[_] : Functor, A, B](ex: F ~> G, ffa: FF[F, A]): G[A] = ffa match {
       case Wrap(fa) ⇒ ex(fa)
-      case Map(fb, funcs) ⇒ funcs.foldLeft(ex(fb)) { case (b, func) ⇒ b.map(func.asInstanceOf[Function1[Any, Any]]) }.asInstanceOf[G[A]]
+      case Map(fb: F[B], f) ⇒ ex(fb).map(f)
     }
 
     println("Benchmark: reduced encoding of free functor")
     val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
-    println(s"Creating $n nested maps took $time1 s") // 0.12 ms 
+    println(s"Creating $n nested maps took $time1 s") // 0.18 ms 
     val (result2, time2) = time(runFF(UnF2Option, result1))
-    println(s"Interpreting into Option[_] took $time2 s") // 0.07 ms
+    println(s"Interpreting into Option[_] took $time2 s") // 0.14 ms
     result2 shouldEqual Some(n + 1)
   }
 
@@ -578,7 +609,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Church encoding: FF[F, X] =  [G[_]] ⇒ ( [A, B] ⇒ F[A] + G[B] × (B ⇒ A) ⇒ G[A] ) ⇒ G[X]
 
-    val n = 5000 // Stack overflow with n = 10000.
+    val n = 50000 // Stack overflow with n = 10000.
     // See https://typelevel.org/cats-tagless/ for mitigation.
     // We would need to interpret an FF into a special stack-safe Free monad rather than into an Option.
 
@@ -614,12 +645,13 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
+    // This needs to be stack-safe.
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
       val ffc: FFC[F, G] = new FFC[F, G] {
-        override def wrapC[X](fa: F[X]): G[X] = ex(fa) // We have this transformation already.
+        override def wrapC[X](fx: F[X]): G[X] = ex(fx) // We have this transformation already.
 
-        override def mapC[X, Y](fb: G[Y])(f: Y ⇒ X): G[X] = fb.map(f) // Just use the Functor instance for G.
+        override def mapC[X, Y](gy: G[Y])(f: Y ⇒ X): G[X] = gy.map(f) // Just use the Functor instance for G.
       }
       ffa.run[G].apply(ffc)
     }
@@ -631,10 +663,14 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     println("Benchmark: Church encoding 1 of free functor")
     val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
-    println(s"Creating $n nested maps took $time1 s") // 0.1 ms 
+    println(s"Creating $n nested maps took $time1 s") // 0.15 ms 
     val (result2, time2) = time(runFF(UnF2Option, result1))
-    println(s"Interpreting into Option[_] took $time2 s") // 1.57 ms
+    println(s"Interpreting into Option[_] took $time2 s") // 0.27 ms
     result2 shouldEqual Some(n + 1)
+
+    // Church encoding is slower than the reduced encoding.
+    //  "Church Encoding of Data Types Considered Harmful for Implementations" - P.W.M. Koopman, et al. (2014).
+    //  https://ifl2014.github.io/submissions/ifl2014_submission_13.pdf
   }
 
 }
