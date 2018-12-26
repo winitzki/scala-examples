@@ -675,4 +675,58 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     //  https://ifl2014.github.io/submissions/ifl2014_submission_13.pdf
   }
 
+  it should "benchmark free functor over UnF in Church/reduced encoding" in {
+
+    // Church/reduced encoding: FF[F, X] =  ∀G[_]. ( ∀A.∀B. F[B] × (B ⇒ A) ⇒ G[A] ) ⇒ G[X]
+
+    val n = 5000
+
+    // Encode FF now, using FFC:   FF[F, X] = ∀G[_]. FFC[F, G] ⇒ G[X]
+    trait FF[F[_], X] {
+      def run[G[_] : Functor]: FFC[F, G] ⇒ G[X]
+    }
+
+    // Define functor instance for FF[F, ?].
+    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+      override def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
+        override def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
+          // We have ceffa: CEFF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
+          // We need to produce G[B].
+          val ga: G[A] = ceffa.run[G].apply(ffc) // Write run.apply(ffc) rather than run(ffc) because of implicit argument.
+          Functor[G].map(ga)(f)
+        }
+      }
+    }
+
+    // Helper functions.
+
+    // Create an FF[F, A] from an F[A].
+    def wrap[F[_], A](fa: F[A]): FF[F, A] = new FF[F, A] {
+      def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc(fa)
+    }
+
+    // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
+    // This needs to be stack-safe.
+    def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
+      // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
+      ffa.run[G].apply(ex)
+    }
+
+    // Performance test:
+    def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
+      (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
+    }
+
+    println("Benchmark: Church encoding 1 of free functor")
+    val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
+    println(s"Creating $n nested maps took $time1 s") // 0.06 ms 
+    val (result2, time2) = time(runFF(UnF2Option, result1))
+    println(s"Interpreting into Option[_] took $time2 s") // 0.1 ms
+    result2 shouldEqual Some(n + 1)
+
+    // Church encoding is claimed to be slower than other encodings. However, here the tests show it's faster.
+    //  "Church Encoding of Data Types Considered Harmful for Implementations" - P.W.M. Koopman, et al. (2014).
+    //  https://ifl2014.github.io/submissions/ifl2014_submission_13.pdf
+  }
+
 }
