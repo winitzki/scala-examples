@@ -6,7 +6,6 @@ import cats.kernel.Semigroup
 import cats.syntax.monoid._
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers, run}
-import io.chymyst.ch._
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -611,9 +610,9 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     val n = 5000
     // Stack overflow with n = 10000.
-    // The reason is that FF.run() needs to be called with a Functor[G] argument before we get a function value out, so we can't use SafeCompose.
+    // The reason is that FF.run[G]() needs to be called before we get a function value out, so we can't use SafeCompose.
     // (We could do that if G were fixed, but the whole point of the Church encoding is to have G a parameter.)
-    
+
     // See https://typelevel.org/cats-tagless/ for mitigation:
     // We would need to interpret an FF into a special stack-safe Free monad rather than into an Option.
 
@@ -636,7 +635,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
       override def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
         override def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
-          // We have ceffa: CEFF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
+          // We have ceffa: FF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
           // We need to produce G[B].
           val ga: G[A] = ceffa.run[G].apply(ffc) // Write run.apply(ffc) rather than run(ffc) because of implicit argument.
           Functor[G].map(ga)(f)
@@ -663,37 +662,58 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
     }
 
-    println("Benchmark: Church encoding 1 of free functor")
+    println("Benchmark: Church/tree encoding of free functor")
     val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
     println(s"Creating $n nested maps took $time1 s") // 0.06 ms 
     val (result2, time2) = time(runFF(UnF2Option, result1))
     println(s"Interpreting into Option[_] took $time2 s") // 0.1 ms
     result2 shouldEqual Some(n + 1)
 
-    // Church encoding is claimed to be slower than other encodings. However, here the tests show it's faster.
+    // Church encoding is claimed to be slower than other encodings.
     //  "Church Encoding of Data Types Considered Harmful for Implementations" - P.W.M. Koopman, et al. (2014).
     //  https://ifl2014.github.io/submissions/ifl2014_submission_13.pdf
+    // However, our tests show it's faster.
   }
 
   it should "benchmark free functor over UnF in Church/reduced encoding" in {
 
-    // Church/reduced encoding: FF[F, X] =  ∀G[_]. ( ∀A.∀B. F[B] × (B ⇒ A) ⇒ G[A] ) ⇒ G[X]
+    // Church/reduced encoding: FF[F, X] =  ∀G[_]. ( ∀A. (∃B. F[B] × (B ⇒ A)) ⇒ G[A] ) ⇒ G[X]
 
     val n = 5000
+    // This is stack-safe, works also for n = 5000000.
 
-    // Encode FF now, using FFC:   FF[F, X] = ∀G[_]. FFC[F, G] ⇒ G[X]
+    // FreeF[F, A] = ∃Z. F[Z] × (Z ⇒ A); this is the reduced encoding of the free functor over F.
+    sealed trait FreeF[F[_], A]
+    case class MapC[F[_], A, Z](fz: F[Z], f: Z ⇒ A) extends FreeF[F, A] // `Z` is existentially quantified here.
+
+    //  FFC[F, G] = ∀A.FreeF[F, A] ⇒ G[A]
+    trait FFC[F[_], G[_]] {
+      def apply[A]: FreeF[F, A] ⇒ G[A] // `A` is universally quantified here.
+    }
+
+    // Encode FF now, using FFC:  FF[F, X] = ∀G[_]. FFC[F, G] ⇒ G[X]
     trait FF[F[_], X] {
-      def run[G[_] : Functor]: FFC[F, G] ⇒ G[X]
+      def run[G[_]]: FFC[F, G] ⇒ G[X]
     }
 
     // Define functor instance for FF[F, ?].
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
-      override def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
-        override def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
-          // We have ceffa: CEFF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
-          // We need to produce G[B].
-          val ga: G[A] = ceffa.run[G].apply(ffc) // Write run.apply(ffc) rather than run(ffc) because of implicit argument.
-          Functor[G].map(ga)(f)
+      override def map[A, B](ceffa: FF[F, A])(fab: A ⇒ B): FF[F, B] = new FF[F, B] {
+
+        // To get ∃Z. F[Z] × (Z ⇒ A) out of `ceffa`, just apply `ceffa` to `identity` of type `FreeF[F, X] ⇒ FreeF[F, X]`.
+        val ffcff: FFC[F, FreeF[F, ?]] = new FFC[F, FreeF[F, ?]] {
+          override def apply[X]: FreeF[F, X] ⇒ FreeF[F, X] = identity
+        }
+        val freefa: FreeF[F, A] = ceffa.run(ffcff) // For stack safety, we need to put this `run()` call outside of the `run` method below.
+
+        override def run[G[_]]: FFC[F, G] ⇒ G[B] = { ffc ⇒
+          // We have ceffa: FF[F, A]; fab: A ⇒ B; and ffc: FFC[F, G].
+          // We need to produce G[B]. The only way of getting a G[B] is to apply ffc to a value of type ∀Z. F[Z] × (Z ⇒ B).
+          // The only way of getting that value is to extract ∃Z. F[Z] × (Z ⇒ A) out of `ceffa` and to map this with `fab`.
+          val freefb: FreeF[F, B] = freefa match {
+            case MapC(fz, f) ⇒ MapC(fz, f before fab) // Using stack-safe composition of functions here.
+          }
+          ffc.apply(freefb)
         }
       }
     }
@@ -702,14 +722,22 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Create an FF[F, A] from an F[A].
     def wrap[F[_], A](fa: F[A]): FF[F, A] = new FF[F, A] {
-      def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc(fa)
+      val freefa: FreeF[F, A] = MapC[F, A, A](fa, identity) // Helper: convert `fa` into `FreeF[F, A]`.
+
+      def run[G[_]]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc.apply(freefa)
     }
 
     // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
     // This needs to be stack-safe.
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
-      ffa.run[G].apply(ex)
+      def ffc[Z]: FFC[F, G] = new FFC[F, G] {
+        override def apply[B]: FreeF[F, B] ⇒ G[B] = {
+          case MapC(fz: F[Z], f) ⇒ ex(fz).map(f)
+        }
+      }
+
+      ffa.run[G](ffc)
     }
 
     // Performance test:
@@ -717,16 +745,14 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
     }
 
-    println("Benchmark: Church encoding 1 of free functor")
+    println("Benchmark: Church/reduced encoding of free functor")
     val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
-    println(s"Creating $n nested maps took $time1 s") // 0.06 ms 
+    println(s"Creating $n nested maps took $time1 s") // 0.27 ms 
     val (result2, time2) = time(runFF(UnF2Option, result1))
-    println(s"Interpreting into Option[_] took $time2 s") // 0.1 ms
+    println(s"Interpreting into Option[_] took $time2 s") // 0.13 ms
     result2 shouldEqual Some(n + 1)
 
-    // Church encoding is claimed to be slower than other encodings. However, here the tests show it's faster.
-    //  "Church Encoding of Data Types Considered Harmful for Implementations" - P.W.M. Koopman, et al. (2014).
-    //  https://ifl2014.github.io/submissions/ifl2014_submission_13.pdf
+    // This is slower than other encodings.
   }
 
 }
