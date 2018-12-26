@@ -10,6 +10,7 @@ object Utils extends GeneratorDrivenPropertyChecks with Matchers {
 
   val timeReps = 20000
 
+  // Repeat the computation `timeReps` times for better measurement. Report time in seconds.
   def time[A](x: ⇒ A): (A, Double) = (1 to timeReps).foldLeft((null.asInstanceOf[A], 0.0)) { case ((_, c), _)  ⇒
     val initTime = System.nanoTime()
     val result = x
@@ -17,6 +18,7 @@ object Utils extends GeneratorDrivenPropertyChecks with Matchers {
     (result, c + elapsedTime / 1000000000.0 / timeReps)
   }
 
+  // Do not repeat the computation, only run it once and report time in seconds.
   def elapsed[A](x: ⇒ A): (A, Double) = {
     val initTime = System.nanoTime()
     val result = x

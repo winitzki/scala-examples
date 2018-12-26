@@ -475,7 +475,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     result shouldEqual "abc ok"
   }
 
-  // Unfunctor describing two operations: add a name; get name by id. 
+  // An "unfunctor" describing two operations: add a name; get name by id. 
   sealed trait UnF[A]
 
   final case class AddName(name: String) extends UnF[Long]
@@ -546,13 +546,13 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       @tailrec def unfold[Z, T](ff: FF[F, Z], result: Z ⇒ A): G[A] = {
         ff match {
           case Wrap(fa) ⇒ ex(fa).map(result)
-          case Map(ffz, f) ⇒ unfold(ffz, f before result)
+          case Map(ffz, f) ⇒ unfold(ffz, f before result) // Use SafeCompose.before
         }
       }
 
       unfold(ffa, identity[A])
       /*
-      // A simple implementation without using `AndThen` would look like this:
+      // A simple implementation without using `SafeCompose` would look like this:
       // We first convert the nested case classes to a List(f, ..., g, h)
       // and then fold through the list, applying .map(f) ... .map(g).map(h) to the wrapped value of type F[_].
       @tailrec def toList(ff: FF[F, _], result: List[Function1[_, _]]): (F[_], List[Function1[_, _]]) = ff match {
@@ -611,9 +611,13 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     val n = 5000
     // Stack overflow with n = 10000.
-    // See https://typelevel.org/cats-tagless/ for mitigation.
+    // The reason is that FF.run() needs to be called with a Functor[G] argument before we get a function value out, so we can't use SafeCompose.
+    // (We could do that if G were fixed, but the whole point of the Church encoding is to have G a parameter.)
+    
+    // See https://typelevel.org/cats-tagless/ for mitigation:
     // We would need to interpret an FF into a special stack-safe Free monad rather than into an Option.
 
+    // Implement the Church encoding of a free functor, starting from the tree encoding.
     // Encode ∀X.∀Y. F[X] + G[Y] × (Y ⇒ X) ⇒ G[X] as a trait FFC parameterized by F and G.
     // It turns to be convenient if we separate the parts of the disjunction into methods of the trait:
     // F[X] + G[Y] × (Y ⇒ X) ⇒ G[X]  =  ( F[X] ⇒ G[X] ) × ( G[Y] × (Y ⇒ X) ⇒ G[X] )
@@ -621,7 +625,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // So, we don't need that value if we impose a Functor typeclass on G.
     // The only value we still need is ∀X. F[X] ⇒ G[X], which is
     // the "generic transformation" type constructor, F ~> G, from `cats.~>`.
-    case class FFC[F[_], G[_] : Functor](transform: F ~> G)
+    type FFC[F[_], G[_]] = F ~> G
 
     // Encode FF now, using FFC:   FF[F, X] = ∀G[_]. FFC[F, G] ⇒ G[X]
     trait FF[F[_], X] {
@@ -631,10 +635,11 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Define functor instance for FF[F, ?].
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
       override def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
-        override def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = {
+        override def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
           // We have ceffa: CEFF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
           // We need to produce G[B].
-          ceffa.run[G] andThen Functor[G].lift(f)
+          val ga: G[A] = ceffa.run[G].apply(ffc) // Write run.apply(ffc) rather than run(ffc) because of implicit argument.
+          Functor[G].map(ga)(f)
         }
       }
     }
@@ -643,16 +648,14 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Create an FF[F, A] from an F[A].
     def wrap[F[_], A](fa: F[A]): FF[F, A] = new FF[F, A] {
-      def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = _.transform(fa)
+      def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc(fa)
     }
 
     // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
     // This needs to be stack-safe.
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
-      val ffc: FFC[F, G] = FFC[F, G](ex)
-
-      ffa.run[G].apply(ffc)
+      ffa.run[G].apply(ex)
     }
 
     // Performance test:
@@ -662,12 +665,12 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     println("Benchmark: Church encoding 1 of free functor")
     val (result1, time1) = time(createFF[UnF, Long](AddName("abc"), n, _ + 1))
-    println(s"Creating $n nested maps took $time1 s") // 0.15 ms 
+    println(s"Creating $n nested maps took $time1 s") // 0.06 ms 
     val (result2, time2) = time(runFF(UnF2Option, result1))
-    println(s"Interpreting into Option[_] took $time2 s") // 0.27 ms
+    println(s"Interpreting into Option[_] took $time2 s") // 0.1 ms
     result2 shouldEqual Some(n + 1)
 
-    // Church encoding is slower than the reduced encoding.
+    // Church encoding is claimed to be slower than other encodings. However, here the tests show it's faster.
     //  "Church Encoding of Data Types Considered Harmful for Implementations" - P.W.M. Koopman, et al. (2014).
     //  https://ifl2014.github.io/submissions/ifl2014_submission_13.pdf
   }
