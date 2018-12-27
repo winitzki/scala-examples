@@ -204,7 +204,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Extractor can only produce String or FPath values.
     // Needs type casts.
     val fileOpsExtractor: Extractor[FileOps] = new Extractor[FileOps] {
-      override def apply[A](fa: FileOps[A]): A = fa match {
+      def apply[A](fa: FileOps[A]): A = fa match {
         case Path(s) ⇒ FPath(s).asInstanceOf[A]
         case Read(p) ⇒ mockFs(p.s).asInstanceOf[A]
       }
@@ -241,7 +241,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     val fileOpsErrExtractor: Ex[FileOps] = new Ex[FileOps] {
-      override def apply[A](fa: FileOps[A]): Either[Throwable, A] = fa match {
+      def apply[A](fa: FileOps[A]): Either[Throwable, A] = fa match {
         case Path(s) ⇒ Right(FPath(s).asInstanceOf[A])
         case Read(p) ⇒ Try(mockFs(p.s).asInstanceOf[A]).toEither
       }
@@ -339,9 +339,9 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Example: A free monoid over Either[Int, String], reduced to the standard Int monoid.
 
     implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
-      override def empty: Int = 0
+      def empty: Int = 0
 
-      override def combine(x: Int, y: Int): Int = x + y
+      def combine(x: Int, y: Int): Int = x + y
     }
 
     type Z = Either[Int, String]
@@ -392,9 +392,9 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Example: A free monoid over Either[Int, String], reduced to the standard Int monoid.
 
     implicit val monoidInt: Monoid[Int] = new Monoid[Int] {
-      override def empty: Int = 0
+      def empty: Int = 0
 
-      override def combine(x: Int, y: Int): Int = x + y
+      def combine(x: Int, y: Int): Int = x + y
     }
 
     def wrap[Z](z: Z): FM[Z] = List(z)
@@ -482,7 +482,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
   final case class GetName(id: Long) extends UnF[Option[String]]
 
   val UnF2Option = new ~>[UnF, Option] {
-    override def apply[A](fa: UnF[A]): Option[A] = fa match {
+    def apply[A](fa: UnF[A]): Option[A] = fa match {
       case AddName(name) ⇒ Some(1L).asInstanceOf[Option[A]]
       case GetName(id) ⇒ None
     }
@@ -530,7 +530,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     final case class Map[F[_], A, B](ffa: FF[F, A], f: A ⇒ B) extends FF[F, B]
 
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
-      override def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = Map(ffa, f)
+      def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = Map(ffa, f)
     }
 
     def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
@@ -581,7 +581,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     final case class Map[F[_], B, A](fb: F[B], f: B ⇒ A) extends FF[F, A]
 
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
-      override def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = ffa match {
+      def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = ffa match {
         case Wrap(fa) ⇒ Map(fa, f)
         case Map(fz, g) ⇒ Map(fz, f after g)
       }
@@ -633,8 +633,8 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Define functor instance for FF[F, ?].
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
-      override def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
-        override def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
+      def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
+        def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
           // We have ceffa: FF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
           // We need to produce G[B].
           val ga: G[A] = ceffa.run[G].apply(ffc) // Write run.apply(ffc) rather than run(ffc) because of implicit argument.
@@ -698,15 +698,15 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Define functor instance for FF[F, ?].
     implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
-      override def map[A, B](ceffa: FF[F, A])(fab: A ⇒ B): FF[F, B] = new FF[F, B] {
+      def map[A, B](ceffa: FF[F, A])(fab: A ⇒ B): FF[F, B] = new FF[F, B] {
 
         // To get ∃Z. F[Z] × (Z ⇒ A) out of `ceffa`, just apply `ceffa` to `identity` of type `FreeF[F, X] ⇒ FreeF[F, X]`.
         val ffcff: FFC[F, FreeF[F, ?]] = new FFC[F, FreeF[F, ?]] {
-          override def apply[X]: FreeF[F, X] ⇒ FreeF[F, X] = identity
+          def apply[X]: FreeF[F, X] ⇒ FreeF[F, X] = identity
         }
         val freefa: FreeF[F, A] = ceffa.run(ffcff) // For stack safety, we need to put this `run()` call outside of the `run` method below.
 
-        override def run[G[_]]: FFC[F, G] ⇒ G[B] = { ffc ⇒
+        def run[G[_]]: FFC[F, G] ⇒ G[B] = { ffc ⇒
           // We have ceffa: FF[F, A]; fab: A ⇒ B; and ffc: FFC[F, G].
           // We need to produce G[B]. The only way of getting a G[B] is to apply ffc to a value of type ∀Z. F[Z] × (Z ⇒ B).
           // The only way of getting that value is to extract ∃Z. F[Z] × (Z ⇒ A) out of `ceffa` and to map this with `fab`.
@@ -732,7 +732,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
       def ffc[Z]: FFC[F, G] = new FFC[F, G] {
-        override def apply[B]: FreeF[F, B] ⇒ G[B] = {
+        def apply[B]: FreeF[F, B] ⇒ G[B] = {
           case MapC(fz: F[Z], f) ⇒ ex(fz).map(f)
         }
       }
