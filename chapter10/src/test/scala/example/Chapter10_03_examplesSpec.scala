@@ -12,6 +12,7 @@ import cats.syntax.bitraverse._
 import WuZip.WuZipSyntax
 import io.chymyst.ch._
 import SafeCompose._
+import cats.data.Func
 
 class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
@@ -63,7 +64,6 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // Example: logger with a prefix. The prefix will contain a message and a timestamp.
     // Writer functor:
     type Wr[X] = (X, Long)
-    type CWr[X] = FreeCFR[Wr, X] // Helps with IntelliJ.
 
     // We will make a free contrafunctor over the writer functor, FreeCFR[Wr, X].
 
@@ -81,16 +81,16 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
     val wr: Wr[String] = ("message1", 12345L)
 
-    val c1: CWr[String] = wrapR(wr)
+    val c1 = wrapR(wr)
 
     // `c1` is a contrafunctor, has `contramap`.
-    val c2 = c1.contramap { x: Int ⇒ s"Items: $x" } // IntelliJ does not understand this unless FreeCFR[Wr, ?] is declared as a type.
+    val c2 = c1.contramap { x: Int ⇒ s"Items: $x" }
 
     // Interpret into the logger.
     val result: Logger[Int] = runR(new ~>[Wr, Logger] {
       override def apply[A](fa: Wr[A]): Logger[A] = prefixLogger(fa)
     }, c2)
-    
+
     // Can use the logger now.
     result(123) shouldEqual "[message1:12345] Items: 123"
   }
@@ -100,6 +100,25 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // A ⇒ F[A]
     // F[A] × (A ⇒ B) ⇒ F[B]
 
+    // Tree encoding:  FreePF[F, B] ≡ B + F[B] + ∃A. FreePF[F, A] × (A ⇒ B)
+    sealed trait FreePF[F[_], B]
+    case class Wrap[F[_], B](fb: F[B]) extends FreePF[F, B]
+    case class Point[F[_], B](b: B) extends FreePF[F, B]
+    case class Map[F[_], B, A](ca: FreePF[F, A], f: A ⇒ B) extends FreePF[F, B]
+
+    // Reduced encoding:  FreePFR[F, B] ≡ B + ∃A. F[A] × (A ⇒ B)
+    sealed trait FreePFR[F[_], A]
+    case class PointR[F[_], B](b: B) extends FreePFR[F, B]
+    case class Reduced[F[_], B, A](ca: F[A], f: A ⇒ B) extends FreePFR[F, B]
+    
+    // Implement a functor instance.
+    implicit def functorFreePFR[F[_]]: Functor[FreePFR[F, ?]] = new Functor[FreePFR[F, ?]]{
+      def map[A, B](fa: FreePFR[F, A])(f: A ⇒ B): FreePFR[F, B] = fa match {
+        case PointR(x) ⇒ PointR(f(x))
+        case Reduced(ca, g) ⇒ Reduced(ca, g before f)
+      }
+    }
+    
   }
 
   it should "implement a free filterable functor" in {
