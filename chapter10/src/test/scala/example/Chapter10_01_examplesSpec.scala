@@ -498,10 +498,14 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     val largeN = 1000000
 
     // Composing a large number of functions and then calling the resulting function results in a stack overflow.
-    val f1: Int ⇒ Int = (1 to largeN).foldLeft(identity[Int] _) { case (b, _) ⇒ b andThen (_ + 1) }
+    val f1: Int ⇒ Int = (1 to largeN).foldLeft(identity[Int] _) { case (b, _) ⇒
+      b andThen (_ + 1)
+    }
     the[StackOverflowError] thrownBy f1(0) should have message null
 
-    val f2: Int ⇒ Int = (1 to largeN).foldLeft(identity[Int] _) { case (b, _) ⇒ x ⇒ 1 + b(x) }
+    val f2: Int ⇒ Int = (1 to largeN).foldLeft(identity[Int] _) { case (b, _) ⇒
+      x ⇒ 1 + b(x)
+    }
     the[StackOverflowError] thrownBy f2(0) should have message null
 
     // Mitigation: use `cats.data.AndThen`.
@@ -534,7 +538,9 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
-      (1 to iterations).foldLeft(Wrap(fa): FF[F, A]) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
+      (1 to iterations).foldLeft(Wrap(fa): FF[F, A]) { case (b, _) ⇒
+        Functor[FF[F, ?]].map(b)(f)
+      }
     }
 
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
