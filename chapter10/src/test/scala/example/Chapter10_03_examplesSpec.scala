@@ -104,27 +104,35 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     sealed trait FreePF[F[_], B]
     case class Wrap[F[_], B](fb: F[B]) extends FreePF[F, B]
     case class Point[F[_], B](b: B) extends FreePF[F, B]
-    case class Map[F[_], B, A](ca: FreePF[F, A], f: A ⇒ B) extends FreePF[F, B]
+    case class Map[F[_], B, A](fpa: FreePF[F, A], f: A ⇒ B) extends FreePF[F, B]
 
     // Reduced encoding:  FreePFR[F, B] ≡ B + ∃A. F[A] × (A ⇒ B)
     sealed trait FreePFR[F[_], A]
     case class PointR[F[_], B](b: B) extends FreePFR[F, B]
-    case class Reduced[F[_], B, A](ca: F[A], f: A ⇒ B) extends FreePFR[F, B]
-    
+    case class Reduced[F[_], B, A](fa: F[A], f: A ⇒ B) extends FreePFR[F, B]
+
     // Implement a functor instance.
-    implicit def functorFreePFR[F[_]]: Functor[FreePFR[F, ?]] = new Functor[FreePFR[F, ?]]{
-      def map[A, B](fa: FreePFR[F, A])(f: A ⇒ B): FreePFR[F, B] = fa match {
+    implicit def functorFreePFR[F[_]]: Functor[FreePFR[F, ?]] = new Functor[FreePFR[F, ?]] {
+      def map[A, B](fra: FreePFR[F, A])(f: A ⇒ B): FreePFR[F, B] = fra match {
         case PointR(x) ⇒ PointR(f(x))
-        case Reduced(ca, g) ⇒ Reduced(ca, g before f)
+        case Reduced(fa, g) ⇒ Reduced(fa, g before f)
       }
     }
-    
+
   }
 
   it should "implement a free filterable functor" in {
     // Methods:
-    // F[A] × (A ⇒ B) ⇒ F[B]
     // F[A] × (A ⇒ 1 + B) ⇒ F[B]
+
+    // Tree encoding:  FreeFi[F, B] ≡ F[B] + ∃A. FreeFi[F, A] × (A ⇒ 1 + B)
+    sealed trait FreeFi[F[_], B]
+    case class Wrap[F[_], B](fb: F[B]) extends FreeFi[F, B]
+    case class MapOpt[F[_], B, A](fia: FreeFi[F, A], f: A ⇒ Option[B]) extends FreeFi[F, B]
+
+    // Reduced encoding:  FreeFiR[F, B] ≡ ∃A. F[A] × (A ⇒ 1 + B)
+    sealed trait FreeFiR[F[_], A]
+    case class Reduced[F[_], B, A](fa: F[A], f: A ⇒ B) extends FreeFiR[F, B]
 
   }
 
@@ -132,7 +140,17 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // Methods:
     // A ⇒ F[A]
     // F[A] × (A ⇒ F[B]) ⇒ F[B]
+   
+    // Tree encoding:  FreeM[F, B] ≡ B + F[B] + ∃A. FreeM[F, A] × (A ⇒ FreeM[F, B])
+    sealed trait FreeM[F[_], B]
+    case class Pure[F[_], B](b: B) extends FreeM[F, B]
+    case class Wrap[F[_], B](fb: F[B]) extends FreeM[F, B]
+    case class FlatMap[F[_], B, A](fma: FreeM[F, A], f: A ⇒ FreeM[F, B]) extends FreeM[F, B]
 
+    // Reduced encoding:  FreeMR[F, B] ≡ B + ∃A. F[A] × (􏰂A ⇒ FreeMR[F, B])􏰃
+    sealed trait FreeMR[F[_], B]
+    case class PureR[F[_], B](b: B) extends FreeMR[F, B]
+    case class Reduced[F[_], B, A](fa: F[A], f: A ⇒ FreeMR[F, B]) extends FreeMR[F, B]
   }
 
   it should "implement a free applicative functor" in {
