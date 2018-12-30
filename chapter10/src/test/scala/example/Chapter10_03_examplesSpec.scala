@@ -2,7 +2,7 @@ package example
 
 import cats.syntax.contravariant._
 import cats.syntax.functor._
-import cats.{Contravariant, Functor, ~>}
+import cats.{Applicative, Contravariant, Functor, ~>}
 import example.SafeCompose._
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -328,7 +328,9 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // Helper functions: Lift values of UnF1, UnF2, UnF3 into the free functor.
     // This boilerplate code depends on the order of disjunctions and is a burden to maintain.
     implicit def LiftUnF1[A](unF1: UnF1[A]): FF[UnF, A] = Wrap(Left(unF1): UnF[A])
+
     implicit def LiftUnF2[A](unF2: UnF2[A]): FF[UnF, A] = Wrap(Right(Left(unF2)): UnF[A])
+
     implicit def LiftUnF3[A](unF3: UnF3[A]): FF[UnF, A] = Wrap(Right(Right(unF3)): UnF[A])
 
     // Define a computation with the free functor, and then interpret it into Option.
@@ -369,9 +371,11 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     implicit def LiftUnF1[A](unF1: UnF1[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF1[G]].apply(unF1)
     }
+
     implicit def LiftUnF2[A](unF2: UnF2[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF2[G]].apply(unF2)
     }
+
     implicit def LiftUnF3[A](unF3: UnF3[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF3[G]].apply(unF3)
     }
@@ -404,18 +408,25 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     case class FlatMapT[F[_], B, A](fma: FreeMAT[F, A], f: A ⇒ FreeMAT[F, B]) extends FreeMAT[F, B]
     case class ApT[F[_], B, A](fma: FreeMAT[F, A], ff: FreeMAT[F, A ⇒ B]) extends FreeMAT[F, B]
 
-    // Reduced encoding:
+    def runFMAT[F[_], G[_] : CatsMonad : Applicative, A](ex: F ~> G)(fmat: FreeMAT[F, A]): G[A] = fmat match {
+      case WrapT(fa) ⇒ ex(fa)
+      case PureT(b) ⇒ implicitly[Applicative[G]].pure(b)
+      case FlatMapT(fma, f) ⇒
+        val g = runFMAT(ex)(fma)
+        val newF = f andThen runFMAT(ex)
+        implicitly[CatsMonad[G]].flatMap(g)(newF)
+      case ApT(fma, ff) ⇒
+        val g = runFMAT(ex)(fma)
+        val gg  = runFMAT(ex)(ff)
+        implicitly[Applicative[G]].ap(gg)(g)
+    }
+
+    // Reduced encoding:  FreeMA[F, B] ≡ B + ∃A. F[A] × FreeMA[􏰂F, A ⇒ B])􏰃 + ∃A. F[A] × (􏰂A ⇒ FreeMA[F, B])􏰃
 
     sealed trait FreeMA[F[_], B]
-    case class Wrap[F[_], B](fa: F[B]) extends FreeMA[F, B]
     case class Pure[F[_], B](b: B) extends FreeMA[F, B]
-    case class FlatMap[F[_], B, A](fma: FreeMA[F, A], f: A ⇒ FreeMA[F, B]) extends FreeMA[F, B]
-    case class Ap[F[_], B, A](fma: FreeMA[F, A], ff: FreeMA[F, A ⇒ B]) extends FreeMA[F, B]
-    
-    implicit def catsMonadFreeMA[F[_]]: CatsMonad[FreeMA[F, ?]] = new CatsMonad[FreeMA[F, ?]] {
-      def flatMap[A, B](fa: FreeMA[F, A])(f: A ⇒ FreeMA[F, B]): FreeMA[F, B] = FlatMap(fa, f)
+    case class FlatMap[F[_], B, A](fa: F[A], f: A ⇒ FreeMA[F, B]) extends FreeMA[F, B]
+    case class Ap[F[_], B, A](fa: F[A], ff: FreeMA[F, A ⇒ B]) extends FreeMA[F, B]
 
-      def pure[A](x: A): FreeMA[F, A] = Pure(x)
-    }
   }
 }
