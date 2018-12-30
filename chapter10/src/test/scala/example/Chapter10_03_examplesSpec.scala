@@ -195,13 +195,13 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Functor instance for Free[C, Z] with respect to Z.
-    implicit def functorFreeCZ[C[_]: Functor]: Functor[Free[C, ?]] = new Functor[Free[C, ?]] {
-     def map[A, B](fa: Free[C, A])(f: A ⇒ B): Free[C, B] = fa match {
-       case Wrap(z) ⇒ Wrap(f(z))
-       case Ops(cf) ⇒ Ops(cf.map(fca ⇒ map(fca)(f))) // Recursive call of `map`.
-     }
+    implicit def functorFreeCZ[C[_] : Functor]: Functor[Free[C, ?]] = new Functor[Free[C, ?]] {
+      def map[A, B](fa: Free[C, A])(f: A ⇒ B): Free[C, B] = fa match {
+        case Wrap(z) ⇒ Wrap(f(z))
+        case Ops(cf) ⇒ Ops(cf.map(fca ⇒ map(fca)(f))) // Recursive call of `map`.
+      }
     }
-    
+
     // Law 1: run(wrap) = id when we set P = Free[C, Z].
     // Both sides of law 1 are functions of type Free[C, Z] ⇒ Free[C, Z].
     /* Instead of `implicit opsP: C[P] ⇒ P` we use `ops` in run().
@@ -211,7 +211,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
       // Therefore, this is equal to ops(cf) = Ops(cf).
     }
      */
-    
+
     // Law 2: fmap f ◦ run g = run (f ◦ g) for all f: Y ⇒ Z, g: Z ⇒ P and any type P of typeclass C.
     /* Both sides of law 2 are functions of type Free[C, Z] ⇒ P. Apply both sides to a `freeCZ`.
     Compute fmap(f)(freeCZ) = freeCZ.map(f) = freeCZ match {
@@ -235,12 +235,12 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     Therefore we may assume that cf.map(run(f ◦ g)) equals cf.map(map(f) ◦ run(g)).
     But this is exactly what remained to be demonstrated. Q.E.D.
      */
-    
+
     // Universal property: run[P](g) ◦ f = run[Q] (g ◦ f)
     //    for any P, Q of typeclass C, and for any g : Z ⇒ P and any typeclass-preserving f: P ⇒ Q.
     // Typeclass-preserving property: ops[P] ◦ f = fmap f ◦ ops[Q]
     // or equivalently  f(opsP(x)) = opsQ(x.map(f)) for x: C[P].
-    
+
     /* Both sides of the law are functions of type Free[C, Z] ⇒ Q.
        Apply both sides to an arbitrary freeCZ.
        Left side:
@@ -260,15 +260,144 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
          // Equals the above.
        }
 
-    */ 
+    */
+  }
+
+  // An "unfunctor" describing two operations: add a name; get name by id. 
+  sealed trait UnF1[A]
+
+  final case class AddName(name: String) extends UnF1[Long]
+
+  final case class GetName(id: Long) extends UnF1[Option[String]]
+
+  val UnF1toOption = new ~>[UnF1, Option] {
+    def apply[A](fa: UnF1[A]): Option[A] = fa match {
+      case AddName(_) ⇒ Some(1L).asInstanceOf[Option[A]]
+      case GetName(_) ⇒ None
+    }
+  }
+
+  // An "unfunctor" describing an operation: log a message. 
+  sealed trait UnF2[A]
+
+  final case class LogMessage(message: String) extends UnF2[Unit]
+
+  val UnF2Option = new ~>[UnF2, Option] {
+    def apply[A](fa: UnF2[A]): Option[A] = fa match {
+      case LogMessage(_) ⇒ None
+    }
+  }
+
+  // An "unfunctor" describing one operation: generate a new id. 
+  sealed trait UnF3[A]
+
+  final case class FreshId() extends UnF3[Long]
+
+  val UnF3Option = new ~>[UnF3, Option] {
+    def apply[A](fa: UnF3[A]): Option[A] = fa match {
+      case FreshId() ⇒ None
+    }
+  }
+
+  import cats.instances.option._
+
+  it should "combine three operation constructors in a free functor using disjunction" in {
+
+    // Define UnF as a disjunction of the three unfunctors.
+    type UnF[A] = Either[UnF1[A], Either[UnF2[A], UnF3[A]]]
+
+    // Define an interpreter for UnF.
+    val UnFOption = new ~>[UnF, Option] {
+      def apply[A](fa: UnF[A]): Option[A] = fa match {
+        case Left(unf1) ⇒ UnF1toOption(unf1)
+        case Right(Left(unf2)) ⇒ UnF2Option(unf2)
+        case Right(Right(unf3)) ⇒ UnF3Option(unf3)
+      }
+    }
+
+    // Define a free functor based on UnF. Use reduced encoding.
+    sealed trait FF[F[_], A]
+    final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
+    final case class Map[F[_], B, A](fb: F[B], f: B ⇒ A) extends FF[F, A]
+
+    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+      def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = ffa match {
+        case Wrap(fa) ⇒ Map(fa, f)
+        case Map(fz, g) ⇒ Map(fz, f after g)
+      }
+    }
+
+    def runFF[F[_], G[_] : Functor, A, B](ex: F ~> G, ffa: FF[F, A]): G[A] = ffa match {
+      case Wrap(fa) ⇒ ex(fa)
+      case Map(fb: F[B], f) ⇒ ex(fb).map(f)
+    }
+
+    type FunFR[A] = FF[UnF, A]
+
+    // Define a computation with the free functor, and then interpret it into Option.
+    val computation = for {
+      // We need to "lift" FreshId() into the disjunction. This is cumbersome, but works.
+      x ← Wrap(Right(Right(FreshId())): UnF[Long]): FunFR[Long]
+      y = x + 1
+    } yield y
+
+    runFF(UnFOption, computation) shouldEqual None
+  }
+
+  it should "combine three operation constructors in a free functor using Church encoding" in {
+    
+    // Church encoding of the reduced encoding of the free functor.
+    sealed trait FreeF[F[_], A]
+    case class MapC[F[_], A, Z](fz: F[Z], f: Z ⇒ A) extends FreeF[F, A] // `Z` is existentially quantified here.
+
+    trait FFC[F[_], G[_]] {
+      def apply[A]: FreeF[F, A] ⇒ G[A] // `A` is universally quantified here.
+    }
+
+    trait FF[F[_], X] {
+      def run[G[_]]: FFC[F, G] ⇒ G[X]
+    }
+
+    // Define functor instance for FF[F, ?].
+    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+      def map[A, B](ceffa: FF[F, A])(fab: A ⇒ B): FF[F, B] = new FF[F, B] {
+
+        val ffcff: FFC[F, FreeF[F, ?]] = new FFC[F, FreeF[F, ?]] {
+          def apply[X]: FreeF[F, X] ⇒ FreeF[F, X] = identity
+        }
+        val freefa: FreeF[F, A] = ceffa.run(ffcff) // For stack safety, we need to put this `run()` call outside of the `run` method below.
+
+        def run[G[_]]: FFC[F, G] ⇒ G[B] = { ffc ⇒
+          val freefb: FreeF[F, B] = freefa match {
+            case MapC(fz, f) ⇒ MapC(fz, f before fab) // Using stack-safe composition of functions here.
+          }
+          ffc.apply(freefb)
+        }
+      }
+    }
+
+    // Helper functions.
+
+    // Create an FF[F, A] from an F[A].
+    def wrap[F[_], A](fa: F[A]): FF[F, A] = new FF[F, A] {
+      val freefa: FreeF[F, A] = MapC[F, A, A](fa, identity) // Helper: convert `fa` into `FreeF[F, A]`.
+
+      def run[G[_]]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc.apply(freefa)
+    }
+
+    // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
+    def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
+      def ffc[Z]: FFC[F, G] = new FFC[F, G] {
+        def apply[B]: FreeF[F, B] ⇒ G[B] = {
+          case MapC(fz: F[Z], f) ⇒ ex(fz).map(f)
+        }
+      }
+      ffa.run[G](ffc)
+    }
+
+    
   }
   
-  it should "combine two operation constructors in a free functor" in {
-    // Methods:
-    // F[A] × (A ⇒ B) ⇒ F[B]
-
-  }
-
   it should "combine a free monad and a free applicative functor" in {
     // Methods:
     // A ⇒ F[A]
