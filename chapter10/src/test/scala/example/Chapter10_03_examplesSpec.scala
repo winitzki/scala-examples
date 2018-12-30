@@ -158,13 +158,16 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // A ⇒ F[A]
     // F[A] × F[A ⇒ B] ⇒ F[B]
 
-    // Tree encoding:  FreeAp[F, B] ≡ B + F[B] + ∃A. FreeAp[F, A] × FreeAp[A ⇒ B]
+    // Tree encoding:  FreeAp[F, B] ≡ B + F[B] + ∃A. FreeAp[F, A] × FreeAp[F, A ⇒ B]
     sealed trait FreeAp[F[_], B]
     case class Pure[F[_], B](b: B) extends FreeAp[F, B]
     case class Wrap[F[_], B](fb: F[B]) extends FreeAp[F, B]
     case class Ap[F[_], B, A](fpa: FreeAp[F, A], ff: FreeAp[F, A ⇒ B]) extends FreeAp[F, B]
-    
-    
+
+    // Reduced encoding:  FreeApR[F, B] ≡ B + ∃A. F[A] × FreeApR[F, A ⇒ B]
+    sealed trait FreeApR[F[_], B]
+    case class PureR[F[_], B](b: B) extends FreeApR[F, B]
+    case class Reduced[F[_], B, A](fa: F[A], f: FreeApR[F, A ⇒ B]) extends FreeApR[F, B]
   }
 
   it should "combine two operation constructors in a free functor" in {
