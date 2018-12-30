@@ -1,7 +1,7 @@
 val scalaV = "2.12.6"
 
 lazy val commonSettings = Seq(
-  addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.4" cross CrossVersion.binary),
+  addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.9" cross CrossVersion.binary),
   scalaVersion := scalaV,
   scalacOptions ++= Seq(
     "-deprecation",

@@ -1,18 +1,10 @@
 package example
 
-import cats.{Applicative, Bifunctor, Bitraverse, Contravariant, Eval, Functor, Monoid, Traverse, ~>}
-import org.scalatest.{FlatSpec, Matchers}
-import cats.syntax.functor._
 import cats.syntax.contravariant._
-import cats.instances._
-import cats.syntax.bifunctor._
-import cats.syntax.traverse._
-import cats.syntax.monoid._
-import cats.syntax.bitraverse._
-import WuZip.WuZipSyntax
-import io.chymyst.ch._
-import SafeCompose._
-import cats.data.Func
+import cats.syntax.functor._
+import cats.{Contravariant, Functor, ~>}
+import example.SafeCompose._
+import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
@@ -282,7 +274,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   final case class LogMessage(message: String) extends UnF2[Unit]
 
-  val UnF2Option = new ~>[UnF2, Option] {
+  val UnF2toOption = new ~>[UnF2, Option] {
     def apply[A](fa: UnF2[A]): Option[A] = fa match {
       case LogMessage(_) ⇒ None
     }
@@ -293,7 +285,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   final case class FreshId() extends UnF3[Long]
 
-  val UnF3Option = new ~>[UnF3, Option] {
+  val UnF3toOption = new ~>[UnF3, Option] {
     def apply[A](fa: UnF3[A]): Option[A] = fa match {
       case FreshId() ⇒ None
     }
@@ -307,11 +299,12 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     type UnF[A] = Either[UnF1[A], Either[UnF2[A], UnF3[A]]]
 
     // Define an interpreter for UnF.
+    // This boilerplate code depends on the order of disjunctions and is a burden to maintain.
     val UnFOption = new ~>[UnF, Option] {
       def apply[A](fa: UnF[A]): Option[A] = fa match {
         case Left(unf1) ⇒ UnF1toOption(unf1)
-        case Right(Left(unf2)) ⇒ UnF2Option(unf2)
-        case Right(Right(unf3)) ⇒ UnF3Option(unf3)
+        case Right(Left(unf2)) ⇒ UnF2toOption(unf2)
+        case Right(Right(unf3)) ⇒ UnF3toOption(unf3)
       }
     }
 
@@ -332,12 +325,16 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
       case Map(fb: F[B], f) ⇒ ex(fb).map(f)
     }
 
-    type FunFR[A] = FF[UnF, A]
+    // Helper functions: Lift values of UnF1, UnF2, UnF3 into the free functor.
+    // This boilerplate code depends on the order of disjunctions and is a burden to maintain.
+    implicit def LiftUnF1[A](unF1: UnF1[A]): FF[UnF, A] = Wrap(Left(unF1): UnF[A])
+    implicit def LiftUnF2[A](unF2: UnF2[A]): FF[UnF, A] = Wrap(Right(Left(unF2)): UnF[A])
+    implicit def LiftUnF3[A](unF3: UnF3[A]): FF[UnF, A] = Wrap(Right(Right(unF3)): UnF[A])
 
     // Define a computation with the free functor, and then interpret it into Option.
     val computation = for {
-      // We need to "lift" FreshId() into the disjunction. This is cumbersome, but works.
-      x ← Wrap(Right(Right(FreshId())): UnF[Long]): FunFR[Long]
+      // The implicit conversions will lift FreshId() into the free functor.
+      x ← FreshId(): FF[UnF, Long] // Type annotation is required here.
       y = x + 1
     } yield y
 
@@ -345,59 +342,55 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
   }
 
   it should "combine three operation constructors in a free functor using Church encoding" in {
-    
-    // Church encoding of the reduced encoding of the free functor.
-    sealed trait FreeF[F[_], A]
-    case class MapC[F[_], A, Z](fz: F[Z], f: Z ⇒ A) extends FreeF[F, A] // `Z` is existentially quantified here.
 
-    trait FFC[F[_], G[_]] {
-      def apply[A]: FreeF[F, A] ⇒ G[A] // `A` is universally quantified here.
+    // Church encoding of the free functor using the "extractor type classes".
+
+    // For each unfunctor, define an extractor type class.
+    type ExF1[G[_]] = UnF1 ~> G
+    type ExF2[G[_]] = UnF2 ~> G
+    type ExF3[G[_]] = UnF3 ~> G
+
+    // Typeclass-driven Church/tree encoding of free functor over 3 generators:
+    // FreeFC[A] ≡ ∀G[_]: ExF1 : ExF2 : ExF3 : Functor. G[A]
+    sealed trait FreeFC[A] {
+      def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A]
     }
+    // Note: This is a fully generic encoding; works for any typeclass and for any number of generators.
 
-    trait FF[F[_], X] {
-      def run[G[_]]: FFC[F, G] ⇒ G[X]
-    }
-
-    // Define functor instance for FF[F, ?].
-    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
-      def map[A, B](ceffa: FF[F, A])(fab: A ⇒ B): FF[F, B] = new FF[F, B] {
-
-        val ffcff: FFC[F, FreeF[F, ?]] = new FFC[F, FreeF[F, ?]] {
-          def apply[X]: FreeF[F, X] ⇒ FreeF[F, X] = identity
-        }
-        val freefa: FreeF[F, A] = ceffa.run(ffcff) // For stack safety, we need to put this `run()` call outside of the `run` method below.
-
-        def run[G[_]]: FFC[F, G] ⇒ G[B] = { ffc ⇒
-          val freefb: FreeF[F, B] = freefa match {
-            case MapC(fz, f) ⇒ MapC(fz, f before fab) // Using stack-safe composition of functions here.
-          }
-          ffc.apply(freefb)
-        }
+    // Define functor instance for FreeFC[?].
+    implicit def functorFF: Functor[FreeFC] = new Functor[FreeFC] {
+      def map[A, B](fa: FreeFC[A])(f: A ⇒ B): FreeFC[B] = new FreeFC[B] {
+        def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[B] = fa.run[G].map(f) // Not stack-safe.
       }
     }
 
-    // Helper functions.
-
-    // Create an FF[F, A] from an F[A].
-    def wrap[F[_], A](fa: F[A]): FF[F, A] = new FF[F, A] {
-      val freefa: FreeF[F, A] = MapC[F, A, A](fa, identity) // Helper: convert `fa` into `FreeF[F, A]`.
-
-      def run[G[_]]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc.apply(freefa)
+    // Helper functions: Lift values of UnF1, UnF2, UnF3 into the free functor.
+    // This boilerplate code does not depend on the order of the unfunctors.
+    implicit def LiftUnF1[A](unF1: UnF1[A]): FreeFC[A] = new FreeFC[A] {
+       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF1[G]].apply(unF1) 
+    }
+    implicit def LiftUnF2[A](unF2: UnF2[A]): FreeFC[A] = new FreeFC[A] {
+      def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF2[G]].apply(unF2)
+    }
+    implicit def LiftUnF3[A](unF3: UnF3[A]): FreeFC[A] = new FreeFC[A] {
+      def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF3[G]].apply(unF3)
     }
 
-    // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
-    def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
-      def ffc[Z]: FFC[F, G] = new FFC[F, G] {
-        def apply[B]: FreeF[F, B] ⇒ G[B] = {
-          case MapC(fz: F[Z], f) ⇒ ex(fz).map(f)
-        }
-      }
-      ffa.run[G](ffc)
-    }
+    // Define a computation with the free functor, and then interpret it into Option.
+    val computation = for {
+      // The implicit conversions will lift FreshId() into the free functor.
+      x ← FreshId(): FreeFC[Long] // Type annotation is required here.
+      y = x + 1
+    } yield y
 
-    
+    // Extractor typeclass instances for Option.
+    implicit val optionExF1: ExF1[Option] = UnF1toOption
+    implicit val optionExF2: ExF2[Option] = UnF2toOption
+    implicit val optionExF3: ExF3[Option] = UnF3toOption
+
+    computation.run[Option] shouldEqual None
   }
-  
+
   it should "combine a free monad and a free applicative functor" in {
     // Methods:
     // A ⇒ F[A]
