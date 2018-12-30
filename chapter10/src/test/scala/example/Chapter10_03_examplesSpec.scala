@@ -12,7 +12,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement a free contrafunctor" in {
     // Methods:
-    // F[A] × (B ⇒ A) ⇒ F[B]
+    // map: F[A] × (B ⇒ A) ⇒ F[B]
 
     // Tree encoding:  FreeCF[F, B] ≡ F[B] + ∃A. FreeCF[F, A] × (B ⇒ A)
     sealed trait FreeCF[F[_], B]
@@ -89,8 +89,8 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement a free pointed functor" in {
     // Methods:
-    // A ⇒ F[A]
-    // F[A] × (A ⇒ B) ⇒ F[B]
+    // pure: A ⇒ F[A]
+    // map: F[A] × (A ⇒ B) ⇒ F[B]
 
     // Tree encoding:  FreePF[F, B] ≡ B + F[B] + ∃A. FreePF[F, A] × (A ⇒ B)
     sealed trait FreePF[F[_], B]
@@ -115,7 +115,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement a free filterable functor" in {
     // Methods:
-    // F[A] × (A ⇒ 1 + B) ⇒ F[B]
+    // mapOpt: F[A] × (A ⇒ 1 + B) ⇒ F[B]
 
     // Tree encoding:  FreeFi[F, B] ≡ F[B] + ∃A. FreeFi[F, A] × (A ⇒ 1 + B)
     sealed trait FreeFi[F[_], B]
@@ -130,8 +130,8 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement a free monadic functor" in {
     // Methods:
-    // A ⇒ F[A]
-    // F[A] × (A ⇒ F[B]) ⇒ F[B]
+    // pure: A ⇒ F[A]
+    // flatMap: F[A] × (A ⇒ F[B]) ⇒ F[B]
 
     // Tree encoding:  FreeM[F, B] ≡ B + F[B] + ∃A. FreeM[F, A] × (A ⇒ FreeM[F, B])
     sealed trait FreeM[F[_], B]
@@ -147,8 +147,8 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement a free applicative functor" in {
     // Methods:
-    // A ⇒ F[A]
-    // F[A] × F[A ⇒ B] ⇒ F[B]
+    // pure: A ⇒ F[A]
+    // ap: F[A] × F[A ⇒ B] ⇒ F[B]
 
     // Tree encoding:  FreeAp[F, B] ≡ B + F[B] + ∃A. FreeAp[F, A] × FreeAp[F, A ⇒ B]
     sealed trait FreeAp[F[_], B]
@@ -262,7 +262,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   final case class GetName(id: Long) extends UnF1[Option[String]]
 
-  val UnF1toOption = new ~>[UnF1, Option] {
+  val UnF1toOption = new (UnF1 ~> Option) {
     def apply[A](fa: UnF1[A]): Option[A] = fa match {
       case AddName(_) ⇒ Some(1L).asInstanceOf[Option[A]]
       case GetName(_) ⇒ None
@@ -274,7 +274,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   final case class LogMessage(message: String) extends UnF2[Unit]
 
-  val UnF2toOption = new ~>[UnF2, Option] {
+  val UnF2toOption = new (UnF2 ~> Option) {
     def apply[A](fa: UnF2[A]): Option[A] = fa match {
       case LogMessage(_) ⇒ None
     }
@@ -285,7 +285,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   final case class FreshId() extends UnF3[Long]
 
-  val UnF3toOption = new ~>[UnF3, Option] {
+  val UnF3toOption = new (UnF3 ~> Option) {
     def apply[A](fa: UnF3[A]): Option[A] = fa match {
       case FreshId() ⇒ None
     }
@@ -367,7 +367,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // Helper functions: Lift values of UnF1, UnF2, UnF3 into the free functor.
     // This boilerplate code does not depend on the order of the unfunctors.
     implicit def LiftUnF1[A](unF1: UnF1[A]): FreeFC[A] = new FreeFC[A] {
-       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF1[G]].apply(unF1) 
+      def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF1[G]].apply(unF1)
     }
     implicit def LiftUnF2[A](unF2: UnF2[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF2[G]].apply(unF2)
@@ -393,8 +393,29 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   it should "combine a free monad and a free applicative functor" in {
     // Methods:
-    // A ⇒ F[A]
-    // F[A] × (A ⇒ F[B]) ⇒ F[B]
-    // F[A] × F[A ⇒ B] ⇒ F[B]
+    // pure:                     B ⇒ F[B]
+    // flatMap: F[A] × (A ⇒ F[B]) ⇒ F[B]
+    // ap:        F[A] × F[A ⇒ B] ⇒ F[B]
+
+    // Tree encoding:
+    sealed trait FreeMAT[F[_], B]
+    case class WrapT[F[_], B](fa: F[B]) extends FreeMAT[F, B]
+    case class PureT[F[_], B](b: B) extends FreeMAT[F, B]
+    case class FlatMapT[F[_], B, A](fma: FreeMAT[F, A], f: A ⇒ FreeMAT[F, B]) extends FreeMAT[F, B]
+    case class ApT[F[_], B, A](fma: FreeMAT[F, A], ff: FreeMAT[F, A ⇒ B]) extends FreeMAT[F, B]
+
+    // Reduced encoding:
+
+    sealed trait FreeMA[F[_], B]
+    case class Wrap[F[_], B](fa: F[B]) extends FreeMA[F, B]
+    case class Pure[F[_], B](b: B) extends FreeMA[F, B]
+    case class FlatMap[F[_], B, A](fma: FreeMA[F, A], f: A ⇒ FreeMA[F, B]) extends FreeMA[F, B]
+    case class Ap[F[_], B, A](fma: FreeMA[F, A], ff: FreeMA[F, A ⇒ B]) extends FreeMA[F, B]
+    
+    implicit def catsMonadFreeMA[F[_]]: CatsMonad[FreeMA[F, ?]] = new CatsMonad[FreeMA[F, ?]] {
+      def flatMap[A, B](fa: FreeMA[F, A])(f: A ⇒ FreeMA[F, B]): FreeMA[F, B] = FlatMap(fa, f)
+
+      def pure[A](x: A): FreeMA[F, A] = Pure(x)
+    }
   }
 }
