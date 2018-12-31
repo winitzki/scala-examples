@@ -140,7 +140,7 @@ class Chapter10_04_examplesSpec extends FlatSpec with Matchers {
     val computation = for {
       id ← MakeId().lift
       (x, y, z) = (id + 1, id + 2, id + 3) // Generate 3 new IDs.
-      ((rx, ry), rz) ←  validate(x) zip validate(y) zip validate(z)
+      ((rx, ry), rz) ← validate(x) zip validate(y) zip validate(z)
       status ← CloseSession(rx && ry && rz).lift
     } yield status
 

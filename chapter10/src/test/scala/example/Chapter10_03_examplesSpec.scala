@@ -296,7 +296,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
     // Define an interpreter for UnF.
     // This boilerplate code depends on the order of disjunctions and is a burden to maintain.
-    val UnFOption = new ~>[UnF, Option] {
+    val UnFOption = new (UnF ~> Option) {
       def apply[A](fa: UnF[A]): Option[A] = fa match {
         case Left(unf1) ⇒ UnF1toOption(unf1)
         case Right(Left(unf2)) ⇒ UnF2toOption(unf2)
@@ -323,9 +323,9 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
     // Helper functions: Lift values of UnF1, UnF2, UnF3 into the free functor.
     // This boilerplate code depends on the order of disjunctions and is a burden to maintain.
-    implicit def LiftUnF1[A](unF1: UnF1[A]): FF[UnF, A] = Wrap(Left(unF1): UnF[A])
-    implicit def LiftUnF2[A](unF2: UnF2[A]): FF[UnF, A] = Wrap(Right(Left(unF2)): UnF[A])
-    implicit def LiftUnF3[A](unF3: UnF3[A]): FF[UnF, A] = Wrap(Right(Right(unF3)): UnF[A])
+    implicit def liftUnF1[A](unF1: UnF1[A]): FF[UnF, A] = Wrap(Left(unF1): UnF[A])
+    implicit def liftUnF2[A](unF2: UnF2[A]): FF[UnF, A] = Wrap(Right(Left(unF2)): UnF[A])
+    implicit def liftUnF3[A](unF3: UnF3[A]): FF[UnF, A] = Wrap(Right(Right(unF3)): UnF[A])
 
     // Define a computation with the free functor, and then interpret it into Option.
     val computation = for {
