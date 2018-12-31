@@ -62,7 +62,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // Specific contrafunctor:
     type Logger[A] = A ⇒ String
     implicit val contravariantLogger: Contravariant[Logger] = new Contravariant[Logger] {
-      override def contramap[A, B](fa: Logger[A])(f: B ⇒ A): Logger[B] = fa after f
+      def contramap[A, B](fa: Logger[A])(f: B ⇒ A): Logger[B] = fa after f
     }
 
     // Extractor: from identity functor to Logger, A ⇒ Logger[A].
@@ -80,7 +80,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
     // Interpret into the logger.
     val result: Logger[Int] = runR(new ~>[Wr, Logger] {
-      override def apply[A](fa: Wr[A]): Logger[A] = prefixLogger(fa)
+      def apply[A](fa: Wr[A]): Logger[A] = prefixLogger(fa)
     }, c2)
 
     // Can use the logger now.
@@ -257,9 +257,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   // An "unfunctor" describing two operations: add a name; get name by id. 
   sealed trait UnF1[A]
-
   final case class AddName(name: String) extends UnF1[Long]
-
   final case class GetName(id: Long) extends UnF1[Option[String]]
 
   val UnF1toOption = new (UnF1 ~> Option) {
@@ -271,7 +269,6 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   // An "unfunctor" describing an operation: log a message. 
   sealed trait UnF2[A]
-
   final case class LogMessage(message: String) extends UnF2[Unit]
 
   val UnF2toOption = new (UnF2 ~> Option) {
@@ -282,7 +279,6 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
   // An "unfunctor" describing one operation: generate a new id. 
   sealed trait UnF3[A]
-
   final case class FreshId() extends UnF3[Long]
 
   val UnF3toOption = new (UnF3 ~> Option) {
@@ -328,9 +324,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     // Helper functions: Lift values of UnF1, UnF2, UnF3 into the free functor.
     // This boilerplate code depends on the order of disjunctions and is a burden to maintain.
     implicit def LiftUnF1[A](unF1: UnF1[A]): FF[UnF, A] = Wrap(Left(unF1): UnF[A])
-
     implicit def LiftUnF2[A](unF2: UnF2[A]): FF[UnF, A] = Wrap(Right(Left(unF2)): UnF[A])
-
     implicit def LiftUnF3[A](unF3: UnF3[A]): FF[UnF, A] = Wrap(Right(Right(unF3)): UnF[A])
 
     // Define a computation with the free functor, and then interpret it into Option.
@@ -371,11 +365,9 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     implicit def LiftUnF1[A](unF1: UnF1[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF1[G]].apply(unF1)
     }
-
     implicit def LiftUnF2[A](unF2: UnF2[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF2[G]].apply(unF2)
     }
-
     implicit def LiftUnF3[A](unF3: UnF3[A]): FreeFC[A] = new FreeFC[A] {
       def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[A] = implicitly[ExF3[G]].apply(unF3)
     }
@@ -417,16 +409,60 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
         implicitly[CatsMonad[G]].flatMap(g)(newF)
       case ApT(fma, ff) ⇒
         val g = runFMAT(ex)(fma)
-        val gg  = runFMAT(ex)(ff)
+        val gg = runFMAT(ex)(ff)
         implicitly[Applicative[G]].ap(gg)(g)
     }
 
-    // Reduced encoding:  FreeMA[F, B] ≡ B + ∃A. F[A] × FreeMA[􏰂F, A ⇒ B])􏰃 + ∃A. F[A] × (􏰂A ⇒ FreeMA[F, B])􏰃
-
+    // Reduced encoding:  FreeMA[F, B] ≡ B + ∃A. F[A] × FreeMA[􏰂F, A ⇒ B])􏰃 + ∃A. FreeMA[F, A] × (􏰂A ⇒ FreeMA[F, B])􏰃
+    // In an expression such as fma.ap().ap().flatMap().flatMap().ap() ..., 
+    // - combine all adjacent `ap`s together, using associativity and composition
+    // - after a `flatMap`, pull all the rest under the `flatMap`
+    // - each `ap` starts a new parallel branch
+    // - the FlatMap branch must retain a FreeMA[F, A] argument because otherwise we cannot keep parallelism in that value
+    // Note that we cannot map M[A ⇒ B] × (􏰂B ⇒ M[C])􏰃 into M[A ⇒ C] for a general monad M (this is the "rigidity" property).
+    // So we cannot simplify Ap(F[A], FreeMA[A ⇒ B]) .flatMap(f: B ⇒ FreeMA[C]) into an Ap(F[A], FreeMA[A ⇒ C]).
+    // As for simplifying it into FlatMap(F[A], A ⇒ FreeMA[C]), this is possible but would lose the parallelism inherent in Ap().
+    // So we need to keep a general argument FreeMA[F, A] inside FlatMap().
     sealed trait FreeMA[F[_], B]
-    case class Pure[F[_], B](b: B) extends FreeMA[F, B]
-    case class FlatMap[F[_], B, A](fa: F[A], f: A ⇒ FreeMA[F, B]) extends FreeMA[F, B]
-    case class Ap[F[_], B, A](fa: F[A], ff: FreeMA[F, A ⇒ B]) extends FreeMA[F, B]
+    case class Pure[F[_], B](x: B) extends FreeMA[F, B]
+    case class FlatMap[F[_], B, A](fmx: FreeMA[F, A], fx2m: A ⇒ FreeMA[F, B]) extends FreeMA[F, B]
+    case class Ap[F[_], B, A](fx: F[A], ffx2a: FreeMA[F, A ⇒ B]) extends FreeMA[F, B]
 
+    // Implement various typeclass instances for FreeMA[F, ?], preserving the reduced form and the parallel/sequential semantic split.
+    
+    // Implement Functor.
+    implicit def functorFreeMA[F[_]]: Functor[FreeMA[F, ?]] = new Functor[FreeMA[F, ?]] {
+      def map[A, B](fa: FreeMA[F, A])(f: A ⇒ B): FreeMA[F, B] = fa match {
+        case Pure(x) ⇒ Pure(f(x))
+        case FlatMap(fx, fx2m) ⇒ FlatMap(fx, x ⇒ map(fx2m(x))(f))
+        case Ap(fx, ffx2a) ⇒ Ap(fx, map(ffx2a)(q ⇒ q andThen f))
+      }
+    }
+    
+    // Implement CatsMonad.
+    implicit def catsMonadFreeMA[F[_]]: CatsMonad[FreeMA[F, ?]] = new CatsMonad[FreeMA[F, ?]] {
+      override def pure[A](x: A): FreeMA[F, A] = Pure(x)
+
+      override def flatMap[B, C](fa: FreeMA[F, B])(f: B ⇒ FreeMA[F, C]): FreeMA[F, C] = fa match {
+        case Pure(x) ⇒ f(x) // Pure(x: B) . flatMap(f: B ⇒ FreeMA[F, B])
+        
+        case FlatMap(fx, fx2m) ⇒
+          // (fx: F[A]).flatMap(f: A ⇒ FreeMA[B]).flatMap(g: B ⇒ FreeMA[C]) is (fx: F[A]).flatMap(x ⇒ f(x) flatMap g) 
+          FlatMap(fx, x ⇒ flatMap(fx2m(x))(f))
+          
+        case Ap(fx, ffx2a) ⇒ FlatMap(fa, f)
+        // (fx: F[A]).ap(ffx2a: FreeMA[A ⇒ B]).flatMap(f: B ⇒ FreeMA[C]) is transformed into
+        // (fx: FreeMA[B]).flatMap(f: B ⇒ FreeMA[C])
+      }
+    }
+    
+    // Implement Applicative.
+    implicit def applicativeFreeMA[F[_]]: Applicative[FreeMA[F, ?]] = new Applicative[FreeMA[F, ?]] {
+      override def pure[A](x: A): FreeMA[F, A] = Pure(x)
+
+      override def ap[A, B](ff: FreeMA[F, A ⇒ B])(fa: FreeMA[F, A]): FreeMA[F, B] = ???
+    }
+    
+    // Interpret FreeMA[F, ?] into a Future[?].
   }
 }
