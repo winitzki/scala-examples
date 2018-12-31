@@ -15,6 +15,7 @@ object CatsMonad {
   implicit class CatsMonadSyntax[F[_] : CatsMonad, A](fa: F[A]) {
     def flatMap[B](f: A ⇒ F[B]): F[B] = CatsMonad[F].flatMap(fa)(f)
 
+    def withFilter(p: A ⇒ Boolean): F[A] = fa
 //    def map[B](f: A ⇒ B): F[B] = CatsMonad[F].flatMap(fa)(f andThen CatsMonad[F].pure)
   }
 
