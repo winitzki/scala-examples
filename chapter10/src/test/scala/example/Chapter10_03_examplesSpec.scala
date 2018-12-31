@@ -458,9 +458,9 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
 
     // Implement CatsMonad with some simplifications.
     implicit def catsMonadFreeMA[F[_]]: CatsMonad[FreeMA[F, ?]] = new CatsMonad[FreeMA[F, ?]] {
-      override def pure[A](x: A): FreeMA[F, A] = Pure(x)
+      def pure[A](x: A): FreeMA[F, A] = Pure(x)
 
-      override def flatMap[B, C](fa: FreeMA[F, B])(f: B ⇒ FreeMA[F, C]): FreeMA[F, C] = fa match {
+      def flatMap[B, C](fa: FreeMA[F, B])(f: B ⇒ FreeMA[F, C]): FreeMA[F, C] = fa match {
         case Pure(x) ⇒ f(x) // Pure(x: B) . flatMap(f: B ⇒ FreeMA[F, B])
         case Wrap(fb) ⇒ FlatMap(Wrap(fb), f)
         case FlatMap(fmx, fx2m) ⇒
@@ -476,17 +476,43 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Implement Applicative with minimal simplifications.
-    implicit def applicativeFreeMA[F[_]]: Applicative[FreeMA[F, ?]] = new Applicative[FreeMA[F, ?]] {
-      override def pure[A](x: A): FreeMA[F, A] = Pure(x)
+    implicit def wuZipFreeMA[F[_]]: WuZip[FreeMA[F, ?]] = new WuZip[FreeMA[F, ?]] {
+      val ffma: Functor[FreeMA[F, ?]] = functorFreeMA[F]
 
-      override def ap[B, C](ff: FreeMA[F, B ⇒ C])(fa: FreeMA[F, B]): FreeMA[F, C] = {
-        implicit val functor: Functor[FreeMA[F, ?]] = functorFreeMA[F] // For convenience.
-        fa match {
-          case Pure(x) ⇒ functor.map(ff)(q ⇒ q(x)) // Pure(x: B).ap (ff: FreeMA[F, B ⇒ C]) becomes ff.map { q: (B ⇒ C) ⇒ q(x) } 
-          case _ ⇒ Ap(fa, ff)
-        }
+      def wu: FreeMA[F, Unit] = Pure(())
+
+      def zip[A, B](fa: FreeMA[F, A], fb: FreeMA[F, B]): FreeMA[F, (A, B)] = (fa, fb) match {
+        case (Pure(x), Pure(y)) ⇒ Pure((x, y))
+        case (Pure(x), _) ⇒ ffma.map(fb) { b ⇒ (x, b) }
+        case (_, Pure(y)) ⇒ ffma.map(fa) { a ⇒ (a, y) }
+        case (_, _) ⇒ Ap(fa, ffma.map[B, A ⇒ (A, B)](fb) { b ⇒ a ⇒ (a, b) })
       }
     }
+    import WuZip._
+    import CatsMonad.CatsMonadSyntax
 
+    // Define a DSL, as an unfunctor with various operations.
+    sealed trait DSL[A]
+    case class MakeId[A]() extends DSL[Long]
+    case class GetName[A](id: Long) extends DSL[String]
+    case class Validate[A](name: String) extends DSL[Boolean]
+    case class CloseSession[A](status: Boolean) extends DSL[Unit]
+    
+    // Convert the unfunctor into a free applicative/monadic functor.
+    type FDSL[A] = FreeMA[DSL, A]
+    
+    // Helper function for lifting operations into the functor.
+    implicit def w[A](dsl: DSL[A]): FDSL[A] = Wrap(dsl)
+    
+    val x =  (GetName(1L): FDSL[String]) zip  GetName(2L) 
+    
+    
+    
+    // Define a computation.
+    val computation = for {
+      id ← MakeId(): FDSL[Long]
+//      (x, y, z) = (id+1, id+2, id+3) // Generate 3 new IDs.
+//      names ← w(GetName(x)) zip w(GetName(y)) zip w(GetName(z))
+    } yield ???
   }
 }
