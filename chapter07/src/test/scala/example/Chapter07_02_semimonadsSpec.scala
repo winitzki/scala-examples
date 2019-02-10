@@ -399,7 +399,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
   }
 
   it should "verify monad construction 6" in {
-    // Cut down the number of type parameters to be written each time.
+    // Decrease the number of type parameters to be written each time.
     def construction6[G[_] : Monad, W: Monoid, Z](): Unit = {
 
       type P[A] = Either[Z, (W, A)] // P[A] = Z + W × A
