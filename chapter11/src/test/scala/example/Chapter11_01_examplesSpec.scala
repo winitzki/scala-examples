@@ -1,6 +1,5 @@
 package example
 
-import cats.Monad
 import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
@@ -24,11 +23,11 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
             // We would like to try returning a `Some[R ⇒ B]` so that we could satisfy the identity law.
             Some { r ⇒
               // We need to get a `B` here. We can apply `f` to `rToA(r) : A`.
-              val orb: OR[B] = f(rToA(r))
+              val orb: Option[R ⇒ B] = f(rToA(r))
               // Now, `orb` is either `None` or `Some[R ⇒ B]`.
               orb match {
                 case Some(rToB) ⇒ rToB(r)
-                case None ⇒ ??? // We are stuck here: there is no way for us to compute a `B`.
+                case None ⇒ ??? // Here we get stuck: there is no way to compute a `B`.
               }
             }
         }
@@ -36,7 +35,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         override def pure[A](x: A): OR[A] = Some { _ ⇒ x }
       }
     }
-    
+
   }
 
   behavior of "State monad does not compose with other monads"
@@ -99,12 +98,12 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
               // Can we get a value sb : (S, B)?
               val s2: S = s // We could return various values of type s.
             val b: B = {
-              // The only way of getting `b: B` is to apply `f` to an `A`.
-              val osb: OS[B] = f(a)
+              // The only way of possibly getting `b: B` is to apply `f` to an `A`.
+              val osb: Option[St[B]] = f(a)
               // Now, `osb` could be either `None` or `Some(...)`.
               osb match {
                 case Some(stb) ⇒ stb(s2)._2
-                case None ⇒ ??? // Here, we get stuck! We can't return a `b : B` here.
+                case None ⇒ ??? // Here we get stuck: there is no way of computing a `b : B`.
               }
             }
               (s2, b)
