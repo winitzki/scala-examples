@@ -1,8 +1,12 @@
 package example
 
-import cats.{Functor, Monad, Monoid}
+import cats.{Functor, Id, Monad, Monoid, ~>}
+import cats.syntax.monad._
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
+import shapeless.ops.nat.LT
+import CatsMonad.CatsMonadSyntax
+import cats.~>
 
 class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
@@ -117,14 +121,14 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
     }
   }
 
-  behavior of "monad transformers for single-value monads"
+  behavior of "monad transformer for single-value monads"
 
   it should "implement monad transformer for EW monad" in {
     def withParams[E, W: Monoid] = {
 
       import cats.syntax.monoid._
 
-      type EW[A] = Either[E, (W, A)] // It could also be (W, Either[E, A]). Both are monads.
+      type EW[A] = Either[E, (W, A)] // It could also be (W, Either[E, A]). Both are lawful monads.
       // W × (E + A) = W × E + W × A can be rewritten as E + W × A if we replace `E × W` by a new `E`.
       // The Option, Writer, and Either monads are special cases of `EW`.
 
@@ -153,28 +157,50 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       //        def map[A, B](fa: EWT[M, A])(f: A ⇒ B): EWT[M, B] = ???
       //      }
 
-      // Traverse instance for EW; this is needed to define the transformer monad.
-      implicit val travEW: Trav[EW] = new Trav[EW] {
-        def seq[F[_] : WuZip : Functor, A](lfa: EW[F[A]]): F[EW[A]] = lfa match {
-          case Left(e) ⇒ WuZip[F].pure(Left(e))
-          case Right((w, fa)) ⇒ fa.map(x ⇒ Right((w, x)))
-        }
+
+      // `sequence` method for EW; this is needed to define the transformer monad.
+      def seq[M[_] : CatsMonad : Functor, A](ewma: EW[M[A]]): M[EW[A]] = ewma match {
+        case Left(e) ⇒ CatsMonad[M].pure(Left(e))
+        case Right((w, fa)) ⇒ fa.map(x ⇒ Right((w, x)))
       }
 
-      import Trav.TravSyntax
-      import CatsMonad.CatsMonadSyntax
-
       // Implement flatten for EWT.
-      def flatten[M[_] : CatsMonad : WuZip : Functor, A](mewmewa: M[EW[M[EW[A]]]]): EWT[M, A] = {
-        // The plan is to transform M[EW[M[EW[A]]]] into M[M[EW[EW[A]]]], then flatten M and EW.
+      def flatten[M[_] : CatsMonad : Functor, A](mewmewa: M[EW[M[EW[A]]]]): EWT[M, A] = {
+        // The plan is first to transform M[EW[M[EW[A]]]] into M[M[EW[EW[A]]]], then flatten M and EW.
         mewmewa.flatMap { ewmewa: EW[M[EW[A]]] ⇒ // Will return M[EW[A]] here.
-          val mewewa: M[EW[EW[A]]] = ewmewa.seq // Using `Trav` instance.
-          val mewa: M[EW[A]] = mewewa.map(flatten) // Using `flatten` defined above for `EW`.
+          val mewewa: M[EW[EW[A]]] = seq[M, EW[A]](ewmewa) // Using `seq` defined above for `EW` and `M`.
+        val mewa: M[EW[A]] = mewewa.map(flatten) // Using `flatten` defined above for `EW`.
           mewa
         }
       }
+
+      // Monad instance for EWT[M, ?].
+      implicit val mtransdefEWT: MTransDef[EWT] = new MTransDef[EWT] {
+        def transformed[M[_] : CatsMonad : Functor]: CatsMonad[EWT[M, ?]] = new CatsMonad[EWT[M, ?]] {
+          def flatMap[A, B](fa: M[EW[A]])(f: A ⇒ EWT[M, B]): EWT[M, B] = flatten(fa.map(_.map(f)))
+
+          def pure[A](x: A): M[EW[A]] = CatsMonad[M].pure(CatsMonad[EW].pure(x))
+        }
+      }
+
+      // The monad laws for the monad EWT[M, ?] were already verified in Chapter 7 (monad construction 6).
       
-      // The monad laws for the monad EWT were already verified in Chapter 7.
+      // For a full monad transformer, we still need to define `lift`, `blift`, `mrun`, and `brun`.
+      // These definitions are straightforward since the monad transformer is defined via functor composition.
+      implicit val mtransEWT: MTrans[EWT, EW] = new MTrans[EWT, EW] {
+        def lift[M[_] : CatsMonad : Functor, A](ma: M[A]): M[EW[A]] = ma.map(CatsMonad[EW].pure)
+
+        def blift[M[_] : CatsMonad : Functor, A](la: EW[A]): M[EW[A]] = CatsMonad[M].pure(la)
+
+        def mrun[M[_] : CatsMonad : Functor, N[_] : CatsMonad](mn: M ~> N): EWT[M, ?] ~> EWT[N, ?] = new (EWT[M, ?] ~> EWT[N, ?]) {
+           def apply[A](fa: M[EW[A]]): N[EW[A]] = mn[EW[A]](fa)
+        }
+
+        def brun[M[_] : CatsMonad : Functor](lrun:  EW ~> Id ): EWT[M, ?] ~> M = new (EWT[M, ?] ~> M) {
+          def apply[A](fa: M[EW[A]]): M[A] = fa.map(ewa ⇒ lrun(ewa))
+        }
+      }
+      
     }
   }
 }
