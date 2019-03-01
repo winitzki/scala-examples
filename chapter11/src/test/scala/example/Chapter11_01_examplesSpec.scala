@@ -153,10 +153,9 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       }
 
       // Functor instance for EWT.
-      //      implicit def functorEWT[M[_] : Functor]: Functor[EWT[M, ?]] = new Functor[EWT[M, ?]] {
-      //        def map[A, B](fa: EWT[M, A])(f: A ⇒ B): EWT[M, B] = ???
-      //      }
-
+      implicit def functorEWT[M[_] : Functor]: Functor[EWT[M, ?]] = new Functor[EWT[M, ?]] {
+        def map[A, B](fa: M[EW[A]])(f: A ⇒ B): M[EW[B]] = fa.map(_.map(f))
+      }
 
       // `sequence` method for EW; this is needed to define the transformer monad.
       def seq[M[_] : CatsMonad : Functor, A](ewma: EW[M[A]]): M[EW[A]] = ewma match {
@@ -173,6 +172,9 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
           mewa
         }
       }
+      
+      // Shorter code: mewmewa.flatten = mewmewa.flatMap(ewmewa ⇒ seq(ewmewa).map(EW.flatten))
+      //                  = mewmewa.flatMap(seq andThen _.map(EW.flatten))
 
       // Monad instance for EWT[M, ?].
       implicit val mtransdefEWT: MTransDef[EWT] = new MTransDef[EWT] {
@@ -200,6 +202,40 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
           def apply[A](fa: M[EW[A]]): M[A] = fa.map(ewa ⇒ lrun(ewa))
         }
       }
+      
+      /* Monad transformer laws:
+      
+      `lift` is a monadic morphism.
+      
+      Identity law: lift(M.pure(x)) = M.pure(x).map(EW.pure) = < use naturality of M.pure >
+        = M.pure(EW.pure(x)) = EWT.pure(x)
+      
+      Composition law (for flatten):
+        lift andThen EWT.fmap(lift) andThen EWT.flatten = M.flatten andThen lift
+      Both sides are functions M[M[A]] ⇒ EWT[A]. Apply both sides to an arbitrary value mma: M[M[A]].
+      
+      mma.map(EW.pure)
+        .map(_.map(_.map(EW.pure))
+        .flatMap(seq andThen _.map(EW.flatten)) =
+      M.flatten(mma)
+        .map(_.map(EW.pure))
+      
+      To perform such calculations, it is quicker to use the short code notation.
+      
+      Here we will just establish two properties of `seq` as implemented above,
+      showing the relationship of `seq` with `EW.pure` and `M.pure`:
+      
+      1. seq(EW.pure(ma)) = ma.map(EW.pure)   or     EW.pure andThen seq = _.map(EW.pure)
+      
+      seq(EW.pure(ma)) = seq(Right((W.empty, ma))) = ma.map(x ⇒ Right((W.empty, x))) = ma.map(EW.pure)
+      
+      2. seq(ewa.map(M.pure)) = M.pure(ewa)    or    _.map(M.pure) andThen seq = M.pure
+      
+      If ewa = Left(e)  then seq(Left(e).map(M.pure)) = seq(Left(e)) = M.pure(Left(e))
+      If ewa = Right((w, x)) then ewa.map(M.pure)) = Right((w, M.pure(x))) and so
+        seq(ewa.map(M.pure)) = M.pure(x).map(x ⇒ Right((w, x))) = M.pure(Right((w, x))) = M.pure(ewa)
+      
+      */ 
       
     }
   }
