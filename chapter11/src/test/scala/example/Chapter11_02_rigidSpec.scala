@@ -1,11 +1,109 @@
 package example
 
+import cats.{Contravariant, Functor}
+import cats.syntax.functor._
+import cats.syntax.contravariant._
 import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter11_02_rigidSpec extends FlatSpec with Matchers {
 
-  behavior of "rigid functors and monads"
+  behavior of "rigid functors"
 
+  it should "show the rigid functor construction H[A] ⇒ R[A]" in {
+    def withParams[H[_] : Contravariant, R[_] : Rigid : Functor] = {
+
+      type Q[A] = H[A] ⇒ R[A]
+
+      implicit val functorQ: Functor[Q] = new Functor[Q] {
+        def map[A, B](qa: Q[A])(f: A ⇒ B): Q[B] = hb ⇒ qa(hb.contramap(f)).map(f)
+      }
+
+      implicit val rigidQ: Rigid[Q] = new Rigid[Q] {
+        def fuseIn[A, B](kleisli: A ⇒ Q[B]): Q[A ⇒ B] = {
+          // Given a value `kleisli: A ⇒ H[B] ⇒ R[B]`,
+          // need to compute a value of type `H[A ⇒ B] ⇒ R[A ⇒ B]`.
+          hab ⇒ // Need to return an R[A ⇒ B] here. 
+            // We will first compute a value of type `A ⇒ R[B]` and then use `R.fuseIn` on that.
+            val hb: H[B] = hab.contramap(b ⇒ _ ⇒ b) // Convert H[A ⇒ B] to H[B].
+
+            val arb: A ⇒ R[B] = a ⇒ kleisli(a)(hb)
+            Rigid[R].fuseIn(arb)
+        }
+      }
+
+    }
+  }
+
+  it should "show the rigid functor construction (A ⇒ P[Q]) ⇒ P[A]" in {
+    def withParams[P[_] : Rigid : Functor, Q] = {
+      type S[A] = (A ⇒ P[Q]) ⇒ P[A]
+
+      implicit val functorS: Functor[S] = new Functor[S] {
+        def map[A, B](sa: S[A])(f: A ⇒ B): S[B] = bpq ⇒ sa(a ⇒ bpq(f(a))).map(f)
+      }
+
+      implicit val rigidS: Rigid[S] = new Rigid[S] {
+        def fuseIn[A, B](kleisli: A ⇒ S[B]): S[A ⇒ B] = {
+          // Given a value `kleisli: A ⇒ (B ⇒ P[Q]) ⇒ P[B]`, 
+          // need to compute a value of type `((A ⇒ B) ⇒ P[Q]) ⇒ P[A ⇒ B]`.
+          (abpq: (A ⇒ B) ⇒ P[Q]) ⇒ // Need to return a value of type `P[A ⇒ B]` here.
+            // We will first compute a value of type `A ⇒ P[B]` and then use `P.fuseIn` on that.
+            val bpq: B ⇒ P[Q] = b ⇒ abpq(_ ⇒ b)
+            val apb: A ⇒ P[B] = a ⇒ kleisli(a)(bpq)
+            Rigid[P].fuseIn(apb)
+        }
+      }
+
+    }
+  }
+
+  it should "show the rigid functor construction F[A ⇒ P[Q]] ⇒ P[A]" in {
+    def withParams[P[_] : Rigid : Functor, F[_] : Functor, Q] = {
+      type S[A] = F[A ⇒ P[Q]] ⇒ P[A]
+
+      implicit val functorS: Functor[S] = new Functor[S] {
+        def map[A, B](sa: S[A])(f: A ⇒ B): S[B] = { fbpq ⇒
+          val fapq: F[A ⇒ P[Q]] = fbpq.map(bpq ⇒ a ⇒ bpq(f(a)))
+          sa(fapq).map(f)
+        }
+      }
+
+      implicit val rigidS: Rigid[S] = new Rigid[S] {
+        def fuseIn[A, B](kleisli: A ⇒ S[B]): S[A ⇒ B] = {
+          // Given a value `kleisli: A ⇒ F[B ⇒ P[Q]] ⇒ P[B]`, 
+          // need to compute a value of type `F[(A ⇒ B) ⇒ P[Q]] ⇒ P[A ⇒ B]`.
+          (fabpq: F[(A ⇒ B) ⇒ P[Q]]) ⇒ // Need to return a value of type `P[A ⇒ B]` here.
+            // We will first compute a value of type `A ⇒ P[B]` and then use `P.fuseIn` on that.
+            val fbpq: F[B ⇒ P[Q]] = fabpq.map(abpq ⇒ b ⇒ abpq(_ ⇒ b))
+            val apb: A ⇒ P[B] = a ⇒ kleisli(a)(fbpq)
+            Rigid[P].fuseIn(apb)
+        }
+      }
+
+    }
+  }
+
+  it should "show that Option[A] is not rigid" in {
+    // Define fuseIn for Option[A]. The only possibility is to always return None.
+
+    def fuseIn[A, B](kleisli: A ⇒ Option[B]): Option[A ⇒ B] = {
+      // We need to return a value of type `Option[A ⇒ B]`. We can either return `None`, or `Some(f)` for f : A ⇒ B.
+      // But we cannot obtain a function A ⇒ B out of A ⇒ Option[B] since we cannot always obtain a B out of Option[B].
+      None
+    }
+    
+    // The non-degeneracy law, fuseOut(fuseIn(x)) == x, fails because fuseOut(None) = _ ⇒ None and not equal to x : A ⇒ Option[B].
+
+  }
+
+  it should "show that W × A is not rigid" in {
+    def withParams[W] = {
+      def fuseIn[A, B](kleisli: A ⇒ (W, B)): (W, A ⇒ B) = ??? // Cannot implement since we do not have a value of W.
+    }
+  }
+
+  it should "show that R[Unit] = Unit for a rigid functor"
   
+  behavior of "rigid monads"
 
 }
