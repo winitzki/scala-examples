@@ -8,7 +8,7 @@ trait MTransDef[LT[_[_], _]] {
   def transformed[M[_] : CatsMonad : Functor]: CatsMonad[LT[M, ?]]
 }
 
-// A fully-featured monad transformer requires the methods lift, blift, mrun, brun.
+// A fully-featured monad transformer has the methods lift, blift, mrun, brun.
 abstract class MTrans[LT[_[_], _] : MTransDef, L[_] : CatsMonad : Functor] {
   def lift[M[_] : CatsMonad : Functor, A](ma: M[A]): LT[M, A]
 

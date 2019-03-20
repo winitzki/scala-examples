@@ -91,8 +91,9 @@ class Chapter11_02_rigidSpec extends FlatSpec with Matchers {
       // But we cannot obtain a function A ⇒ B out of A ⇒ Option[B] since we cannot always obtain a B out of Option[B].
       None
     }
-    
-    // The non-degeneracy law, fuseOut(fuseIn(x)) == x, fails because fuseOut(None) = _ ⇒ None and not equal to x : A ⇒ Option[B].
+
+    // The non-degeneracy law, fuseOut(fuseIn(x)) == x, fails because
+    // `fuseOut(None) = _ ⇒ None`, which cannot be always equal to `x : A ⇒ Option[B]`.
 
   }
 
@@ -102,8 +103,33 @@ class Chapter11_02_rigidSpec extends FlatSpec with Matchers {
     }
   }
 
-  it should "show that R[Unit] = Unit for a rigid functor"
-  
+  it should "show that a rigid monad has a multi-valued flatMap" in {
+    def withParams[R[_] : Rigid : Functor : CatsMonad, M[A] : CatsMonad] = {
+
+      import example.CatsMonad.CatsMonadSyntax
+
+      // In addition to flatMap: M[A] ⇒ (A ⇒ M[B]) ⇒ M[B],
+      // we also have flatMapR: M[A] ⇒ (A ⇒ R[M[B]]) ⇒ R[M[B]],
+      // which returns an R-valued container of M-valued monadic values.
+      def flatMapR[A, B](ma: M[A])(f: A ⇒ R[M[B]]): R[M[B]] = {
+        val ramb: R[A ⇒ M[B]] = Rigid[R].fuseIn(f)
+        val mFlatMap: (A ⇒ M[B]) ⇒ M[B] = amb ⇒ ma.flatMap(amb)
+        ramb.map(mFlatMap) // Map R[A ⇒ M[B]] to R[M[B]].
+      }
+    }
+  }
+
+  it should "show that a rigid monad has a refactoring transformation" in {
+    def withParams[R[_] : Rigid : Functor] = {
+
+      def refactor[A, B, C](program: (A ⇒ B) ⇒ C): (A ⇒ R[B]) ⇒ R[C] = {
+        arb ⇒
+          val rab: R[A ⇒ B] = Rigid[R].fuseIn(arb)
+          rab.map(program) // Map R[A ⇒ B] to R[C].
+      }
+    }
+  }
+
   behavior of "rigid monads"
 
 }

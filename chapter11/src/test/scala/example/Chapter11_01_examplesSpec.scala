@@ -1,14 +1,89 @@
 package example
 
-import cats.{Functor, Id, Monad, Monoid, ~>}
-import cats.syntax.monad._
 import cats.syntax.functor._
+import cats.{Functor, Id, Monoid, ~>}
+import example.CatsMonad.CatsMonadSyntax
 import org.scalatest.{FlatSpec, Matchers}
-import shapeless.ops.nat.LT
-import CatsMonad.CatsMonadSyntax
-import cats.~>
+
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
+
+  behavior of "composition of Future and Option"
+
+  it should "compute with Future[Option[A]] without monad transformers" in {
+
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val r = for {
+      xOpt ← Future(Option(1))
+      yOpt ← xOpt match {
+        case Some(x) ⇒ for {
+          zOpt ← Future(Option(x + 1))
+          t ← zOpt match {
+            case Some(z) ⇒ Future(Option(z + 3))
+            case None ⇒ Future.successful(None)
+          }
+        } yield t
+        case None ⇒ Future.successful(None)
+      }
+      z ← yOpt match {
+        case Some(y) ⇒ Future(Option(y * 2).orElse(Some(-1)))
+        case None ⇒ Future.successful(None)
+      }
+    } yield z
+
+    Await.result(r, Duration.Inf).get shouldEqual 10
+  }
+
+  it should "compute with Future[Option[A]] with a custom monad transformer" in {
+    /** Wrapper monad class for `Future[Option[A]]` that supports `for/yield` syntax more easily,
+      * without nested type constructors.
+      *
+      * @tparam A Type of a computed value inside the monad.
+      */
+    case class FutureWithOption[A](nested: Future[Option[A]]) {
+      def map[B](f: A ⇒ B)(implicit ec: ExecutionContext): FutureWithOption[B] = nested.map(_.map(f))
+
+      def flatMap[B](f: A ⇒ FutureWithOption[B])(implicit ec: ExecutionContext): FutureWithOption[B] = {
+        nested.flatMap {
+          case None ⇒ Future.successful(None)
+          case Some(x) ⇒ f(x).nested
+        }
+      }
+
+      // This is necessary to support pattern-matching, e.g. `(x, y) ← futureWithOption(...)`.
+      def withFilter(p: A ⇒ Boolean)(implicit ec: ExecutionContext): FutureWithOption[A] = nested
+
+      // Convenience method to lift Option's operations into the wrapper.
+      def liftFunction[B](f: Option[A] ⇒ Option[B])(implicit ec: ExecutionContext): FutureWithOption[B] = nested.map(f)
+
+      // Convenience method.
+      def orElse[B](y: ⇒ Option[B])(implicit ec: ExecutionContext): FutureWithOption[B] = liftFunction(x ⇒ y)
+    }
+
+    // Lower-precedence implicit conversion.
+    trait FutureWithOptionConversion {
+      implicit def toFutureWithErrorPlain[E, A](x: Future[A])(implicit ec: ExecutionContext): FutureWithOption[A] =
+        FutureWithOption(x.map(Some.apply))
+    }
+
+    object FutureWithOption extends FutureWithOptionConversion {
+      implicit def toFutureWithError[A](x: Future[Option[A]]): FutureWithOption[A] = FutureWithOption(x)
+
+      def pure[A](x: A): FutureWithOption[A] = FutureWithOption(Future.successful(Some(x)))
+    }
+
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val r = for {
+      x ← FutureWithOption.pure(1)
+      y ← FutureWithOption.pure(x + 1)
+      t ← FutureWithOption.pure(y + 3)
+      z ← FutureWithOption.pure(t * 2).orElse(Some(-1))
+    } yield z
+
+    Await.result(r.nested, Duration.Inf).get shouldEqual 10
+  }
 
   behavior of "monad transformers"
 
@@ -139,7 +214,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       implicit val functorEW: Functor[EW] = cats.derive.functor[EW]
 
       // Implement `flatten` for `EW`.
-      def flatten[A]: EW[EW[A]] ⇒ EW[A] = {
+      def flattenEW[A]: EW[EW[A]] ⇒ EW[A] = {
         case Left(e) ⇒ Left(e)
         case Right((w, Left(e))) ⇒ Left(e)
         case Right((w1, Right((w2, x)))) ⇒ Right((w1 |+| w2, x))
@@ -147,14 +222,14 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
       // Monad instance for EW.
       implicit val monadEW: CatsMonad[EW] = new CatsMonad[EW] {
-        def flatMap[A, B](fa: EW[A])(f: A ⇒ EW[B]): EW[B] = flatten(fa.map(f))
+        def flatMap[A, B](fa: EW[A])(f: A ⇒ EW[B]): EW[B] = flattenEW(functorEW.map(fa)(f))
 
         def pure[A](x: A): EW[A] = Right((Monoid[W].empty, x))
       }
 
       // Functor instance for EWT.
       implicit def functorEWT[M[_] : Functor]: Functor[EWT[M, ?]] = new Functor[EWT[M, ?]] {
-        def map[A, B](fa: M[EW[A]])(f: A ⇒ B): M[EW[B]] = fa.map(_.map(f))
+        def map[A, B](fa: M[EW[A]])(f: A ⇒ B): M[EW[B]] = fa.map(functorEW.map(_)(f))
       }
 
       // `sequence` method for EW; this is needed to define the transformer monad.
@@ -168,25 +243,25 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         // The plan is first to transform M[EW[M[EW[A]]]] into M[M[EW[EW[A]]]], then flatten M and EW.
         mewmewa.flatMap { ewmewa: EW[M[EW[A]]] ⇒ // Will return M[EW[A]] here.
           val mewewa: M[EW[EW[A]]] = seq[M, EW[A]](ewmewa) // Using `seq` defined above for `EW` and `M`.
-        val mewa: M[EW[A]] = mewewa.map(flatten) // Using `flatten` defined above for `EW`.
+        val mewa: M[EW[A]] = mewewa.map(flattenEW) // Using `flatten` defined above for `EW`.
           mewa
         }
       }
-      
+
       // Shorter code: mewmewa.flatten = mewmewa.flatMap(ewmewa ⇒ seq(ewmewa).map(EW.flatten))
       //                  = mewmewa.flatMap(seq andThen _.map(EW.flatten))
 
       // Monad instance for EWT[M, ?].
       implicit val mtransdefEWT: MTransDef[EWT] = new MTransDef[EWT] {
         def transformed[M[_] : CatsMonad : Functor]: CatsMonad[EWT[M, ?]] = new CatsMonad[EWT[M, ?]] {
-          def flatMap[A, B](fa: M[EW[A]])(f: A ⇒ EWT[M, B]): EWT[M, B] = flatten(fa.map(_.map(f)))
+          def flatMap[A, B](fa: M[EW[A]])(f: A ⇒ EWT[M, B]): EWT[M, B] = flatten(fa.map(functorEW.map(_)(f)))
 
           def pure[A](x: A): M[EW[A]] = CatsMonad[M].pure(CatsMonad[EW].pure(x))
         }
       }
 
       // The monad laws for the monad EWT[M, ?] were already verified in Chapter 7 (monad construction 6).
-      
+
       // For a full monad transformer, we still need to define `lift`, `blift`, `mrun`, and `brun`.
       // These definitions are straightforward since the monad transformer is defined via functor composition.
       implicit val mtransEWT: MTrans[EWT, EW] = new MTrans[EWT, EW] {
@@ -195,14 +270,14 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         def blift[M[_] : CatsMonad : Functor, A](la: EW[A]): M[EW[A]] = CatsMonad[M].pure(la)
 
         def mrun[M[_] : CatsMonad : Functor, N[_] : CatsMonad](mn: M ~> N): EWT[M, ?] ~> EWT[N, ?] = new (EWT[M, ?] ~> EWT[N, ?]) {
-           def apply[A](fa: M[EW[A]]): N[EW[A]] = mn[EW[A]](fa)
+          def apply[A](fa: M[EW[A]]): N[EW[A]] = mn[EW[A]](fa)
         }
 
-        def brun[M[_] : CatsMonad : Functor](lrun:  EW ~> Id ): EWT[M, ?] ~> M = new (EWT[M, ?] ~> M) {
+        def brun[M[_] : CatsMonad : Functor](lrun: EW ~> Id): EWT[M, ?] ~> M = new (EWT[M, ?] ~> M) {
           def apply[A](fa: M[EW[A]]): M[A] = fa.map(ewa ⇒ lrun(ewa))
         }
       }
-      
+
       /* Monad transformer laws:
       
       `lift` is a monadic morphism.
@@ -235,8 +310,8 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       If ewa = Right((w, x)) then ewa.map(M.pure)) = Right((w, M.pure(x))) and so
         seq(ewa.map(M.pure)) = M.pure(x).map(x ⇒ Right((w, x))) = M.pure(Right((w, x))) = M.pure(ewa)
       
-      */ 
-      
+      */
+
     }
   }
 }
