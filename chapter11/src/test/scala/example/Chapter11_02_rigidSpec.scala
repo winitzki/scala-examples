@@ -130,6 +130,10 @@ class Chapter11_02_rigidSpec extends FlatSpec with Matchers {
     }
   }
 
-  behavior of "rigid monads"
+  behavior of "rigid functor and monad constructions"
+  
+  it should "show that the composition of rigid monads is rigid" in {
+    
+  }
 
 }

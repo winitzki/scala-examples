@@ -196,7 +196,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
     }
   }
 
-  behavior of "monad transformer for single-value monads"
+  behavior of "monad transformer for linear-value monads"
 
   it should "implement monad transformer for EW monad" in {
     def withParams[E, W: Monoid] = {
