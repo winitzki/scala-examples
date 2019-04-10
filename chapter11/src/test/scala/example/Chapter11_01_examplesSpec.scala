@@ -232,8 +232,8 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         def map[A, B](mewa: M[EW[A]])(f: A ⇒ B): M[EW[B]] = mewa.map(functorEW.map(_)(f))
       }
 
-      // `sequence` method for EW; this is needed to define the transformer monad.
-      def seq[M[_] : CatsMonad : Functor, A](ewma: EW[M[A]]): M[EW[A]] = ewma match {
+      // `switch` method for EW; this is needed to define the transformer monad.
+      def sw[M[_] : CatsMonad : Functor, A](ewma: EW[M[A]]): M[EW[A]] = ewma match {
         case Left(e) ⇒ CatsMonad[M].pure(Left(e))
         case Right((w, ma)) ⇒ ma.map(x ⇒ Right((w, x)))
       }
@@ -242,14 +242,14 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       def flatten[M[_] : CatsMonad : Functor, A](mewmewa: M[EW[M[EW[A]]]]): EWT[M, A] = {
         // The plan is first to transform M[EW[M[EW[A]]]] into M[M[EW[EW[A]]]], then flatten M and EW.
         mewmewa.flatMap { ewmewa: EW[M[EW[A]]] ⇒ // Will return M[EW[A]] here.
-          val mewewa: M[EW[EW[A]]] = seq[M, EW[A]](ewmewa) // Using `seq` defined above for `EW` and `M`.
+          val mewewa: M[EW[EW[A]]] = sw[M, EW[A]](ewmewa) // Using `sw` defined above for `EW` and `M`.
         val mewa: M[EW[A]] = mewewa.map(flattenEW) // Using `flatten` defined above for `EW`.
           mewa
         }
       }
 
-      // Shorter code: mewmewa.flatten = mewmewa.flatMap(ewmewa ⇒ seq(ewmewa).map(EW.flatten))
-      //                  = mewmewa.flatMap(seq andThen _.map(EW.flatten))
+      // Shorter code: mewmewa.flatten = mewmewa.flatMap(ewmewa ⇒ sw(ewmewa).map(EW.flatten))
+      //                  = mewmewa.flatMap(sw andThen _.map(EW.flatten))
 
       // Monad instance for EWT[M, ?].
       implicit val mtransdefEWT: MTransDef[EWT] = new MTransDef[EWT] {
@@ -291,54 +291,54 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       
       mma.map(EW.pure)
         .map(_.map(_.map(EW.pure))
-        .flatMap(seq andThen _.map(EW.flatten)) =
+        .flatMap(sw andThen _.map(EW.flatten)) =
       M.flatten(mma)
         .map(_.map(EW.pure))
       
       To perform such calculations, it is quicker to use the short code notation.
       
-      Here we will just establish some properties of `seq` as implemented above.
+      Here we will just establish some properties of `sw` as implemented above.
       
-      The first two properties show the relationship of `seq` with `EW.pure` and `M.pure`:
+      The first two properties show the relationship of `sw` with `EW.pure` and `M.pure`:
       
-      1. seq(EW.pure(ma)) == ma.map(EW.pure)   or     EW.pure andThen seq == _.map(EW.pure)
+      1. sw(EW.pure(ma)) == ma.map(EW.pure)   or     EW.pure andThen sw == _.map(EW.pure)
       
-      seq(EW.pure(ma)) = seq(Right((W.empty, ma))) = ma.map(x ⇒ Right((W.empty, x))) = ma.map(EW.pure)
+      sw(EW.pure(ma)) = sw(Right((W.empty, ma))) = ma.map(x ⇒ Right((W.empty, x))) = ma.map(EW.pure)
       
-      2. seq(ewa.map(M.pure)) == M.pure(ewa)    or    _.map(M.pure) andThen seq == M.pure
+      2. sw(ewa.map(M.pure)) == M.pure(ewa)    or    _.map(M.pure) andThen sw == M.pure
       
-      If ewa = Left(e)  then seq(Left(e).map(M.pure)) = seq(Left(e)) = M.pure(Left(e))
+      If ewa = Left(e)  then sw(Left(e).map(M.pure)) = sw(Left(e)) = M.pure(Left(e))
       If ewa = Right((w, x)) then ewa.map(M.pure)) = Right((w, M.pure(x))) and so
-        seq(ewa.map(M.pure)) = M.pure(x).map(x ⇒ Right((w, x))) = M.pure(Right((w, x))) = M.pure(ewa)
+        sw(ewa.map(M.pure)) = M.pure(x).map(x ⇒ Right((w, x))) = M.pure(Right((w, x))) = M.pure(ewa)
       
-      The third property shows the naturality of `seq` with respect to the monad `M`.
+      The third property shows the naturality of `sw` with respect to the monad `M`.
       
-      Given a monadic morphism f[A]: M[A] ⇒ N[A], we can transform the result of `seq`
-        or we can transform the argument of `seq`, with the same result.
+      Given a monadic morphism f[A]: M[A] ⇒ N[A], we can transform the result of `sw`
+        or we can transform the argument of `sw`, with the same result.
       
-      3.  seq ; φ = L.fmap φ ; seq  or rewritten in Scala code, 
+      3.  sw ; φ = L.fmap φ ; sw  or rewritten in Scala code, 
       
-      seq[M] andThen f[L[A]] == { lma: L[M[A]] ⇒ lma.map(f[A]) } andThen seq[N]
+      sw[M] andThen f[L[A]] == { lma: L[M[A]] ⇒ lma.map(f[A]) } andThen sw[N]
         
-      Apply both sides to some `lma: L[M[A]]`. Need to show that `f(seq(lma)) = seq[N](lma.map(f))`.
+      Apply both sides to some `lma: L[M[A]]`. Need to show that `f(sw(lma)) = sw[N](lma.map(f))`.
       
       Case 1. If lma = Left(e) then the left-hand side is
-        f(seq(lma)) = f(M.pure(Left(e))) = N.pure(Left(e))
+        f(sw(lma)) = f(M.pure(Left(e))) = N.pure(Left(e))
       since `f` is a monadic morphism.
       
       The right-hand side is
-        seq(lma.map(f)) = seq(Left(e)) = N.pure(Left(e)).
+        sw(lma.map(f)) = sw(Left(e)) = N.pure(Left(e)).
       
       Case 2. If lma = Right((w, ma)) then the left-hand side is
-        f(seq(lma)) = f( ma.map(x ⇒ Right((w, x))) ) = f(ma).map(x ⇒ Right((w, x)))
+        f(sw(lma)) = f( ma.map(x ⇒ Right((w, x))) ) = f(ma).map(x ⇒ Right((w, x)))
       because f is natural.
       
       The right-hand side is
-        seq(lma.map(f)) = seq(Right((w, f(ma)))) = f(ma).map(x ⇒ Right((w, x)))
+        sw(lma.map(f)) = sw(Right((w, f(ma)))) = f(ma).map(x ⇒ Right((w, x)))
       
       So, in both cases the left-hand side is equal to the right-hand side.
       
-      The fourth property shows the compatibility of `seq` with L's "runners" r: L[A] ⇒ A.
+      The fourth property shows the compatibility of `sw` with L's "runners" r: L[A] ⇒ A.
       
       The runner must be a monadic morphism. This means L.pure andThen r = id.
       Write out L.pure = Right((Monoid[W].empty, x)). So we must have r(Right((Monoid[W].empty, x))) == x.
@@ -347,9 +347,9 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         the value of r(Right((w, x))) cannot depend on the value `w: W` of an unrelated type `W`.
       So it must be that r(Right((w, x))) == x for all w and x.
       
-      4. seq ; M.fmap φ = φ  or rewritten in Scala code,
+      4. sw ; M.fmap φ = φ  or rewritten in Scala code,
       
-      seq andThen _.map(r[A]) == r[M[A]]   as functions L[M[A]] ⇒ M[A].  
+      sw andThen _.map(r[A]) == r[M[A]]   as functions L[M[A]] ⇒ M[A].  
       
       Note that the first `r` has type parameter `A` while the second `r` has type parameter `M[A]`.
       This has a significant implication for the implementation of `r` in the case `L[A] = E + W × A`
@@ -359,7 +359,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       or (at least) store an extra "default" value of `A` to be returned for an argument of type E + 0.
       
       If a runner stores a default value of `A`, we cannot simply assign a type parameter `M[A]`
-      to the runner `r` as required by the property `seq andThen _.map(r[A]) == r[M[A]]`.
+      to the runner `r` as required by the property `sw andThen _.map(r[A]) == r[M[A]]`.
       
       Either `r[A]` and `r[M[A]]` are two different runners that have different default values,
       or the default value of type `A` stored in `r[A]` must be somehow transformed to a default value
@@ -373,14 +373,14 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       Case 1. lma == Left(e).
       
       The left-hand side is
-        seq(lma).map(r[A]) = M.pure(Left(e)).map(r[A]) = M.pure(r[A](Left(e))
+        sw(lma).map(r[A]) = M.pure(Left(e)).map(r[A]) = M.pure(r[A](Left(e))
       
       The right-hand side is r[M[A]](Left(e)), and it is equal to M.pure(r[A](Left(e))) by the assumed "compatibility condition".
       
       Case 2. lma == Right((w, ma)).
       
       The left-hand side is
-        seq(lma).map(r[A]) = ma.map(x ⇒ Right((w, x))).map(r) = ma.map(x ⇒ r(Right((w, x)))) = ma.map(x ⇒ x) = ma 
+        sw(lma).map(r[A]) = ma.map(x ⇒ Right((w, x))).map(r) = ma.map(x ⇒ r(Right((w, x)))) = ma.map(x ⇒ x) = ma 
       
       The right-hand side is
         r[M[A]](lma) = r(Right((w, ma))) = ma.
