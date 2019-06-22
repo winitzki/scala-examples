@@ -15,7 +15,7 @@ abstract class Rigid[R[_] : Functor] {
   def point[A](a: A): R[A] = Functor[R].map(fuseIn[R[A], A](identity))(_ ⇒ a)
 
   // Wrapped unit: a unique value of type R[Unit].
-  def wu: R[Unit] = Functor[R].map(fuseIn[R[Unit], Unit](identity))(_ ⇒ Unit)
+  def wu: R[Unit] = Functor[R].map(fuseIn[R[Unit], Unit](identity))(_ ⇒ ())
 }
 
 object Rigid {

@@ -152,11 +152,9 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
 
   it should "implement `converge`" in {
     def converge[T](f: T ⇒ T, x0: T, cond: T ⇒ Boolean): T = {
-      Iterator.iterate[T](x0)(f)
-        .filter(cond)
-        .take(1)
-        .toSeq
-        .head
+      Stream.iterate(x0)(f)
+        .find(cond)
+        .get
     }
 
     @tailrec
@@ -239,7 +237,7 @@ class Chapter03_01_examplesSpec extends FlatSpec with Matchers {
       q[A ⇒ (A ⇒ B) ⇒ B, C](q[A, B])
 
     // q(q(q))
-    def qqq[A, B, C, D]: ((((A ⇒ (A ⇒ B) ⇒ B) ⇒ B) ⇒ B) ⇒ D) ⇒ D = q[((A ⇒ (A ⇒ B) ⇒ B) ⇒ B) ⇒ B, D](q[(A ⇒ (A ⇒ B) ⇒ B), B](q))
+    def qqq[A, B, C, D]: ((((A ⇒ (A ⇒ B) ⇒ B) ⇒ C) ⇒ C) ⇒ D) ⇒ D = q[((A ⇒ (A ⇒ B) ⇒ B) ⇒ C) ⇒ C, D](q[(A ⇒ (A ⇒ B) ⇒ B), C](q))
 
     // q(q)(q) does not work?
     "def qqq0[A, B] = q(q)(q[A, B])" shouldNot compile

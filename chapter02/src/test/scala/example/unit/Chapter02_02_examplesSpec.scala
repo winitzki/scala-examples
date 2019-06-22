@@ -1,5 +1,6 @@
 package example.unit
 
+import cats.Monad
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.annotation.tailrec

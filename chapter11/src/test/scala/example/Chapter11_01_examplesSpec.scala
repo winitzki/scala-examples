@@ -347,7 +347,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         the value of r(Right((w, x))) cannot depend on the value `w: W` of an unrelated type `W`.
       So it must be that r(Right((w, x))) == x for all w and x.
       
-      4. sw ; M.fmap φ = φ  or rewritten in Scala code,
+      4. sw ; M.fmap r = r  or rewritten in Scala code,
       
       sw andThen _.map(r[A]) == r[M[A]]   as functions L[M[A]] ⇒ M[A].  
       

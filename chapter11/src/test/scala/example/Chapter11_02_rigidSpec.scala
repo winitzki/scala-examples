@@ -3,12 +3,41 @@ package example
 import cats.{Contravariant, Functor}
 import cats.syntax.functor._
 import cats.syntax.contravariant._
+import CatsMonad.CatsMonadSyntax
 import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter11_02_rigidSpec extends FlatSpec with Matchers {
 
   behavior of "rigid functors"
+  
+  it should "define flatMap methods for composed rigid monads for Example 13.5.2.2" in {
+    def withParams[Z, Q] = {
+      type R1[A] = (A => Q) => A
 
+      def map_R1[A, B](r1: R1[A])(f: A => B): R1[B] = { (b2q: B => Q) => f(r1(f andThen b2q)) }
+
+      def flatMap_R1[A, B, M[_] : CatsMonad](r1: R1[M[A]])(f: A => R1[M[B]]): R1[M[B]] = {
+        (q: M[B] => Q) => map_R1(r1) { (m: M[A]) => m.flatMap(x => f(x)(q)) }(q)
+      }
+
+      type R2[A] = Z => A
+
+      def map_R2[A, B](r2: R2[A])(f: A => B): R2[B] = {
+        r2 andThen f
+      }
+
+      def flatMap_R2[A, B, M[_] : CatsMonad](r2: R2[M[A]])(f: A => R2[M[B]]): R2[M[B]] = {
+        z => map_R2(r2) { (m: M[A]) => m.flatMap(x => f(x)(z)) }(z)
+      }
+
+      type T[A] = R1[R2[A]]
+
+      def flatMap_T[A, B, M[_] : CatsMonad](t: T[M[A]])(f: A => T[M[B]]): T[M[B]] = {
+        (q: R2[M[B]] => Q) => map_R1(t) { (m: R2[M[A]]) => flatMap_R2(m)(x => f(x)(q)) }(q)
+      }
+    }
+  }
+  
   it should "show the rigid functor construction H[A] ⇒ R[A]" in {
     def withParams[H[_] : Contravariant, R[_] : Rigid : Functor] = {
 
