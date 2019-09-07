@@ -14,6 +14,7 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     final case class Case2() extends MyTC[String]
 
     def g[A]: MyTC[Int] = Case1(1.0)
+
     "def f[A]: MyTC[A] = Case2()" shouldNot typeCheck
 
     type T1 = MyTC[Int] // PTTF applied to Int
@@ -34,9 +35,6 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
 
     "x3 match { case Case2() ⇒ 0.0 }" shouldNot typeCheck
   }
-
-
-
 
 
   it should "implement Semigroup without any data in PTTF" in {
@@ -214,12 +212,80 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     // Boolean implication (if x then y) is not associative
     implicit val badSemigroupEvidence: Semigroup[Boolean] = Semigroup((x, y) ⇒ if (x) y else true)
 
-//        checkSemigroupLaw[Boolean] // fails and prints a counterexample (x = false, y = true, z = false)
+    //        checkSemigroupLaw[Boolean] // fails and prints a counterexample (x = false, y = true, z = false)
     // So, let's run the test on this counterexample.
 
     val op = implicitly[Semigroup[Boolean]].op
 
     op(false, op(true, false)) should not be op(op(false, true), false)
+  }
+
+
+  it should "define a recursive type instance for Monoid" in {
+
+    import MonoidR._
+
+    implicit class MonoidROps[T: MonoidR](t: T) {
+      def |+|(a: T): T = implicitly[MonoidR[T]].methods(Some((t, a)))
+    }
+
+    1 |+| 1 shouldEqual 1 + 1
+
+    // Structural combinators.
+
+    def monoidPair[A: MonoidR, B: MonoidR]: MonoidR[(A, B)] = MonoidR[(A, B)] {
+      case None ⇒ (implicitly[MonoidR[A]].methods(None), implicitly[MonoidR[B]].methods(None))
+      case Some(((a1, b1), (a2, b2))) ⇒ (a1 |+| a2, b1 |+| b2)
+    }
+
+    def monoidEitherPreferB[A: MonoidR, B: MonoidR] = MonoidR[Either[A, B]] {
+      case None ⇒ Left(implicitly[MonoidR[A]].methods(None))
+      case Some((Left(a1), Left(a2))) ⇒ Left(a1 |+| a2)
+      case Some((Left(a), Right(b))) ⇒ Right(b) // "Take B".
+      case Some((Right(b), Left(a))) ⇒ Right(b)
+      case Some((Right(b1), Right(b2))) ⇒ Right(b1 |+| b2)
+    }
+
+    def monoidFunc[A: MonoidR, E] = MonoidR[E ⇒ A] {
+      case None ⇒ e ⇒ implicitly[MonoidR[A]].methods(None)
+      case Some((f, g)) ⇒ e ⇒ f(e) |+| g(e)
+    }
+
+    type S[A] = Either[(Either[Int, A], Int), (String, A ⇒ (A ⇒ Int) ⇒ A)]
+
+    def monoidS[A](implicit ti: MonoidR[A]): MonoidR[S[A]] = {
+      implicit val m0 = monoidEitherPreferB[Int, A]
+      implicit val m1 = monoidPair[Either[Int, A], Int]
+      implicit val m2 = monoidFunc[A, A => Int]
+      implicit val m3 = monoidFunc[(A => Int) => A, A]
+      implicit val m4 = monoidPair[String, A => (A => Int) => A]
+      monoidEitherPreferB[(Either[Int, A], Int), (String, A => (A => Int) => A)]
+    }
+
+    final case class T(s: S[T])
+
+    implicit def monoidT: MonoidR[T] = MonoidR[T] {
+      case None ⇒ T(monoidS[T](monoidT).methods(None))
+      case Some((t1, t2)) ⇒ T(monoidS[T](monoidT).methods(Some(t1.s, t2.s)))
+    }
+
+    val t = T(Right(("a", t => f => T(Left((Left(f(t)), 10))))))
+
+    (t |+| t).s.right.get._1 shouldEqual "aa"
+
+  }
+}
+
+final case class MonoidR[T](methods: Option[(T, T)] ⇒ T)
+
+object MonoidR {
+  implicit val monoidRInt: MonoidR[Int] = MonoidR[Int] {
+    case None ⇒ 0
+    case Some((x, y)) ⇒ x + y
+  }
+  implicit val monoidRString: MonoidR[String] = MonoidR[String] {
+    case None ⇒ ""
+    case Some((x, y)) ⇒ x + y
   }
 
 }
