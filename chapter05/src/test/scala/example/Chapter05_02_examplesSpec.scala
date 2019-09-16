@@ -175,6 +175,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
           x
         else
           MyLogData(x.log + "\n" + y.log)
+
         // Note added: This definition of `combine` violates the associativity law when some log strings are empty!
       }
     }
@@ -189,5 +190,118 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
     val logResult = initialLog +++ logData1 +++ logData2
 
     logResult shouldEqual MyLogData("all is well\nerror code 12345 found")
+  }
+
+  it should "implemented Pointed typeclass with examples for functors and contrafunctors" in {
+    trait Functor[F[_]] {
+      def map[A, B](fa: F[A])(f: A => B): F[B]
+    }
+    implicit class FunctorOp[F[_] : Functor, A](fa: F[A]) {
+      def map[B](f: A => B): F[B] = implicitly[Functor[F]].map(fa)(f)
+    }
+    trait Contrafunctor[F[_]] {
+      def cmap[A, B](fa: F[A])(f: B => A): F[B]
+    }
+    implicit class ContrafunctorOp[F[_] : Contrafunctor, A](fa: F[A]) {
+      def cmap[B](f: B => A): F[B] = implicitly[Contrafunctor[F]].cmap(fa)(f)
+    }
+
+    final case class Pointed[F[_]](wu: F[Unit])
+    def pure[F[_] : Pointed : Functor, A](a: A): F[A] = implicitly[Pointed[F]].wu.map(_ => a)
+
+    def purec[F[_] : Pointed : Contrafunctor, A]: F[A] = implicitly[Pointed[F]].wu.cmap(_ ⇒ ())
+
+    type Const[Z, A] = Z
+
+    def pointedOption[U]: Pointed[Const[Option[U], ?]] = Pointed(None: Const[Option[U], Unit])
+
+    type Id[A] = A
+
+    def pointedId: Pointed[Id] = Pointed[Id](())
+
+    def pointedFoG[F[_] : Pointed : Functor, G[_] : Pointed]: Pointed[Lambda[X ⇒ F[G[X]]]] =
+      Pointed[Lambda[X ⇒ F[G[X]]]](pure[F, G[Unit]](implicitly[Pointed[G]].wu))
+
+    def pointedCFoG[F[_] : Pointed : Contrafunctor, G[_]]: Pointed[Lambda[X ⇒ F[G[X]]]] =
+      Pointed[Lambda[X ⇒ F[G[X]]]](purec[F, G[Unit]])
+
+    def pointedFxG[F[_] : Pointed, G[_] : Pointed]: Pointed[Lambda[X => (F[X], G[X])]] =
+      Pointed[Lambda[X => (F[X], G[X])]]((implicitly[Pointed[F]].wu, implicitly[Pointed[G]].wu))
+
+    def pointedEitherFG[F[_] : Pointed, G[_]]: Pointed[Lambda[X => Either[F[X], G[X]]]] =
+      Pointed[Lambda[X => Either[F[X], G[X]]]](Left(implicitly[Pointed[F]].wu))
+
+    def pointedFuncFG[F[_] : Pointed, C[_]]: Pointed[Lambda[X => C[X] => F[X]]] =
+      Pointed[Lambda[X => C[X] => F[X]]](_ => implicitly[Pointed[F]].wu)
+
+    def pointedCoF[C[_] : Pointed : Contrafunctor, F[_]]: Pointed[Lambda[X ⇒ C[F[X]]]] =
+      Pointed[Lambda[X ⇒ C[F[X]]]](purec[C, F[Unit]])
+
+    def pointedFoC[C[_] : Pointed, F[_] : Pointed : Functor]: Pointed[Lambda[X => F[C[X]]]] =
+      Pointed[Lambda[X => F[C[X]]]](pure[F, C[Unit]](implicitly[Pointed[C]].wu))
+
+    def pointedFuncFC[C[_] : Pointed, F[_]]: Pointed[Lambda[X => F[X] => C[X]]] =
+      Pointed[Lambda[X => F[X] => C[X]]](_ => implicitly[Pointed[C]].wu)
+
+    // Recursive construction.
+    type S[A, R] = Either[A, (A, R)]
+    final case class F[A](s: S[A, F[A]])
+    implicit val pointedF: Pointed[F] = Pointed(F(Left(())))
+
+    // Co-pointed typeclass.
+
+    trait Copointed[F[_]] {
+      def ex[A]: F[A] => A
+    }
+    def extract[F[_] : Copointed, A](f: F[A]): A = implicitly[Copointed[F]].ex(f)
+
+    //    type Id[A] = A
+    def copointedId: Copointed[Id] = new Copointed[Id] {
+      def ex[A]: Id[A] ⇒ A = identity
+    }
+
+    def copointedFoG[F[_] : Copointed, G[_] : Copointed]: Copointed[Lambda[X => F[G[X]]]] =
+      new Copointed[Lambda[X => F[G[X]]]] {
+        def ex[A]: F[G[A]] => A = extract[F, G[A]] _ andThen extract[G, A]
+      }
+
+    def copointedFxG[F[_] : Copointed, G[_]]: Copointed[Lambda[X => (F[X], G[X])]] =
+      new Copointed[Lambda[X => (F[X], G[X])]] {
+        def ex[A]: ((F[A], G[A])) => A = {
+          case (f, g) => extract(f)
+        } // ((_._1) : ((F[A], G[A])) => F[A]) andThen extract[F,A]
+      }
+
+    def copointedEitherFG[F[_] : Copointed, G[_] : Copointed]: Copointed[Lambda[X => Either[F[X], G[X]]]] =
+      new Copointed[Lambda[X => Either[F[X], G[X]]]] {
+        def ex[A]: Either[F[A], G[A]] ⇒ A = {
+          case Left(f) ⇒ extract(f)
+          case Right(g) ⇒ extract(g)
+        }
+      }
+
+    import PipeOps._
+    def copointedFunc[C[_] : Pointed : Contrafunctor, P[_] : Copointed]: Copointed[Lambda[X => C[X] => P[X]]] = new Copointed[Lambda[X => C[X] => P[X]]] {
+      def ex[A]: (C[A] => P[A]) => A = h ⇒ purec[C, A] pipe h pipe extract[P, A] // or  h => extract[P, A](h(purec[C, A]))
+    }
+
+    type S1[A, R] = Either[A, (R, R)]
+
+    def exS1[A]: S1[A, A] => A = {
+      case Left(a) => a
+      case Right((a1, a2)) => a1 // Could be a2.
+    }
+
+    def bimap_S[A, B, P, Q](f: A => B, g: P => Q): S1[A, P] => S1[B, Q] = {
+      case Left(a) => Left(f(a))
+      case Right((x, y)) => Right((g(x), g(y)))
+    }
+
+    final case class F1[A](s: S1[A, F1[A]])
+    val copointedF: Copointed[F1] = new Copointed[F1] {
+      override def ex[A]: F1[A] ⇒ A = { case F1(s) ⇒ exS1(bimap_S(identity[A], ex[A])(s)) }
+    }
+
+
   }
 }

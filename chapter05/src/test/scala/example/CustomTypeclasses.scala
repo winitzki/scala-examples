@@ -11,7 +11,7 @@ class CustomTypeclasses extends FlatSpec with CatsLawChecking {
     // Define some typeclasses using case class constructors.
 
     case class TC1[A]()
-    object TC1 extends TCSub // Problem: this works, but TC1 must know about all its future intersections.
+    object TC1 extends TCSub // Problem: this works, but TC1 must know about all its future extensions.
 
     case class TC2[A]()
     object TC2 extends TCSub
@@ -66,7 +66,7 @@ class CustomTypeclasses extends FlatSpec with CatsLawChecking {
     case class TC[A]()(implicit val ti1: TC1[A], val ti2: TC2[A])
 
     // Can we inherit two case classes? No. Can only mix in a trait.
-    //    case class TCC[A]() extends TC1[A] with TC2[A]
+    //    case class TCC[A]() extends TC1[A] with TC2[A] // Does not compile.
 
     // If we have TC1 and TC2, we should automatically get TC.
     // If we have TC, we should automatically get TC1 and TC2.
@@ -145,4 +145,52 @@ class CustomTypeclasses extends FlatSpec with CatsLawChecking {
     getTC12[Int]
   }
 
+  it should "inherit the same typeclass from two typeclasses using case classes" in {
+
+    // TC1 and TC2 both inherit from TC.
+    // We want automatic conversions from TC1 to TC and from TC2 to TC. 
+    // Can we then have a type that has both TC1 and TC2 instances? Yes, but with some manual work.
+    final case class TC[A]()
+    final case class TC1[A]()(implicit val tc0: TC[A])
+    object TC1 {
+      implicit def toTC[A](implicit x: TC1[A]): TC[A] = x.tc0
+    }
+    final case class TC2[A]()(implicit val tc0: TC[A])
+    object TC2 {
+      implicit def toTC[A](implicit x: TC2[A]): TC[A] = x.tc0
+    }
+    
+    // A function requires A to have both TC1 and TC2 instances and then wants to access TC instance.
+    
+    def f[A: TC1 : TC2]() = {
+      import TC1._ // Manual work here: use this import but not the other one.
+//      import TC2._ // Compilation fails when this is uncommented because two implicits of type TC[A] will be found!
+      implicitly[TC[A]]
+    }
+    
+    val tcInt: TC[Int] = TC() // Do not make this implicit.
+    implicit val tc1Int: TC1[Int] = TC1()(tcInt)
+    implicit val tc2Int: TC2[Int] = TC2()(tcInt)
+    
+    f[Int]()
+  }
+
+  it should "inherit the same typeclass from two typeclasses using OO inheritance" in {
+    // TC1 and TC2 both inherit from TC.
+    // We want automatic conversions from TC1 to TC and from TC2 to TC. 
+    // Can we then have a type that has both TC1 and TC2 instances? No.
+    trait TC[A]
+    trait TC1[A] extends TC[A]
+    trait TC2[A] extends TC[A]
+    // A function requires A to have both TC1 and TC2 instances and then wants to access TC instance.
+
+    def f[A: TC1 : TC2]() = {
+      "implicitly[TC[A]]" shouldNot compile // Compilation fails when this is uncommented because two implicits of type TC[A] will be found!
+    }
+
+    implicit val tc1Int: TC1[Int] = new TC1[Int]{}
+    implicit val tc2Int: TC2[Int] = new TC2[Int]{}
+    
+    f[Int]()
+  }
 }

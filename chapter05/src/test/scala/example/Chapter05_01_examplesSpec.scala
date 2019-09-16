@@ -272,10 +272,45 @@ class Chapter05_01_examplesSpec extends FlatSpec with CatsLawChecking {
     val t = T(Right(("a", t => f => T(Left((Left(f(t)), 10))))))
 
     (t |+| t).s.right.get._1 shouldEqual "aa"
+    val e = implicitly[MonoidR[T]].methods(None)
+    t |+| e shouldEqual t
 
   }
+
+  it should "define recursive instance for Eq typeclass" in {
+
+    import Eq._
+
+    (1 ==== 1) shouldEqual true
+
+    implicit def eqPair[A: Eq, B: Eq] = Eq[(A, B)] { case ((a1, b1), (a2, b2)) ⇒ a1 ==== a2 && b1 ==== b2 }
+
+    implicit def eqEither[A: Eq, B: Eq] = Eq[Either[A, B]] {
+      case (Left(a1), Left(a2)) ⇒ a1 ==== a2 // Compare $a_1 + \bbnum0$ and $a_2 + \bbnum0$.
+      case (Right(b1), Right(b2)) ⇒ b1 ==== b2 // Compare $\bbnum0 + b_1$ and $\bbnum0 + b_2$.
+      case _ ⇒ false // $a + \bbnum0$ is never equal to $\bbnum0 + b$.
+    }
+
+    type S[A] = Either[Either[Int, A], (Int, (A, A))]
+    final case class T(s: S[T]) // Recursive equation $ T\triangleq\text{Int}+T+\text{Int}\times T\times T $.
+
+    def eqS[A](implicit ti: Eq[A]): Eq[S[A]] = {
+      implicit val e1 = eqEither[Int, A]
+      implicit val e2 = eqPair[A, A]
+      implicit val e3 = eqPair[Int, (A, A)]
+      eqEither[Either[Int, A], (Int, (A, A))]
+    }
+
+    implicit def eqT: Eq[T] = Eq { case (T(s1), T(s2)) => eqS(eqT).equal(s1, s2) }
+
+    val t = T(Left(Right(T(Left(Left(10))))))
+
+    (t ==== t) shouldEqual true
+  }
+
 }
 
+// Monoid typeclass defined using the inductive algebra, which makes it convenient to define recursive typeclass instances.
 final case class MonoidR[T](methods: Option[(T, T)] ⇒ T)
 
 object MonoidR {
@@ -288,4 +323,17 @@ object MonoidR {
     case Some((x, y)) ⇒ x + y
   }
 
+}
+
+final case class Eq[A](equal: (A, A) => Boolean)
+
+object Eq {
+
+  implicit class EqOps[A: Eq](a: A) {
+    def ====(b: A): Boolean = implicitly[Eq[A]].equal(a, b)
+  }
+
+  implicit val eqInt: Eq[Int] = Eq[Int](_ == _)
+  implicit val eqString: Eq[String] = Eq[String](_ == _)
+  // Other typeclass instances to be defined here.
 }
