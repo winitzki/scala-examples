@@ -193,4 +193,20 @@ class CustomTypeclasses extends FlatSpec with CatsLawChecking {
     
     f[Int]()
   }
+  
+  it should "define a closed type domain" in {
+    final class HasBitsize[T] private (val size: Int)
+    object HasBitsize {
+      implicit val bitsizeShort = new HasBitsize[Short](16)
+      implicit val bitsizeInt = new HasBitsize[Int](32)
+      implicit val bitsizeLong = new HasBitsize[Long](64)
+    }
+    def bitsize[T: HasBitsize]: Int = implicitly[HasBitsize[T]].size
+    
+    bitsize[Int] shouldEqual 32
+    
+    "bitsize[String]" shouldNot compile
+    
+    "new HasBitsize[Boolean](1)" shouldNot compile
+  }
 }

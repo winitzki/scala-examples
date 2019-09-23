@@ -69,6 +69,8 @@ class RecursiveMonoidTrait extends FlatSpec with Matchers {
     val e = implicitly[MonoidT[T]].empty
     t |+| e shouldEqual t
   }
+  
+  
 }
 
 trait MonoidT[A] {

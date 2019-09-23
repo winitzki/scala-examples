@@ -35,9 +35,9 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     // Boring instance: often produce None
     val monoidInstance1 = new Monoid[Data] {
-      override def empty: Data = Some(identity[String])
+      def empty: Data = Some(identity[String])
 
-      override def combine(x: Data, y: Data): Data = x match {
+      def combine(x: Data, y: Data): Data = x match {
         case Some(s2sX) ⇒ y match {
           case Some(s2sY) ⇒ Some(s2sX andThen s2sY)
           case None ⇒ None
@@ -48,9 +48,9 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     // Interesting instance: rarely produce None
     val monoidInstance2 = new Monoid[Data] {
-      override def empty: Data = None
+      def empty: Data = None
 
-      override def combine(x: Data, y: Data): Data = x match {
+      def combine(x: Data, y: Data): Data = x match {
         case Some(s2sX) ⇒ y match {
           case Some(s2sY) ⇒ Some(s2sX andThen s2sY)
           case None ⇒ x
@@ -76,9 +76,9 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   //    If A and B are monoids, define monoid instance for A × B
   it should "ex03" in {
     implicit def monoidABInstance[A, B](implicit evA: Monoid[A], evB: Monoid[B]): Monoid[(A, B)] = new Monoid[(A, B)] {
-      override def empty: (A, B) = (evA.empty, evB.empty)
+      def empty: (A, B) = (evA.empty, evB.empty)
 
-      override def combine(x: (A, B), y: (A, B)): (A, B) = (evA.combine(x._1, y._1), evB.combine(x._2, y._2))
+      def combine(x: (A, B), y: (A, B)): (A, B) = (evA.combine(x._1, y._1), evB.combine(x._2, y._2))
     }
 
     // Testing.
@@ -91,16 +91,16 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     // Declare these instances now.
 
     implicit val monoidIntInstance = new Monoid[Int] {
-      override def empty: Int = 1
+      def empty: Int = 1
 
-      override def combine(x: Int, y: Int): Int = x * y
+      def combine(x: Int, y: Int): Int = x * y
     }
 
     // Multiplication for Double is not precisely associative.
     implicit val monoidDoubleInstance = new Monoid[Double] {
-      override def empty: Double = 0.0
+      def empty: Double = 0.0
 
-      override def combine(x: Double, y: Double): Double = x + y
+      def combine(x: Double, y: Double): Double = x + y
     }
 
     // After this, we have both Int and Double monoid instances in scope.
@@ -116,9 +116,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
   it should "ex04" in {
     implicit def monoidABInstance[A, B](implicit evA: Monoid[A], evB: Semigroup[B]): Monoid[Either[A, B]] = new Monoid[Either[A, B]] {
       override def empty: Either[A, B] = Left(evA.empty) // No choice since we don't have a chosen element in B.
-
-      override def combine(x: Either[A, B], y: Either[A, B]): Either[A, B] = x match {
-        case Left(xa) ⇒ y match {
+      override def combine(x: Either[A, B], y: Either[A, B]): Either[A, B] = x match {        case Left(xa) ⇒ y match {
           case Left(ya) ⇒ Left(evA.combine(xa, ya))
           case Right(yb) ⇒ y // Laws do not hold if we put x here.
         }
@@ -136,7 +134,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     // Declare these instances now.
     implicit val semigroupIntInstanceNonCommutAssoc = new Semigroup[Int] {
-      override def combine(x: Int, y: Int): Int = nonCommutAssoc(x, y)
+      def combine(x: Int, y: Int): Int = nonCommutAssoc(x, y)
 
       // Budden's function: see F. J. Budden, A Non-Commutative, Associative Operation on the Reals.
       //   The Mathematical Gazette, Vol. 54, No. 390 (Dec., 1970), pp. 368-372
@@ -146,9 +144,9 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
 
     // Multiplication for Double is not precisely associative.
     implicit val monoidDoubleInstance = new Monoid[Double] {
-      override def empty: Double = 0.0
+      def empty: Double = 0.0
 
-      override def combine(x: Double, y: Double): Double = x + y
+      def combine(x: Double, y: Double): Double = x + y
     }
 
     // Should be able to derive monoid instance for (Int, Double) now
@@ -160,7 +158,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     type F[T] = Seq[Try[T]]
 
     implicit val fFunctorInstance: Functor[F] = new Functor[F] {
-      override def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = fa.map(_.map(f))
+      def map[A, B](fa: F[A])(f: A ⇒ B): F[B] = fa.map(_.map(f))
     }
   }
 
@@ -170,10 +168,22 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     // Define a bifunctor as a type constructor.
     type Q[X, Y] = Either[X, (X, Y)]
 
-    implicit val bifBifunctorInstance = new Bifunctor[Q] {
-      override def bimap[A, B, C, D](fab: Either[A, (A, B)])(f: A ⇒ C, g: B ⇒ D): Either[C, (C, D)] = implement
+    implicit val bifunctorQ = new Bifunctor[Q] {
+      def bimap[A, B, C, D](fab: Either[A, (A, B)])(f: A ⇒ C, g: B ⇒ D): Either[C, (C, D)] = implement
     }
 
+    checkCatsBifunctorLaws[Q, Int, String, Boolean, Char, Long, Double]()
+  }
+  
+  it should "define bifunctor by hand as a case class" in {
+    final case class Q[X, Y](e: Either[X, (X, Y)])
+    implicit val bifunctorQ = new Bifunctor[Q] {
+      def bimap[A, B, C, D](fab: Q[A, B])(f: A => C, g: B => D): Q[C, D] = fab.e match {
+        case Left(a) => Q(Left(f(a)))
+        case Right((a, b)) => Q(Right((f(a), g(b))))
+      }
+    }
+    
     checkCatsBifunctorLaws[Q, Int, String, Boolean, Char, Long, Double]()
   }
 
@@ -190,7 +200,7 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     }
     // Type domain includes C.
     implicit val ReaderCF = new ContraFunctor[C] {
-      override def contrafmap[A, B](f: B ⇒ A): (A ⇒ Int) ⇒ B ⇒ Int = implement
+      def contrafmap[A, B](f: B ⇒ A): (A ⇒ Int) ⇒ B ⇒ Int = implement
     }
 
   }
@@ -311,6 +321,23 @@ class Chapter05_03_workedExamplesSpec extends FlatSpec with CatsLawChecking {
     }
 
     checkEx06[D1, D2, Double, Int]
+  }
+
+  it should "define Functor instance for a type alias" in {
+    type F[T] = Seq[Try[T]]
+    implicit val functorF: Functor[F] = new Functor[F] {
+      def map[A, B](fa: F[A])(f: A => B): F[B] = fa.map(_.map(f))
+    }
+    import cats.syntax.functor._
+    val s: F[Int] = Seq(Try(1), Try(2), Try(3))
+    
+    // Have typeclass instance? Yes.
+    implicitly[Functor[F]]
+    
+    implicitly[Functor[Lambda[X ⇒ Seq[Try[X]]]]]
+    
+    // But the extension method `.map` does not work for `s`.
+    "s.map(_ * 2)" shouldNot compile
   }
 
 }
