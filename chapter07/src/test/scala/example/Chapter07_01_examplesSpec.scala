@@ -88,10 +88,11 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
   it should "2. Compute all subsets of a set of 3" in {
 
     // Organize the selection by hand.
+    val empty = Set[String]()
     val subsets: Set[Set[String]] = for {
-      xa ← Set(Set[String](), Set("a"))
-      xb ← Set(Set[String](), Set("b"))
-      xc ← Set(Set[String](), Set("c"))
+      xa ← Set(empty, Set("a"))
+      xb ← Set(empty, Set("b"))
+      xc ← Set(empty, Set("c"))
     } yield {
       xa ++ xb ++ xc
     }
@@ -291,7 +292,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
             x ← firstClause // x goes over terms in the first clause.
             ys ← dnf2cnf(DNF(dnf.v.tail)).v // ys are all other terms converted to CNF.
             // Now we have x || ( (c || d || e) && ... the rest of the CNF )
-          } yield Set(x) ++ ys
+          } yield  ys + x //Set(x) ++ ys
         ))
     }
 
