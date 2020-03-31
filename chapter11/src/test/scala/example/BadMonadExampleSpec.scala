@@ -8,42 +8,42 @@ import scala.util.{Failure, Success, Try}
 class BadMonadExampleSpec extends FlatSpec with Matchers {
 
   behavior of "bad monad"
-  /*
-    it should "fail to implement flatten" in {
-      def withParams[P, R, Z]() = {
-        type M[A] = Option[A] // Either[Z, A]
-        type Bad[A] = (M[A] ⇒ R) ⇒ M[R]
+  
+  it should "fail to implement flatten" in {
+    def withParams[P, R, Z]() = {
+      type M[A] = Option[A] // Either[Z, A]
+      type Bad[A] = (M[A] ⇒ R) ⇒ M[R]
 
-        def flattens[A] = allOfType[Bad[Bad[A]] ⇒ Bad[A]]()
+      def flattens[A] = allOfType[Bad[Bad[A]] ⇒ Bad[A]]()
 
-        //      def flatMap[A, B]: Bad[A] ⇒ (A ⇒ Bad[B]) ⇒ Bad[B] = implement
-        def flatMaps[A, B] = allOfType[Bad[A] ⇒ (A ⇒ Bad[B]) ⇒ Bad[B]]()
+      //      def flatMap[A, B]: Bad[A] ⇒ (A ⇒ Bad[B]) ⇒ Bad[B] = implement
+      def flatMaps[A, B] = allOfType[Bad[A] ⇒ (A ⇒ Bad[B]) ⇒ Bad[B]]()
 
-        //      flattens[Int].map(_.lambdaTerm.prettyPrint).length
-        //      flatMap[Int, Int].lambdaTerm.prettyPrint
-        (flattens[Int].length, flatMaps[Int, Int].length)
-      }
-      // We can't see a clear failure to implement flatten! When we use the continuation monad for M[A], curryhoward runs out of memory.
-      withParams() shouldEqual ""
+      //      flattens[Int].map(_.lambdaTerm.prettyPrint).length
+      //      flatMap[Int, Int].lambdaTerm.prettyPrint
+      (flattens[Int].length, flatMaps[Int, Int].length)
+    }
+    // We can't see a clear failure to implement flatten! When we use the continuation monad for M[A], curryhoward runs out of memory.
+    withParams() shouldEqual ""
+  }
+
+  it should "fail to implement base lift for continuation monad transformer" in {
+    type Cont[R, A] = (A ⇒ R) ⇒ R
+    type ContT[M[_], R, A] = (A ⇒ M[R]) ⇒ M[R]
+
+    def withParams[Z]() = {
+      type M[A] = Either[Z, A]
+
+      def blifts[R, A] = allOfType[Cont[R, A] ⇒ ContT[M, R, A]]()
+
+      blifts.length
     }
 
-    it should "fail to implement base lift for continuation monad transformer" in {
-      type Cont[R, A] = (A ⇒ R) ⇒ R
-      type ContT[M[_], R, A] = (A ⇒ M[R]) ⇒ M[R]
-
-      def withParams[Z]() = {
-        type M[A] = Either[Z, A]
-
-        def blifts[R, A] = allOfType[Cont[R, A] ⇒ ContT[M, R, A]]()
-
-        blifts.length
-      }
-
-      withParams() shouldEqual 0
+    withParams() shouldEqual 0
 
 
-     """ def blift[R, A]: Cont[R, A] ⇒ ContT[Either[Int, ?], R, A] = implement """ shouldNot compile
-    }*/
+    """ def blift[R, A]: Cont[R, A] ⇒ ContT[Either[Int, ?], R, A] = implement """ shouldNot compile
+  }
 
   import TryOps._
 
@@ -74,11 +74,15 @@ class BadMonadExampleSpec extends FlatSpec with Matchers {
 }
 
 object TryOps {
+
   implicit class TryPartialRecovery[A](val t: Try[A]) extends AnyVal {
+
     import scala.reflect.ClassTag
+
     def onException[T, B >: A](recover: T => Try[B])(implicit classT: ClassTag[T]): Try[B] = t match {
       case Failure(e) if classT.runtimeClass == e.getClass => recover(e.asInstanceOf[T])
       case _ => t
     }
   }
+
 }
