@@ -87,6 +87,43 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
   behavior of "monad transformers"
 
+  it should "define monad transformer for Try" in {
+    import scala.util._
+
+    final case class TryT[M[_]: CatsMonad : Functor, A](value: M[Try[A]]) { // Will use `Monad[M].pure`.
+      def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f)))        // Using M.map here.
+      def flatMap[B](f: A => TryT[M, B]): TryT[M, B] = TryT(
+        value.flatMap {                                                 // Using M.flatMap here.
+          case Failure(t)   => CatsMonad[M].pure(Failure(t))
+          case Success(a)   => f(a).value
+        }
+      )
+    }
+
+    implicit class MToTryT[M[_]: CatsMonad : Functor, A](m: M[A]) {
+      def up: TryT[M, A] = TryT(m.map(Success(_)))
+    }
+    implicit class TryToTryT[M[_]: CatsMonad : Functor, A](t: Try[A]) {
+      def up: TryT[M, A] = TryT(CatsMonad[M].pure(t))
+    }
+
+    implicit val functorList: Functor[List] = new Functor[List] {
+      override def map[A, B](fa: List[A])(f: A ⇒ B): List[B] = fa.map(f)
+    } // Define Functor typeclass instance for List.
+
+    implicit val monadList: CatsMonad[List] = new CatsMonad[List] {
+      override def flatMap[A, B](fa: List[A])(f: A ⇒ List[B]): List[B] = fa flatMap f
+
+      override def pure[A](x: A): List[A] = List(x)
+    }
+
+    val result = for {
+      x <- List(1, 2, 3).up
+      y <- Try(x + 100).up
+    } yield y
+    result shouldEqual TryT[List, Int](List(Success(101), Success(102), Success(103)))
+  }
+
   it should "fail to compose Option with Reader" in {
     def withParams[R] = {
       type OR[A] = Option[R ⇒ A]

@@ -8,7 +8,7 @@ import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 class ContinuationMonadPresentation extends FlatSpec with Matchers {
 

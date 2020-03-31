@@ -21,6 +21,7 @@ import cats.syntax.{flatMap, monad}
 import scala.collection.immutable
 import scala.concurrent.duration.{Duration, DurationConversions}
 import scala.concurrent.{Await, Future}
+import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
@@ -388,7 +389,7 @@ class Chapter07_01_examplesSpec extends FlatSpec with Matchers {
     getOrderAmount("client 3") shouldEqual None
   }
 
-  it should "2. Obtain values from Future computations in sequence" in {
+  ignore should "2. Obtain values from Future computations in sequence" in {
 
     val n = 2000
     import scala.concurrent.ExecutionContext.Implicits.global
@@ -748,6 +749,28 @@ multiply by 2.0: took 104.00 ms
     result shouldEqual 8.0
   }
 
+  it should "2a. Implement a very simple shell runner" in {
+    import sys.process._
+    type RunSh = (String, String) ⇒ (Int, String)
+    val runSh: RunSh = { (command, input) =>
+      var result: Array[Char] = Array()
+      val p: Process = command.run(new ProcessIO(
+        { os => os.write(input.getBytes); os.close() },
+        { is => result = Source.fromInputStream(is).toArray; is.close() },
+        _.close())
+      )
+      val exitCode =  p.exitValue()
+      (exitCode, new String(result))
+    }
+
+    val result1 = runSh("echo abcd", "")
+    result1 shouldEqual ((0, "abcd\n"))
+
+    val result2 = runSh("cat", "xyz")
+    result2 shouldEqual ((0, "xyz"))
+
+  }
+
   it should "3. Perform a sequence of lazy or memoized computations" in {
 
     sealed trait Eval[A] {
@@ -852,6 +875,19 @@ Elapsed time after z: 168 ms
     })
   }
 
+  it should "4a. Use Cont monad with result type"in {
+    def pure[R, A](a: A): Cont[R, A] = Cont { ar => ar(a) }
+    def add3[R](x: Int): Cont[R, Int] = Cont { callback => callback(x + 3) }
+    def mult4[R](x: Int): Cont[R, Int] = Cont { callback => callback(x * 4) }
+
+    import Semimonad.SemimonadSyntax
+    val result: Cont[Unit, Int] = for {
+      x <- pure[Unit, Int](10)
+      y <- mult4[Unit](x)
+      z <- add3[Unit](y)
+    } yield z
+  }
+
   it should "4. A chain of asynchronous operations using the Cont monad" in {
     // Now rewrite this code using the continuation monad.
     // The type is (A ⇒ Unit) ⇒ Unit. Define this type constructor for convenience:
@@ -941,4 +977,31 @@ Elapsed time after z: 168 ms
     // The `.run().value` returns a tuple: (state, result)
     resultState.run(PCGRandom.initialDefault).value._2 shouldEqual "Average is 4.485299616666667E8"
   }
+
+   it should "5a. Check that Lehmer's algorithm produces correct random numbers" in {
+     def lehmer(x: Long): Long = x * 48271L % 0xffffffffL
+
+     val rngUniform: State[Long, Double] = State { oldState =>
+       val result = (oldState - 1).toDouble / (0xffffffffL - 2).toDouble // Rescale to the interval [0, 1].
+       val newState = lehmer(oldState)
+       (newState, result)
+     }
+
+     val program: State[Long, String] = for {
+       x <- rngUniform
+       y <- rngUniform
+     } yield s"Pair of uniform random numbers: $x, $y"
+
+     val seed = 9876543210L % 0xffffffffL // Seed must be below the limit.
+
+     program.run(seed).value shouldEqual ((3699446670L,"Pair of uniform random numbers: 0.2995619131016279, 0.1531118339531439"))
+
+     def program2(n: Int): State[Long, List[Double]] = if (n == 0) State.pure(Nil) else for {
+       x ← rngUniform
+       y ← program2(n - 1)
+     } yield x :: y
+
+     program2(100).run(seed).value._2.max should be < 1.0
+
+   }
 }
