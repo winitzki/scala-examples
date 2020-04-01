@@ -8,7 +8,7 @@ import scala.util.{Failure, Success, Try}
 class BadMonadExampleSpec extends FlatSpec with Matchers {
 
   behavior of "bad monad"
-  
+
   it should "fail to implement flatten" in {
     def withParams[P, R, Z]() = {
       type M[A] = Option[A] // Either[Z, A]
@@ -24,7 +24,7 @@ class BadMonadExampleSpec extends FlatSpec with Matchers {
       (flattens[Int].length, flatMaps[Int, Int].length)
     }
     // We can't see a clear failure to implement flatten! When we use the continuation monad for M[A], curryhoward runs out of memory.
-    withParams() shouldEqual ""
+    withParams() shouldEqual ((10, 2))
   }
 
   it should "fail to implement base lift for continuation monad transformer" in {
@@ -75,11 +75,11 @@ class BadMonadExampleSpec extends FlatSpec with Matchers {
 
 object TryOps {
 
-  implicit class TryPartialRecovery[A](val t: Try[A]) extends AnyVal {
+  implicit class TryPartialRecovery[A, B >: A](val t: Try[A]) extends AnyVal {
 
     import scala.reflect.ClassTag
 
-    def onException[T, B >: A](recover: T => Try[B])(implicit classT: ClassTag[T]): Try[B] = t match {
+    def onException[T](recover: T => Try[B])(implicit classT: ClassTag[T]): Try[B] = t match {
       case Failure(e) if classT.runtimeClass == e.getClass => recover(e.asInstanceOf[T])
       case _ => t
     }
