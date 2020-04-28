@@ -75,3 +75,31 @@ class SeqTryRecoverSpec extends FlatSpec with Matchers {
   }
 
 }
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
+
+object FutureCloseable {
+  def using[T, R <: AutoCloseable](r: => R)(program: R => Future[T])(implicit ec: ExecutionContext): Future[T] = {
+    val futureResult: Future[T] = for {
+      resource ← Future(r) // If this fails, we will just return the resulting failed future value.
+      // Only recover the given program. Do not recover from failure creating the resource.
+      result ← program(resource).recoverWith {
+        case e: Throwable ⇒
+          Try(resource.close()) match {
+            case Failure(e2) ⇒
+              e.addSuppressed(e2)
+            case Success(_) ⇒
+          }
+          Future.failed(e)
+      }
+    } yield {
+      Try(resource.close()) // We ignore any exceptions here.
+      result
+    }
+
+    futureResult
+  }
+}
+
+// Problem: this does not work together with continuations.
