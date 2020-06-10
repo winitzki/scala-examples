@@ -1,7 +1,7 @@
-val scalaV = "2.12.6"
+val scalaV = "2.12.11"
 
 lazy val commonSettings = Seq(
-  addCompilerPlugin("org.spire-math" % "kind-projector" % "0.9.9" cross CrossVersion.binary),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
   scalaVersion := scalaV,
   scalacOptions ++= Seq(
     "-deprecation",
@@ -29,7 +29,7 @@ lazy val commonSettings = Seq(
 lazy val scala_examples = (project in file("."))
   .settings(commonSettings)
   .aggregate(common, chapter01, chapter02, chapter03, chapter04,
-    chapter05, chapter06, chapter07)
+    chapter05, chapter06, chapter07, chapter08, chapter09, chapter10, chapter11)
 
 lazy val common = (project in file("common"))
   .settings(commonSettings)
