@@ -4,7 +4,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import io.chymyst.ch.implement
 import scala.language.higherKinds
 
-object AuxTC {
+object TypeClassDefinitions {
 
   trait Monad[M[_]] {
     def pure[A]: A ⇒ M[A]
@@ -56,11 +56,16 @@ object AuxTC {
     def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): T[M, A] => T[N, A]
   }
 
+  // Produce a monad instance automatically for any transormed monads.
+  implicit def monadTransformed[M[_] : Monad, T[_[_], _] : MTrans]: Monad[T[M, *]] = implicitly[MTrans[T]].monadT
+
+  // Natural transformations, monad morphisms, etc.
   trait ~>[P[_], Q[_]] {
     def apply[A]: P[A] ⇒ Q[A]
   }
 
-  case class Liftable[P[_], Q[_]](up: P ~> Q) // This function must be a monad morphism.
+  // The lift relation.
+  case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a monad morphism, not just a natural transformation.
 
   implicit class LiftableSyntax[P[_], A](p: P[A]) {
     def up[Q[_]](implicit liftable: Liftable[P, Q]): Q[A] = liftable.up.apply(p)
@@ -84,52 +89,79 @@ object AuxTC {
 
 class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
 
-  import AuxTC._
+  import TypeClassDefinitions._
 
   behavior of "monad transformer typeclass"
 
-  it should "implement transformer instance for ReaderT and EitherT" in {
-    def withParams[E, R] = {
+  it should "implement transformer instances for ReaderT and EitherT" in {
+    def withParams[E, R]() = {
 
-      type ReaderT[M[_], A] = R => M[A] // The fixed type R must be already defined.
-      implicit val mTransReaderT = new MTrans[ReaderT] {
+      final case class ReaderT[M[_], A](run: R => M[A]) // The fixed type R must be already defined.
+
+      implicit val mTransReaderT: MTrans[ReaderT] = new MTrans[ReaderT] {
         def monadT[M[_] : Monad]: Monad[ReaderT[M, *]] = new Monad[ReaderT[M, *]] {
-          override def pure[A]: A ⇒ ReaderT[M, A] = a ⇒ _ ⇒ Monad[M].pure(a)
+          override def pure[A]: A ⇒ ReaderT[M, A] = a ⇒ ReaderT(_ ⇒ Monad[M].pure(a))
 
-          override def fmap[A, B](f: A ⇒ B): ReaderT[M, A] ⇒ ReaderT[M, B] = rma ⇒ r ⇒ rma(r).map(f)
+          override def fmap[A, B](f: A ⇒ B): ReaderT[M, A] ⇒ ReaderT[M, B] =
+            rma ⇒ ReaderT(r ⇒ rma.run(r).map(f))
 
-          override def flm[A, B](f: A ⇒ ReaderT[M, B]): ReaderT[M, A] ⇒ ReaderT[M, B] = rma ⇒ r ⇒ rma(r).flatMap(a ⇒ f(a)(r))
+          override def flm[A, B](f: A ⇒ ReaderT[M, B]): ReaderT[M, A] ⇒ ReaderT[M, B] =
+            rma ⇒ ReaderT(r ⇒ rma.run(r).flatMap(a ⇒ f(a).run(r)))
         }
 
-        def flift[M[_] : Monad, A]: M[A] => R => M[A] = { ma => _ => ma }
+        def flift[M[_] : Monad, A]: M[A] => ReaderT[M, A] = { ma => ReaderT(_ => ma) }
 
-        def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): (R => M[A]) => R => N[A] = t => r => phi.apply(t(r))
+        def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] => ReaderT[N, A] =
+          t => ReaderT(r => phi.apply(t.run(r)))
       }
 
-      type EitherT[M[_], A] = M[Either[E, A]]
-      implicit val mTransEitherT = new MTrans[EitherT] {
+      final case class EitherT[M[_], A](run: M[Either[E, A]]) // The fixed type E must be already defined.
+
+      implicit val mTransEitherT: MTrans[EitherT] = new MTrans[EitherT] {
         override def monadT[M[_] : Monad]: Monad[EitherT[M, *]] = new Monad[EitherT[M, *]] {
-          override def pure[A]: A ⇒ EitherT[M, A] = a ⇒ Monad[M].pure(Right(a): Either[E, A])
+          override def pure[A]: A ⇒ EitherT[M, A] = a ⇒ EitherT(Monad[M].pure(Right(a): Either[E, A]))
 
-          override def fmap[A, B](f: A ⇒ B): EitherT[M, A] ⇒ EitherT[M, B] = { m: M[Either[E, A]] ⇒ m.map(_.map(f)) }
+          override def fmap[A, B](f: A ⇒ B): EitherT[M, A] ⇒ EitherT[M, B] = { m: EitherT[M, A] ⇒ EitherT(m.run.map(_.map(f))) }
 
-          override def flm[A, B](f: A ⇒ EitherT[M, B]): EitherT[M, A] ⇒ EitherT[M, B] = { m: M[Either[E, A]] ⇒
-            m.flatMap {
+          override def flm[A, B](f: A ⇒ EitherT[M, B]): EitherT[M, A] ⇒ EitherT[M, B] = { m: EitherT[M, A] ⇒
+            EitherT(m.run.flatMap {
               case Left(e) ⇒ Monad[M].pure(Left(e): Either[E, B])
-              case Right(a) ⇒ f(a)
-            }
+              case Right(a) ⇒ f(a).run
+            })
           }
         }
 
-        override def flift[M[_] : Monad, A]: M[A] ⇒ EitherT[M, A] = _.map(Right.apply)
+        override def flift[M[_] : Monad, A]: M[A] ⇒ EitherT[M, A] = m ⇒ EitherT(m.map(Right.apply))
 
-        override def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): EitherT[M, A] ⇒ EitherT[N, A] = phi.apply[Either[E, A]]
+        override def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): EitherT[M, A] ⇒ EitherT[N, A] = { m: EitherT[M, A] ⇒
+          EitherT(phi.apply(m.run))
+        }
       }
 
-      // Write some functor blocks using this.
+      // The last monad in the stack is Option. We do not supply a transformer for it.
+      implicit val monadOption: Monad[Option] = new Monad[Option] {
+        override def pure[A]: A ⇒ Option[A] = Some.apply
+
+        override def fmap[A, B](f: A ⇒ B): Option[A] ⇒ Option[B] = _.map(f)
+
+        override def flm[A, B](f: A ⇒ Option[B]): Option[A] ⇒ Option[B] = _.flatMap(f)
+      }
+
+      // The lift relation must be produced automatically.
+      // We can now write some functor blocks using these transformers.
+      type MyMonadStack[A] = EitherT[ReaderT[Option, *], A]
+
+      // Must create a monad instance for MyMonadStack automatically.
+      implicitly[Monad[Option[*]]]
+      implicitly[Monad[ReaderT[Option, *]]]
+      implicitly[Monad[EitherT[Option, *]]]
+      implicitly[Liftable[Option, ReaderT[Option, *]]]
+      implicitly[Monad[MyMonadStack]]
+
+      ()
     }
 
+    withParams[Int, String]()
 
   }
 }
-
