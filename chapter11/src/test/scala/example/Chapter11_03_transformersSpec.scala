@@ -2,7 +2,9 @@ package example
 
 import org.scalatest.{FlatSpec, Matchers}
 import io.chymyst.ch.implement
+
 import scala.language.higherKinds
+import scala.util.Try
 
 object TypeClassDefinitions {
 
@@ -51,13 +53,16 @@ object TypeClassDefinitions {
 
     def flift[M[_] : Monad, A]: M[A] => T[M, A]
 
-    def blift[M[_] : Monad, A]: Base[A] => T[M, A] = frun[Id, M, A](pureAsMonadMorphism[M])
+    def blift[M[_] : Monad, A]: Base[A] => T[M, A] = frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
 
     def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): T[M, A] => T[N, A]
   }
 
-  // Produce a monad instance automatically for any transormed monads.
+  // Produce a monad instance automatically for any transformed monads.
   implicit def monadTransformed[M[_] : Monad, T[_[_], _] : MTrans]: Monad[T[M, *]] = implicitly[MTrans[T]].monadT
+
+  // Declare a given monad as the base monad of a given transformer.
+  //  def baseMonadOf[M[_] : Monad, T[_[_], _] : MTrans]: Li/**/ M ~> T[Id, *] =
 
   // Natural transformations, monad morphisms, etc.
   trait ~>[P[_], Q[_]] {
@@ -72,6 +77,12 @@ object TypeClassDefinitions {
   }
 
   implicit def liftableId[P[_]]: Liftable[P, P] = Liftable[P, P](identityAsMonadMorphism[P])
+
+  // Transitivity of the lift relation.
+  implicit def liftableTransitive[P[_], Q[_], R[_]](implicit pq: Liftable[P, Q], qr: Liftable[Q, R]): Liftable[P, R] =
+    Liftable[P, R](new ~>[P, R] {
+      override def apply[A]: P[A] ⇒ R[A] = pq.up.apply andThen qr.up.apply
+    })
 
   implicit def base[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[kt.Base, KT[M, *]] = Liftable(
     new ~>[kt.Base, KT[M, *]] {
@@ -94,8 +105,43 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
   behavior of "monad transformer typeclass"
 
   it should "implement transformer instances for ReaderT and EitherT" in {
-    def withParams[E, R]() = {
+    def withParams[E, R](transform1: (R, Int) ⇒ Option[Int], check1: (R, Int) ⇒ Either[E, Int]) = {
 
+      // The test will create a monadic program that uses a read-only value R and will work with optional values.
+      // The given initial optional value is first transformed using transform1.
+      // If the resulting optional value is empty or is invalid (which is determined using the read-only value via check1),
+      // the program will return an error value of type E.
+
+      // Helper functions that implement this business logic are transform1 and check1.
+      // We would like to write code like this:
+      /*
+      val program = for {
+        x <- input // : Option[Int]
+        y <- Reader(r => transform1(r, x))
+        z <- Reader(r => check1(r, y)) // : Reader[R, Either[E, Int]]
+      } yield z
+
+      program.run(...) // Need to use some runner here.
+       */
+
+      final case class Reader[A](run: R ⇒ A)
+
+      // We remove some boilerplate by using the helper function `ask`:
+      val ask: Reader[R] = Reader(identity)
+
+      // Then the program should eventually look like this:
+      /*
+      val program = for {
+        x <- input.up // : Option[Int] lifted to the monad stack
+        r <- ask.up // : Reader[R] lifted to the monad stack
+        y <- transform1(r, x).up // Option[Int] lifted to the monad stack
+        z <- check1(r, y) // : Either[E, Int] lifted to the monad stack
+      } yield z
+
+      program.run(...) // Need to use some runner here.
+       */
+
+      // A type alias does not work with implicit derivation of instances later, so we need a case class.
       final case class ReaderT[M[_], A](run: R => M[A]) // The fixed type R must be already defined.
 
       implicit val mTransReaderT: MTrans[ReaderT] = new MTrans[ReaderT] {
@@ -115,6 +161,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
           t => ReaderT(r => phi.apply(t.run(r)))
       }
 
+      // A type alias does not work here, need a case class.
       final case class EitherT[M[_], A](run: M[Either[E, A]]) // The fixed type E must be already defined.
 
       implicit val mTransEitherT: MTrans[EitherT] = new MTrans[EitherT] {
@@ -151,17 +198,30 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
       // We can now write some functor blocks using these transformers.
       type MyMonadStack[A] = EitherT[ReaderT[Option, *], A]
 
-      // Must create a monad instance for MyMonadStack automatically.
+      // Must create a monad instance for MyMonadStack and other monads automatically.
       implicitly[Monad[Option[*]]]
       implicitly[Monad[ReaderT[Option, *]]]
       implicitly[Monad[EitherT[Option, *]]]
-      implicitly[Liftable[Option, ReaderT[Option, *]]]
       implicitly[Monad[MyMonadStack]]
+      implicitly[Liftable[Option, ReaderT[Option, *]]]
 
+      val input: Option[Int] = Some(5)
+
+      val resultStack: MyMonadStack[Int] = for {
+        x ← input.up[MyMonadStack]
+        r ← ask.up[MyMonadStack]
+        y ← transform1(r, x).up[MyMonadStack]
+        z ← check1(r, y).up[MyMonadStack]
+      } yield z
+
+//      val result: Int = resultStack.run(???)
       ()
     }
 
-    withParams[Int, String]()
+    withParams[String, String](
+      (s, i) ⇒ Try(s.toInt).toOption.map(_ + i),
+      (s, i) ⇒ if (i < 10) Left("error") else Right(i)
+    )
 
   }
 }
