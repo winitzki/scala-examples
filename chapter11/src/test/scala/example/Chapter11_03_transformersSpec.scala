@@ -1,12 +1,40 @@
 package example
 
-import org.scalatest.{FlatSpec, Matchers}
+import example.TypeClassDefinitions.{Id, Monad}
 import io.chymyst.ch.implement
+import org.scalatest.{FlatSpec, Matchers}
 
 import scala.language.higherKinds
 import scala.util.Try
 
-object TypeClassDefinitions {
+// Natural transformations, monad morphisms, etc.
+trait ~>[P[_], Q[_]] {
+  def apply[A]: P[A] ⇒ Q[A]
+}
+
+// The lift relation.
+case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a monad morphism, not just a natural transformation.
+
+trait TypeClassDefinitionsLowerPriorityImplicits {
+  def pureAsMonadMorphism[M[_] : Monad]: Id ~> M = new ~>[Id, M] {
+    override def apply[A]: Id[A] ⇒ M[A] = Monad[M].pure
+  }
+
+  def identityAsMonadMorphism[M[_]]: M ~> M = new ~>[M, M] {
+    override def apply[A]: M[A] ⇒ M[A] = identity
+  }
+
+  implicit def liftableId[P[_]]: Liftable[P, P] = Liftable[P, P](identityAsMonadMorphism[P])
+
+  // Transitivity of the lift relation.
+  implicit def liftableTransitive[P[_], Q[_], R[_]](implicit pq: Liftable[P, Q], qr: Liftable[Q, R]): Liftable[P, R] =
+    Liftable[P, R](new ~>[P, R] {
+      override def apply[A]: P[A] ⇒ R[A] = pq.up.apply andThen qr.up.apply
+    })
+
+}
+
+object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
 
   trait Monad[M[_]] {
     def pure[A]: A ⇒ M[A]
@@ -38,14 +66,6 @@ object TypeClassDefinitions {
     override def flm[A, B](f: A ⇒ Id[B]): Id[A] ⇒ Id[B] = implement
   }
 
-  def pureAsMonadMorphism[M[_] : Monad]: Id ~> M = new ~>[Id, M] {
-    override def apply[A]: Id[A] ⇒ M[A] = Monad[M].pure
-  }
-
-  def identityAsMonadMorphism[M[_]]: M ~> M = new ~>[M, M] {
-    override def apply[A]: M[A] ⇒ M[A] = identity
-  }
-
   trait MTrans[T[_[_], _]] {
     type Base[A] = T[Id, A] // The type constructor describing the base monad.
 
@@ -64,33 +84,17 @@ object TypeClassDefinitions {
   // Declare a given monad as the base monad of a given transformer.
   //  def baseMonadOf[M[_] : Monad, T[_[_], _] : MTrans]: Li/**/ M ~> T[Id, *] =
 
-  // Natural transformations, monad morphisms, etc.
-  trait ~>[P[_], Q[_]] {
-    def apply[A]: P[A] ⇒ Q[A]
-  }
-
-  // The lift relation.
-  case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a monad morphism, not just a natural transformation.
-
   implicit class LiftableSyntax[P[_], A](p: P[A]) {
     def up[Q[_]](implicit liftable: Liftable[P, Q]): Q[A] = liftable.up.apply(p)
   }
 
-  implicit def liftableId[P[_]]: Liftable[P, P] = Liftable[P, P](identityAsMonadMorphism[P])
-
-  // Transitivity of the lift relation.
-  implicit def liftableTransitive[P[_], Q[_], R[_]](implicit pq: Liftable[P, Q], qr: Liftable[Q, R]): Liftable[P, R] =
-    Liftable[P, R](new ~>[P, R] {
-      override def apply[A]: P[A] ⇒ R[A] = pq.up.apply andThen qr.up.apply
-    })
-
-  implicit def base[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[kt.Base, KT[M, *]] = Liftable(
+  implicit def baseLiftable[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[kt.Base, KT[M, *]] = Liftable(
     new ~>[kt.Base, KT[M, *]] {
       override def apply[A]: kt.Base[A] ⇒ KT[M, A] = kt.blift[M, A]
     }
   )
 
-  implicit def forn[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[M, KT[M, *]] = Liftable(
+  implicit def foreignLiftable[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[M, KT[M, *]] = Liftable(
     new ~>[M, KT[M, *]] {
       override def apply[A]: M[A] ⇒ KT[M, A] = kt.flift[M, A]
     }
@@ -214,7 +218,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         z ← check1(r, y).up[MyMonadStack]
       } yield z
 
-//      val result: Int = resultStack.run(???)
+      //      val result: Int = resultStack.run(???)
       ()
     }
 
