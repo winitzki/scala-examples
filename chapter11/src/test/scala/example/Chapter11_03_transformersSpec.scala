@@ -207,7 +207,18 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
       implicitly[Monad[ReaderT[Option, *]]]
       implicitly[Monad[EitherT[Option, *]]]
       implicitly[Monad[MyMonadStack]]
+
+      // Must create Liftable instances automatically.
       implicitly[Liftable[Option, ReaderT[Option, *]]]
+      implicitly[Liftable[Option, EitherT[ReaderT[Option, *], *]]]
+      implicitly[Liftable[Option, MyMonadStack]]
+      implicitly[Liftable[Reader, ReaderT[Option, *]]]
+      implicitly[Liftable[Reader, EitherT[ReaderT[Option, *], *]]]
+      implicitly[Liftable[Reader, MyMonadStack]]
+      implicitly[Liftable[Either[E, *], EitherT[Option, *]]]
+      implicitly[Liftable[Either[E, *], EitherT[ReaderT[Option, *], *]]]
+      implicitly[Liftable[Either[E, *], MyMonadStack]]
+
 
       val input: Option[Int] = Some(5)
 
