@@ -265,7 +265,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
       }
 
       // Functor instance for EWT.
-      implicit def functorEWT[M[_] : Functor]: Functor[EWT[M, ?]] = new Functor[EWT[M, ?]] {
+      implicit def functorEWT[M[_] : Functor]: Functor[EWT[M, *]] = new Functor[EWT[M, *]] {
         def map[A, B](mewa: M[EW[A]])(f: A ⇒ B): M[EW[B]] = mewa.map(functorEW.map(_)(f))
       }
 
@@ -290,7 +290,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
       // Monad instance for EWT[M, ?].
       implicit val mtransdefEWT: MTransDef[EWT] = new MTransDef[EWT] {
-        def transformed[M[_] : CatsMonad : Functor]: CatsMonad[EWT[M, ?]] = new CatsMonad[EWT[M, ?]] {
+        def transformed[M[_] : CatsMonad : Functor]: CatsMonad[EWT[M, *]] = new CatsMonad[EWT[M, *]] {
           def flatMap[A, B](fa: M[EW[A]])(f: A ⇒ EWT[M, B]): EWT[M, B] = flatten(fa.map(functorEW.map(_)(f)))
 
           def pure[A](x: A): M[EW[A]] = CatsMonad[M].pure(CatsMonad[EW].pure(x))
@@ -306,11 +306,11 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
         def blift[M[_] : CatsMonad : Functor, A](la: EW[A]): M[EW[A]] = CatsMonad[M].pure(la)
 
-        def mrun[M[_] : CatsMonad : Functor, N[_] : CatsMonad](mn: M ~> N): EWT[M, ?] ~> EWT[N, ?] = new (EWT[M, ?] ~> EWT[N, ?]) {
+        def mrun[M[_] : CatsMonad : Functor, N[_] : CatsMonad](mn: M ~> N): EWT[M, *] ~> EWT[N, *] = new (EWT[M, *] ~> EWT[N, *]) {
           def apply[A](fa: M[EW[A]]): N[EW[A]] = mn[EW[A]](fa)
         }
 
-        def brun[M[_] : CatsMonad : Functor](lrun: EW ~> Id): EWT[M, ?] ~> M = new (EWT[M, ?] ~> M) {
+        def brun[M[_] : CatsMonad : Functor](lrun: EW ~> Id): EWT[M, *] ~> M = new (EWT[M, *] ~> M) {
           def apply[A](fa: M[EW[A]]): M[A] = fa.map(ewa ⇒ lrun(ewa))
         }
       }

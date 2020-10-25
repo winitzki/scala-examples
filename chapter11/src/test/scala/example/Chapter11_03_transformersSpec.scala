@@ -1,23 +1,19 @@
 package example
 
-import example.TypeClassDefinitions.{Id, Monad}
+import example.TypeClassDefinitions.Monad
 import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
+import cats.{Id, ~>}
 
 import scala.language.higherKinds
 import scala.util.Try
-
-// Natural transformations, monad morphisms, etc.
-trait ~>[P[_], Q[_]] {
-  def apply[A]: P[A] ⇒ Q[A]
-}
 
 // The lift relation.
 case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a monad morphism, not just a natural transformation.
 
 trait TypeClassDefinitionsLowerPriorityImplicits {
   def pureAsMonadMorphism[M[_] : Monad]: Id ~> M = new ~>[Id, M] {
-    override def apply[A]: Id[A] ⇒ M[A] = Monad[M].pure
+    override def apply[A](p: Id[A]): M[A] = Monad[M].pure(p)
   }
 
   def identityAsMonadMorphism[M[_]]: M ~> M = new ~>[M, M] {
@@ -26,11 +22,15 @@ trait TypeClassDefinitionsLowerPriorityImplicits {
 
   implicit def liftableId[P[_]]: Liftable[P, P] = Liftable[P, P](identityAsMonadMorphism[P])
 
+  // Liftable[L, P] and Liftable[M, P] where P = TL[M] is a transformed monad, where TL has an instance of MTrans[T] and L = TL[Id].
+
+  //  implicit def liftableTrans[K[_], L[_], M[_], T[_[_], _]]: Liftable[K, ]
+
   // Transitivity of the lift relation.
-  implicit def liftableTransitive[P[_], Q[_], R[_]](implicit pq: Liftable[P, Q], qr: Liftable[Q, R]): Liftable[P, R] =
-    Liftable[P, R](new ~>[P, R] {
-      override def apply[A]: P[A] ⇒ R[A] = pq.up.apply andThen qr.up.apply
-    })
+  //  implicit def liftableTransitive[P[_], Q[_], R[_]](implicit pq: Liftable[P, Q], qr: Liftable[Q, R]): Liftable[P, R] =
+  //    Liftable[P, R](new ~>[P, R] {
+  //      override def apply[A]: P[A] ⇒ R[A] = pq.up.apply andThen qr.up.apply
+  //    })
 
 }
 
@@ -56,9 +56,7 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
     def withFilter(p: A ⇒ Boolean): M[A] = m
   }
 
-  type Id[A] = A // The identity monad's typeclass instance must be defined elsewhere.
-
-  implicit val monadId = new Monad[Id] {
+  implicit val monadId: Monad[Id] = new Monad[Id] {
     override def pure[A]: A ⇒ Id[A] = implement
 
     override def fmap[A, B](f: A ⇒ B): Id[A] ⇒ Id[B] = implement
@@ -66,14 +64,14 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
     override def flm[A, B](f: A ⇒ Id[B]): Id[A] ⇒ Id[B] = implement
   }
 
-  trait MTrans[T[_[_], _]] {
-    type Base[A] = T[Id, A] // The type constructor describing the base monad.
+  trait MTrans[T[_[_], _]] { // The base monad is T[Id, A].
+    //    type Base[A] = T[Id, A] // The type constructor describing the base monad.
 
     def monadT[M[_] : Monad]: Monad[T[M, *]]
 
     def flift[M[_] : Monad, A]: M[A] => T[M, A]
 
-    def blift[M[_] : Monad, A]: Base[A] => T[M, A] = frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
+    def blift[M[_] : Monad, A]: T[Id, A] => T[M, A] = frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
 
     def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): T[M, A] => T[N, A]
   }
@@ -88,9 +86,11 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
     def up[Q[_]](implicit liftable: Liftable[P, Q]): Q[A] = liftable.up.apply(p)
   }
 
-  implicit def baseLiftable[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[kt.Base, KT[M, *]] = Liftable(
-    new ~>[kt.Base, KT[M, *]] {
-      override def apply[A]: kt.Base[A] ⇒ KT[M, A] = kt.blift[M, A]
+  implicit def baseLiftable[KT[_[_], _], M[_] : Monad, P[_]](
+                                                              implicit kt: MTrans[KT], pIsBase: Liftable[P, KT[Id, *]]
+                                                            ): Liftable[P, KT[M, *]] = Liftable(
+    new ~>[P, KT[M, *]] {
+      override def apply[A]: P[A] ⇒ KT[M, A] = (pIsBase.up.apply[A] _) andThen kt.blift[M, A]
     }
   )
 
@@ -109,7 +109,8 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
   behavior of "monad transformer typeclass"
 
   it should "implement transformer instances for ReaderT and EitherT" in {
-    def withParams[E, R](transform1: (R, Int) ⇒ Option[Int], check1: (R, Int) ⇒ Either[E, Int]) = {
+    // Declare types and some values for brevity.
+    def withParams[E, R](r0: R, transform1: (R, Int) ⇒ Option[Int], check1: (R, Int) ⇒ Either[E, Int]) = {
 
       // The test will create a monadic program that uses a read-only value R and will work with optional values.
       // The given initial optional value is first transformed using transform1.
@@ -146,23 +147,23 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
        */
 
       // A type alias does not work with implicit derivation of instances later, so we need a case class.
-      final case class ReaderT[M[_], A](run: R => M[A]) // The fixed type R must be already defined.
+      final case class ReaderT[M[_], A](run: Reader[M[A]]) // The fixed type R must be already defined.
 
       implicit val mTransReaderT: MTrans[ReaderT] = new MTrans[ReaderT] {
         def monadT[M[_] : Monad]: Monad[ReaderT[M, *]] = new Monad[ReaderT[M, *]] {
-          override def pure[A]: A ⇒ ReaderT[M, A] = a ⇒ ReaderT(_ ⇒ Monad[M].pure(a))
+          override def pure[A]: A ⇒ ReaderT[M, A] = a ⇒ ReaderT(Reader(_ ⇒ Monad[M].pure(a)))
 
           override def fmap[A, B](f: A ⇒ B): ReaderT[M, A] ⇒ ReaderT[M, B] =
-            rma ⇒ ReaderT(r ⇒ rma.run(r).map(f))
+            rma ⇒ ReaderT(Reader(r ⇒ rma.run.run(r).map(f)))
 
           override def flm[A, B](f: A ⇒ ReaderT[M, B]): ReaderT[M, A] ⇒ ReaderT[M, B] =
-            rma ⇒ ReaderT(r ⇒ rma.run(r).flatMap(a ⇒ f(a).run(r)))
+            rma ⇒ ReaderT(Reader(r ⇒ rma.run.run(r).flatMap(a ⇒ f(a).run.run(r))))
         }
 
-        def flift[M[_] : Monad, A]: M[A] => ReaderT[M, A] = { ma => ReaderT(_ => ma) }
+        def flift[M[_] : Monad, A]: M[A] => ReaderT[M, A] = { ma => ReaderT(Reader(_ => ma)) }
 
         def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] => ReaderT[N, A] =
-          t => ReaderT(r => phi.apply(t.run(r)))
+          t => ReaderT(Reader(r => phi.apply(t.run.run(r))))
       }
 
       // A type alias does not work here, need a case class.
@@ -189,7 +190,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         }
       }
 
-      // The last monad in the stack is Option. We do not supply a transformer for it.
+      // The last monad in the stack is Option. We do not need to supply a transformer for it.
       implicit val monadOption: Monad[Option] = new Monad[Option] {
         override def pure[A]: A ⇒ Option[A] = Some.apply
 
@@ -200,43 +201,44 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
 
       // The lift relation must be produced automatically.
       // We can now write some functor blocks using these transformers.
-      type MyMonadStack[A] = EitherT[ReaderT[Option, *], A]
+      type MStack1[A] = EitherT[ReaderT[Option, *], A]
 
-      // Must create a monad instance for MyMonadStack and other monads automatically.
+      // Must create a monad instance for MStack1 and other monads automatically.
       implicitly[Monad[Option[*]]]
       implicitly[Monad[ReaderT[Option, *]]]
       implicitly[Monad[EitherT[Option, *]]]
-      implicitly[Monad[MyMonadStack]]
+      implicitly[Monad[MStack1]]
 
-      // Must create Liftable instances automatically.
+      // Must create these Liftable instances automatically.
       implicitly[Liftable[Option, ReaderT[Option, *]]]
-      implicitly[Liftable[Option, EitherT[ReaderT[Option, *], *]]]
-      implicitly[Liftable[Option, MyMonadStack]]
       implicitly[Liftable[Reader, ReaderT[Option, *]]]
-      implicitly[Liftable[Reader, EitherT[ReaderT[Option, *], *]]]
-      implicitly[Liftable[Reader, MyMonadStack]]
       implicitly[Liftable[Either[E, *], EitherT[Option, *]]]
       implicitly[Liftable[Either[E, *], EitherT[ReaderT[Option, *], *]]]
-      implicitly[Liftable[Either[E, *], MyMonadStack]]
-
+      implicitly[Liftable[Option, EitherT[ReaderT[Option, *], *]]]
+      implicitly[Liftable[Reader, EitherT[ReaderT[Option, *], *]]]
+      implicitly[Liftable[Option, MStack1]]
+      implicitly[Liftable[Reader, MStack1]]
+      implicitly[Liftable[Either[E, *], MStack1]]
 
       val input: Option[Int] = Some(5)
 
-      val resultStack: MyMonadStack[Int] = for {
-        x ← input.up[MyMonadStack]
-        r ← ask.up[MyMonadStack]
-        y ← transform1(r, x).up[MyMonadStack]
-        z ← check1(r, y).up[MyMonadStack]
+      val resultStack: MStack1[Int] = for {
+        x ← input.up[MStack1]
+        r ← ask.up[MStack1]
+        y ← transform1(r, x).up[MStack1]
+        z ← check1(r, y).up[MStack1]
       } yield z
 
-      //      val result: Int = resultStack.run(???)
-      ()
+      // Run the stack and get the result value.
+      val result: Int = resultStack.run.run.run(r0).getOrElse(Right(0)).getOrElse(0)
+      result
     }
 
     withParams[String, String](
+      "123",
       (s, i) ⇒ Try(s.toInt).toOption.map(_ + i),
       (s, i) ⇒ if (i < 10) Left("error") else Right(i)
-    )
+    ) shouldEqual 123
 
   }
 }
