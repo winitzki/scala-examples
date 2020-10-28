@@ -13,20 +13,43 @@ final case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a
 
 final case class BaseMonadOf[L[_], KT[_[_], _]](iso: L ~> KT[Id, *])
 
+// Monad transformer typeclass for this example.
+trait MTr[KT[_[_], _]] { // The base monad is KT[Id, A].
+  def monadT[M[_] : Monad]: Monad[KT[M, *]]
+
+  def flift[M[_] : Monad, A]: M[A] => KT[M, A]
+
+  def blift[M[_] : Monad, A]: KT[Id, A] => KT[M, A] = frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
+
+  def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): KT[M, A] => KT[N, A]
+}
+
 trait TypeClassDefinitionsLowerPriorityImplicits {
+
   type Id[A] = A
+
+  implicit class PipeOps[A](a: A) {
+    def |>[B](f: A ⇒ B): B = f(a)
+  }
 
   def pureAsMonadMorphism[M[_] : Monad]: Id ~> M = new ~>[Id, M] {
     override def apply[A](p: Id[A]): M[A] = Monad[M].pure(p)
   }
 
   def identityAsMonadMorphism[M[_]]: M ~> M = new ~>[M, M] {
-    override def apply[A]: M[A] ⇒ M[A] = identity
+    override def apply[A](m: M[A]): M[A] = m
   }
 
   implicit def liftableId[P[_]]: Liftable[P, P] = Liftable[P, P](identityAsMonadMorphism[P])
 
-  // Liftable[L, P] and Liftable[M, P] where P = TL[M] is a transformed monad, where TL has an instance of MTrans[T] and L = TL[Id].
+  // Lift a monad to the more nested transformed monad. This assumes L not equal to M.
+  implicit def monadToTransformer[KT[_[_], _], L[_] : Monad, M[_] : Monad]
+  (implicit kt: MTr[KT], lm: Liftable[L, M]): Liftable[L, KT[M, *]] = Liftable(new ~>[L, KT[M, *]] {
+    override def apply[A](fa: L[A]): KT[M, A] = fa |> lm.up.apply |> kt.flift
+  })
+
+
+  // Liftable[L, P] and Liftable[M, P] where P = TL[M] is a transformed monad, where TL has an instance of MTr[T] and L = TL[Id].
 
   //  implicit def liftableTrans[K[_], L[_], M[_], T[_[_], _]]: Liftable[K, ]
 
@@ -40,16 +63,13 @@ trait TypeClassDefinitionsLowerPriorityImplicits {
 
 object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
 
+  // Quick and self-contained definition of the Monad typeclass.
   trait Monad[M[_]] {
     def pure[A]: A ⇒ M[A]
 
     def fmap[A, B](f: A ⇒ B): M[A] ⇒ M[B]
 
     def flm[A, B](f: A ⇒ M[B]): M[A] ⇒ M[B]
-  }
-
-  implicit class PipeOps[A](a: A) {
-    def |>[B](f: A ⇒ B): B = f(a)
   }
 
   object Monad {
@@ -72,55 +92,40 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
     override def flm[A, B](f: A ⇒ Id[B]): Id[A] ⇒ Id[B] = implement
   }
 
-  trait MTrans[KT[_[_], _]] { // The base monad is KT[Id, A].
-    //    type Base[A] // The type constructor describing the base monad.
-    //
-    //    def baseMonad: Monad[Base]
-    //
-    //    def baseId: Base ~> KT[Id, *]
-
-    def monadT[M[_] : Monad]: Monad[KT[M, *]]
-
-    def flift[M[_] : Monad, A]: M[A] => KT[M, A]
-
-    def blift[M[_] : Monad, A]: KT[Id, A] => KT[M, A] = frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
-
-    def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): KT[M, A] => KT[N, A]
-  }
-
   // Produce a monad instance automatically for any transformed monads.
-  implicit def monadTransformed[M[_] : Monad, KT[_[_], _] : MTrans]: Monad[KT[M, *]] = implicitly[MTrans[KT]].monadT
-
-  // Declare a given monad as the base monad of a given transformer.
-  //def baseMonadOf[M[_] : Monad, T[_[_], _] : MTrans]: Li/**/ M ~> T[Id, *] =
+  implicit def monadTransformed[M[_] : Monad, KT[_[_], _] : MTr]: Monad[KT[M, *]] = implicitly[MTr[KT]].monadT
 
   implicit class LiftableSyntax[P[_], A](p: P[A]) {
     def up[Q[_]](implicit liftable: Liftable[P, Q]): Q[A] = liftable.up.apply(p)
   }
 
+  // Lift base monad to the transformed monad.
   implicit def baseMonadToTransformer[KT[_[_], _], M[_] : Monad, L[_] : Monad]
-  (implicit kt: MTrans[KT], isBase: BaseMonadOf[L, KT]): Liftable[L, KT[M, *]] = Liftable(
+  (implicit kt: MTr[KT], isBase: BaseMonadOf[L, KT]): Liftable[L, KT[M, *]] = Liftable(
     new ~>[L, KT[M, *]] {
       def apply[A](fa: L[A]): KT[M, A] = fa |> isBase.iso.apply |> kt.blift[M, A] //kt.blift[M, A].apply(isBase.iso(fa))
     }
   )
 
+  // Does not work:
   //  implicit def baseLiftable[KT[_[_], _], M[_] : Monad, P[_]](
-  //                                                              implicit kt: MTrans[KT], pIsBase: Liftable[P, KT[Id, *]]
+  //                                                              implicit kt: MTr[KT], pIsBase: Liftable[P, KT[Id, *]]
   //                                                            ): Liftable[P, KT[M, *]] = Liftable(
   //    new ~>[P, KT[M, *]] {
   //      override def apply[A]: P[A] ⇒ KT[M, A] = (pIsBase.up.apply[A] _) andThen kt.blift[M, A]
   //    }
   //  )
 
-  implicit def foreignLiftable[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[M, KT[M, *]] = Liftable(
+  // Lift foreign monad to the transformed monad.
+  implicit def foreignLiftable[KT[_[_], _], M[_] : Monad](implicit kt: MTr[KT]): Liftable[M, KT[M, *]] = Liftable(
     new ~>[M, KT[M, *]] {
-      override def apply[A]: M[A] ⇒ KT[M, A] = kt.flift[M, A]
+      override def apply[A](m: M[A]): KT[M, A] = m |> kt.flift[M, A]
     }
   )
 
-  //  def getBaseMonad[KT[_[_], _]](implicit kt: MTrans[KT]): BaseMonadOf[kt.Base, KT] =
-  //    BaseMonadOf[kt.Base, KT](kt.baseId) // Does not work.
+  // Does not work:
+  //  def getBaseMonad[KT[_[_], _]](implicit kt: MTr[KT]): BaseMonadOf[kt.Base, KT] =
+  //    BaseMonadOf[kt.Base, KT](kt.baseId)
 
 }
 
@@ -165,7 +170,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         z <- check1(r, y) // : Either[E, Int] lifted to the monad stack
       } yield z
 
-      program.run(...) // Need to use some runner here.
+      program.run(...) // Will use some runner here.
        */
 
       // A type alias does not work with implicit derivation of instances later, so we need a case class.
@@ -179,7 +184,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         def flm[A, B](f: A ⇒ Reader[B]): Reader[A] ⇒ Reader[B] = implement
       }
 
-      implicit val mTransReaderT: MTrans[ReaderT] = new MTrans[ReaderT] {
+      implicit val MTrReaderT: MTr[ReaderT] = new MTr[ReaderT] {
 
         override def monadT[M[_] : Monad]: Monad[ReaderT[M, *]] = new Monad[ReaderT[M, *]] {
           override def pure[A]: A ⇒ ReaderT[M, A] = a ⇒ ReaderT(Reader(_ ⇒ Monad[M].pure(a)))
@@ -196,13 +201,6 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         override def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] => ReaderT[N, A] =
           t => ReaderT(Reader(r => phi.apply(t.run.run(r))))
 
-        //        override type Base[A] = Reader[A]
-        //
-        //        override def baseMonad: Monad[Base] = implicitly[Monad[Reader]]
-        //
-        //        override def baseId: ~>[Base, ReaderT[Id, *]] = new ~>[Base, ReaderT[Id, *]] {
-        //          def apply[A](fa: Base[A]): ReaderT[Id, A] = ReaderT[Id, A](fa)
-        //        }
       }
 
       implicit val readerBase: BaseMonadOf[Reader, ReaderT] = BaseMonadOf(new ~>[Reader, ReaderT[Id, *]] {
@@ -220,7 +218,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
       // A type alias does not work here, need a case class.
       final case class EitherT[M[_], A](run: M[Either[E, A]]) // The fixed type E must be already defined.
 
-      implicit val mTransEitherT: MTrans[EitherT] = new MTrans[EitherT] {
+      implicit val MTrEitherT: MTr[EitherT] = new MTr[EitherT] {
         override def monadT[M[_] : Monad]: Monad[EitherT[M, *]] = new Monad[EitherT[M, *]] {
           override def pure[A]: A ⇒ EitherT[M, A] = a ⇒ EitherT(Monad[M].pure(Right(a): Either[E, A]))
 
@@ -239,13 +237,6 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         override def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): EitherT[M, A] ⇒ EitherT[N, A] = { m: EitherT[M, A] ⇒
           EitherT(phi.apply(m.run))
         }
-
-        //
-        //        override type Base[A] = Either[E, A]
-        //
-        //        override def baseMonad: Monad[Base] = implicitly[Monad[Base]]
-        //
-        //        override def baseId: ~>[Base, EitherT[Id, *]] = ???
       }
 
       implicit val baseEither: BaseMonadOf[Either[E, *], EitherT] = BaseMonadOf(new ~>[Either[E, *], EitherT[Id, *]] {
@@ -306,7 +297,7 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
       "123",
       (s, i) ⇒ Try(s.toInt).toOption.map(_ + i),
       (s, i) ⇒ if (i < 10) Left("error") else Right(i)
-    ) shouldEqual 123
+    ) shouldEqual 128 // 123 + 5
 
   }
 }
