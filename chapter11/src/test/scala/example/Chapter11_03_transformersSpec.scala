@@ -1,6 +1,6 @@
 package example
 
-import example.TypeClassDefinitions.{Monad, pureAsMonadMorphism}
+import example.TypeClassDefinitions.{Id, Monad, pureAsMonadMorphism}
 import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
 import cats.~>
@@ -9,7 +9,9 @@ import scala.language.higherKinds
 import scala.util.Try
 
 // The lift relation.
-case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a monad morphism, not just a natural transformation.
+final case class Liftable[P[_], Q[_]](up: P ~> Q) // The function `up` must be a monad morphism, not just a natural transformation.
+
+final case class BaseMonadOf[L[_], KT[_[_], _]](iso: L ~> KT[Id, *])
 
 trait TypeClassDefinitionsLowerPriorityImplicits {
   type Id[A] = A
@@ -46,6 +48,10 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
     def flm[A, B](f: A ⇒ M[B]): M[A] ⇒ M[B]
   }
 
+  implicit class PipeOps[A](a: A) {
+    def |>[B](f: A ⇒ B): B = f(a)
+  }
+
   object Monad {
     def apply[M[_]](implicit mm: Monad[M]): Monad[M] = mm
   }
@@ -67,17 +73,17 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
   }
 
   trait MTrans[KT[_[_], _]] { // The base monad is KT[Id, A].
-    type Base[A] // The type constructor describing the base monad.
-
-    def baseMonad: Monad[Base]
-
-    def baseId: Base ~> KT[Id, *]
+    //    type Base[A] // The type constructor describing the base monad.
+    //
+    //    def baseMonad: Monad[Base]
+    //
+    //    def baseId: Base ~> KT[Id, *]
 
     def monadT[M[_] : Monad]: Monad[KT[M, *]]
 
     def flift[M[_] : Monad, A]: M[A] => KT[M, A]
 
-    def blift[M[_] : Monad, A]: Base[A] => KT[M, A] = (baseId.apply[A] _) andThen frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
+    def blift[M[_] : Monad, A]: KT[Id, A] => KT[M, A] = frun[Id, M, A](pureAsMonadMorphism[M]) // Default implementation.
 
     def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): KT[M, A] => KT[N, A]
   }
@@ -86,15 +92,16 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
   implicit def monadTransformed[M[_] : Monad, KT[_[_], _] : MTrans]: Monad[KT[M, *]] = implicitly[MTrans[KT]].monadT
 
   // Declare a given monad as the base monad of a given transformer.
-  //  def baseMonadOf[M[_] : Monad, T[_[_], _] : MTrans]: Li/**/ M ~> T[Id, *] =
+  //def baseMonadOf[M[_] : Monad, T[_[_], _] : MTrans]: Li/**/ M ~> T[Id, *] =
 
   implicit class LiftableSyntax[P[_], A](p: P[A]) {
     def up[Q[_]](implicit liftable: Liftable[P, Q]): Q[A] = liftable.up.apply(p)
   }
 
-  implicit def baseMonadFromTransformer[KT[_[_], _], M[_] : Monad](implicit kt: MTrans[KT]): Liftable[kt.Base, KT[M, *]] = Liftable(
-    new ~>[kt.Base, KT[M, *]] {
-      def apply[A](fa: kt.Base[A]): KT[M, A] = kt.blift[M, A].apply(fa)
+  implicit def baseMonadToTransformer[KT[_[_], _], M[_] : Monad, L[_] : Monad]
+  (implicit kt: MTrans[KT], isBase: BaseMonadOf[L, KT]): Liftable[L, KT[M, *]] = Liftable(
+    new ~>[L, KT[M, *]] {
+      def apply[A](fa: L[A]): KT[M, A] = fa |> isBase.iso.apply |> kt.blift[M, A] //kt.blift[M, A].apply(isBase.iso(fa))
     }
   )
 
@@ -111,6 +118,9 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
       override def apply[A]: M[A] ⇒ KT[M, A] = kt.flift[M, A]
     }
   )
+
+  //  def getBaseMonad[KT[_[_], _]](implicit kt: MTrans[KT]): BaseMonadOf[kt.Base, KT] =
+  //    BaseMonadOf[kt.Base, KT](kt.baseId) // Does not work.
 
 }
 
@@ -186,14 +196,18 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
         override def frun[M[_] : Monad, N[_] : Monad, A](phi: M ~> N): ReaderT[M, A] => ReaderT[N, A] =
           t => ReaderT(Reader(r => phi.apply(t.run.run(r))))
 
-        override type Base[A] = Reader[A]
-
-        override def baseMonad: Monad[Base] = implicitly[Monad[Reader]]
-
-        override def baseId: ~>[Base, ReaderT[Id, *]] = new ~>[Base, ReaderT[Id, *]] {
-          def apply[A](fa: Base[A]): ReaderT[Id, A] = ReaderT[Id, A](fa)
-        }
+        //        override type Base[A] = Reader[A]
+        //
+        //        override def baseMonad: Monad[Base] = implicitly[Monad[Reader]]
+        //
+        //        override def baseId: ~>[Base, ReaderT[Id, *]] = new ~>[Base, ReaderT[Id, *]] {
+        //          def apply[A](fa: Base[A]): ReaderT[Id, A] = ReaderT[Id, A](fa)
+        //        }
       }
+
+      implicit val readerBase: BaseMonadOf[Reader, ReaderT] = BaseMonadOf(new ~>[Reader, ReaderT[Id, *]] {
+        def apply[A](fa: Reader[A]): ReaderT[Id, A] = ReaderT[Id, A](fa)
+      })
 
       implicit val monadEither: Monad[Either[E, *]] = new Monad[Either[E, *]] {
         override def pure[A]: A ⇒ Either[E, A] = implement
@@ -226,12 +240,17 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
           EitherT(phi.apply(m.run))
         }
 
-        override type Base[A] = Either[E, A]
-
-        override def baseMonad: Monad[Base] = implicitly[Monad[Base]]
-
-        override def baseId: ~>[Base, EitherT[Id, *]] = ???
+        //
+        //        override type Base[A] = Either[E, A]
+        //
+        //        override def baseMonad: Monad[Base] = implicitly[Monad[Base]]
+        //
+        //        override def baseId: ~>[Base, EitherT[Id, *]] = ???
       }
+
+      implicit val baseEither: BaseMonadOf[Either[E, *], EitherT] = BaseMonadOf(new ~>[Either[E, *], EitherT[Id, *]] {
+        override def apply[A](fa: Either[E, A]): EitherT[Id, A] = EitherT[Id, A](fa) // Full type annotation is required in the r.h.s.
+      })
 
       // The last monad in the stack is Option. We do not need to supply a transformer for it.
       implicit val monadOption: Monad[Option] = new Monad[Option] {
@@ -252,6 +271,8 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
       implicitly[Monad[ReaderT[Option, *]]]
       implicitly[Monad[EitherT[Option, *]]]
       implicitly[Monad[MStack1]]
+
+      implicitly[BaseMonadOf[Reader, ReaderT]]
 
       // Should be able to create these Liftable instances automatically.
       implicitly[Liftable[Option, ReaderT[Option, *]]] // Foreign lift.
