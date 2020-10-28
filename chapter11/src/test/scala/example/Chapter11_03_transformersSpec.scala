@@ -98,7 +98,7 @@ object TypeClassDefinitions extends TypeClassDefinitionsLowerPriorityImplicits {
   }
 
   // Lift foreign monad to the transformed monad.
-  implicit def foreignLiftable[KT[_[_], _], M[_] : Monad](implicit kt: MTr[KT]): MM[M, KT[M, *]] = new MM[M, KT[M, *]] {
+  implicit def foreignMonadToTransformer[KT[_[_], _], M[_] : Monad](implicit kt: MTr[KT]): MM[M, KT[M, *]] = new MM[M, KT[M, *]] {
     override def apply[A]: M[A] ⇒ KT[M, A] = kt.flift[M, A]
   }
 
@@ -258,11 +258,9 @@ class Chapter11_03_transformersSpec extends FlatSpec with Matchers {
       implicitly[MM[Reader, MStack1]]
       implicitly[MM[Either[E, *], MStack1]]
 
-      val input: Option[Int] = Some(5)
-
       val resultStack: MStack1[Int] = for {
-        x ← input.up[MStack1]
-        r ← ask.up[MStack1]
+        x ← Option(5).up[MStack1]
+        r ← Reader(identity).up[MStack1]
         y ← transform1(r, x).up[MStack1]
         z ← check1(r, y).up[MStack1]
       } yield z
