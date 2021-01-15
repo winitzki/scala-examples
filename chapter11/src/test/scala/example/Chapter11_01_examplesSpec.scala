@@ -3,6 +3,7 @@ package example
 import cats.syntax.functor._
 import cats.{Functor, Id, Monoid, ~>}
 import example.CatsMonad.CatsMonadSyntax
+import io.chymyst.ch.implement
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.duration.Duration
@@ -38,10 +39,10 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
   it should "compute with Future[Option[A]] with a custom monad transformer" in {
     /** Wrapper monad class for `Future[Option[A]]` that supports `for/yield` syntax more easily,
-      * without nested type constructors.
-      *
-      * @tparam A Type of a computed value inside the monad.
-      */
+     * without nested type constructors.
+     *
+     * @tparam A Type of a computed value inside the monad.
+     */
     case class FutureWithOption[A](nested: Future[Option[A]]) {
       def map[B](f: A ⇒ B)(implicit ec: ExecutionContext): FutureWithOption[B] = nested.map(_.map(f))
 
@@ -90,20 +91,20 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
   it should "define monad transformer for Try" in {
     import scala.util._
 
-    final case class TryT[M[_]: CatsMonad : Functor, A](value: M[Try[A]]) { // Will use `Monad[M].pure`.
-      def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f)))        // Using M.map here.
+    final case class TryT[M[_] : CatsMonad : Functor, A](value: M[Try[A]]) { // Will use `Monad[M].pure`.
+      def map[B](f: A => B): TryT[M, B] = TryT(value.map(_.map(f))) // Using M.map here.
       def flatMap[B](f: A => TryT[M, B]): TryT[M, B] = TryT(
-        value.flatMap {                                                 // Using M.flatMap here.
-          case Failure(t)   => CatsMonad[M].pure(Failure(t))
-          case Success(a)   => f(a).value
+        value.flatMap { // Using M.flatMap here.
+          case Failure(t) => CatsMonad[M].pure(Failure(t))
+          case Success(a) => f(a).value
         }
       )
     }
 
-    implicit class MToTryT[M[_]: CatsMonad : Functor, A](m: M[A]) {
+    implicit class MToTryT[M[_] : CatsMonad : Functor, A](m: M[A]) {
       def up: TryT[M, A] = TryT(m.map(Success(_)))
     }
-    implicit class TryToTryT[M[_]: CatsMonad : Functor, A](t: Try[A]) {
+    implicit class TryToTryT[M[_] : CatsMonad : Functor, A](t: Try[A]) {
       def up: TryT[M, A] = TryT(CatsMonad[M].pure(t))
     }
 
@@ -215,15 +216,15 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
               val (s1, a) = sta(s)
               // Can we get a value sb : (S, B)?
               val s2: S = s // We could return various values of type s.
-            val b: B = {
-              // The only way of possibly getting `b: B` is to apply `f` to an `A`.
-              val osb: Option[St[B]] = f(a)
-              // Now, `osb` could be either `None` or `Some(...)`.
-              osb match {
-                case Some(stb) ⇒ stb(s2)._2
-                case None ⇒ ??? // Here we get stuck: there is no way of computing a `b : B`.
+              val b: B = {
+                // The only way of possibly getting `b: B` is to apply `f` to an `A`.
+                val osb: Option[St[B]] = f(a)
+                // Now, `osb` could be either `None` or `Some(...)`.
+                osb match {
+                  case Some(stb) ⇒ stb(s2)._2
+                  case None ⇒ ??? // Here we get stuck: there is no way of computing a `b : B`.
+                }
               }
-            }
               (s2, b)
             }
         }
@@ -280,7 +281,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         // The plan is first to transform M[EW[M[EW[A]]]] into M[M[EW[EW[A]]]], then flatten M and EW.
         mewmewa.flatMap { ewmewa: EW[M[EW[A]]] ⇒ // Will return M[EW[A]] here.
           val mewewa: M[EW[EW[A]]] = sw[M, EW[A]](ewmewa) // Using `sw` defined above for `EW` and `M`.
-        val mewa: M[EW[A]] = mewewa.map(flattenEW) // Using `flatten` defined above for `EW`.
+          val mewa: M[EW[A]] = mewewa.map(flattenEW) // Using `flatten` defined above for `EW`.
           mewa
         }
       }
@@ -299,7 +300,7 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
 
       // The monad laws for the monad EWT[M, ?] were already verified in Chapter 7 (monad construction 6).
 
-      // For a full monad transformer, we still need to define `lift`, `blift`, `mrun`, and `brun`.
+      // For a full monad transformer, we still need to define `lift`, `blift`, `frun`, and `brun`.
       // These definitions are straightforward since the monad transformer is defined via functor composition.
       implicit val mtransEWT: MTrans[EWT, EW] = new MTrans[EWT, EW] {
         def lift[M[_] : CatsMonad : Functor, A](ma: M[A]): M[EW[A]] = ma.map(CatsMonad[EW].pure)
@@ -315,8 +316,15 @@ class Chapter11_01_examplesSpec extends FlatSpec with Matchers {
         }
       }
 
+      def inG[A, B, C]: ((A ⇒ B) ⇒ B) ⇒ (((A ⇒ C) ⇒ C) ⇒ B) ⇒ B = implement
+
+      //      def outG[A, B, C]: ((((A ⇒ C) ⇒ C) ⇒ B) ⇒ B) ⇒ (A ⇒ B) ⇒ B = implement // fails
+      def outG[A, B, C]: (((((A ⇒ C) ⇒ C) ⇒ C) ⇒ B) ⇒ B) ⇒ ((A ⇒ C) ⇒ B) ⇒ B = implement
+
+      def try3[A, C]: (((A ⇒ C) ⇒ C) ⇒ C) ⇒ (A ⇒ C) = implement
+
       /* Monad transformer laws:
-      
+
       `lift` is a monadic morphism.
       
       Identity law: lift(M.pure(x)) = M.pure(x).map(EW.pure) = < use naturality of M.pure >
