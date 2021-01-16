@@ -1,5 +1,7 @@
 package example
 
+import cats.data.Chain
+
 import scala.annotation.tailrec
 
 /** Stack-safe and fast function composition. Reimplement SafeCompose with more sophisticated optimizations.
@@ -18,15 +20,10 @@ object FastCompose {
 
   // Define the specific collection type here?
   //
-  @inline def of[A, B, Coll[_] : CollectionAPI](f: A ⇒ B): FastCompose[A, B, Coll] =
-    FastCompose[A, B, Coll](CollectionAPI[Coll].pure(CountCompose(f.asInstanceOf[Any ⇒ Any])))
-
-  // Convenience method.
-  @inline def of[A, B, Coll[_] : CollectionAPI](f: FastCompose[A, B, Coll]): FastCompose[A, B, Coll] = f
-
-  //
-  //  @inline def apply[A, B, Coll[_]](countCompose: CountCompose[A, B])(implicit collAPI: CollectionAPI[Coll]): FastCompose[A, B, Coll] =
-  //    FastCompose[A, B, Coll](collAPI.pure(countCompose.asInstanceOf[CountCompose[Any, Any]]))
+  @inline def of[A, B, Coll[_] : CollectionAPI](f: A ⇒ B): FastCompose[A, B, Coll] = f match {
+    case p@FastCompose(_) ⇒ p.asInstanceOf[FastCompose[A, B, Coll]]
+    case _ ⇒ FastCompose[A, B, Coll](CollectionAPI[Coll].pure(CountCompose(f.asInstanceOf[Any ⇒ Any])))
+  }
 
   @inline implicit class FastComposeOps[A, B, Coll[_]](val f: A ⇒ B)(implicit collAPI: CollectionAPI[Coll]) {
     @inline def before[C](g: B ⇒ C): FastCompose[A, C, Coll] = f match {
@@ -144,9 +141,6 @@ object CollectionAPI {
     override def directCompositionLimit: Int = limit
   }
 
-  //  implicit val collApiList: CollectionAPI[List] = collList(100)
-  implicit val collApi: CollectionAPI[Vector] = collVector(100)
-
   def collVector(limit: Int): CollectionAPI[Vector] = new CollectionAPI[Vector] {
     override def foldLeft[A, R](coll: Vector[A])(init: R)(update: (R, A) ⇒ R): R = coll.foldLeft(init)(update)
 
@@ -169,5 +163,35 @@ object CollectionAPI {
     override def directCompositionLimit: Int = limit
   }
 
+  def collChain(limit: Int): CollectionAPI[Chain] = new CollectionAPI[Chain] {
+    override def foldLeft[A, R](coll: Chain[A])(init: R)(update: (R, A) ⇒ R): R = coll.foldLeft(init)(update)
+
+    override def head[A](c: Chain[A]): A = c.headOption.get
+
+    override def replaceHead[A](c: Chain[A], a: A): Chain[A] = {
+      val (_, tail) = c.uncons.get
+      tail.prepend(a)
+    }
+
+    override def pure[A](a: A): Chain[A] = Chain.one(a)
+
+    override def concat[A](c1: Chain[A], c2: Chain[A]): Chain[A] = c1.concat(c2)
+
+    override def append[A](c: Chain[A], a: A): Chain[A] = c.append(a)
+
+    override def prepend[A](a: A, c: Chain[A]): Chain[A] = c.prepend(a)
+
+    override def fmap[A, B](f: A ⇒ B): Chain[A] ⇒ Chain[B] = _.map(f)
+
+    override def isLengthOne[A](c: Chain[A]): Boolean = {
+      val iter = c.iterator
+      iter.hasNext && {
+        iter.next();
+        iter.hasNext
+      }
+    }
+
+    override def directCompositionLimit: Int = limit
+  }
 }
 

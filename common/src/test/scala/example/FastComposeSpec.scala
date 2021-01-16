@@ -1,5 +1,6 @@
 package example
 
+import example.CollectionAPI._
 import example.PipeOps.PipeOp
 import example.Utils.elapsed
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -9,7 +10,10 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
 
   behavior of "correctness of FastCompose"
 
+  def makeCollImplicit(limit: Int) = collChain(limit)
+
   it should "convert a single function to counted function, and check compositions" in {
+    implicit val collApi = makeCollImplicit(100)
     val f1: Boolean ⇒ Int = b ⇒ if (b) 10 else 11
     val f2: Int ⇒ String = x ⇒ s"have $x"
     val f3: Int ⇒ Boolean = x ⇒ x % 2 == 0
@@ -44,19 +48,19 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     m(1) shouldEqual "have 11"
   }
 
-  def postComposeMany[A](count: Int, func: A ⇒ A): A ⇒ A = {
+  def postComposeMany[A, Coll[_]: CollectionAPI](count: Int, func: A ⇒ A): A ⇒ A = {
     import FastCompose.FastComposeOps
     (1 to count).foldLeft[A ⇒ A](identity[A])((q, _) ⇒ q before func)
   }
 
-  def preComposeMany[A](count: Int, func: A ⇒ A): A ⇒ A = {
+  def preComposeMany[A, Coll[_]: CollectionAPI](count: Int, func: A ⇒ A): A ⇒ A = {
     import FastCompose.FastComposeOps
     (1 to count).foldLeft[A ⇒ A](identity[A])((q, _) ⇒ q after func)
   }
 
-  val directCompositionLimit = implicitly[CollectionAPI[Vector]].directCompositionLimit
-
   it should "compose many functions and maintain chains" in {
+    val directCompositionLimit = 100
+    implicit val collApi = makeCollImplicit(directCompositionLimit)
     val increment = 10
     val f: Int ⇒ Int = x ⇒ x + increment
     val count1 = directCompositionLimit / 2
@@ -83,6 +87,9 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
   behavior of "speed of FastCompose"
 
   it should "build a long FastCompose chain of functions and run it without causing a stack overflow" in {
+    val directCompositionLimit = 100
+    implicit val collApi = makeCollImplicit(directCompositionLimit)
+
     val repetitions = 1000
     val count = directCompositionLimit * repetitions
     val f: Int ⇒ Int = x ⇒ x + 1
@@ -104,11 +111,18 @@ Pre-composing 100000 functions took 0.010626068 seconds
 Running post-composed 100000 functions took 0.013142418 seconds
 Running pre-composed 100000 functions took 0.004555858 seconds
 
-
+For Coll = Vector:
 Post-composing 100000 functions took 0.063813275 seconds
 Pre-composing 100000 functions took 0.036010323 seconds
 Running post-composed 100000 functions took 0.009538363 seconds
 Running pre-composed 100000 functions took 0.004438007 seconds
+
+For Coll = Chain: (correctness not yet established?)
+
+Post-composing 100000 functions took 0.045865894 seconds
+Pre-composing 100000 functions took 0.024936107 seconds
+Running post-composed 100000 functions took 1.15975E-4 seconds
+Running pre-composed 100000 functions took 0.012662047 seconds
 
      */
   }
