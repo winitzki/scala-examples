@@ -1,6 +1,8 @@
 package example
 
-/** Stack-safe and fast function composition.
+import scala.annotation.tailrec
+
+/** Stack-safe and fast function composition. Reimplement SafeCompose with more sophisticated optimizations.
  *
  * Usage:
  *
@@ -8,79 +10,90 @@ package example
  * val g: B => C = ...
  * val h = f before g
  * val x: A = ...
- * h(x) // Interface should be the same as for functions, but h is a FastCompose object.
+ * h(x) // Interface should be the same as for functions, but h is a FastCompose value.
+ *
+ * All functions are implicitly converted to FastCompose whenever `before` or `after` are used.
  */
 object FastCompose {
+
   // Define the specific collection type here?
+  //
+  @inline def of[A, B, Coll[_] : CollectionAPI](f: A ⇒ B): FastCompose[A, B, Coll] =
+    FastCompose[A, B, Coll](CollectionAPI[Coll].pure(CountCompose(f.asInstanceOf[Any ⇒ Any])))
 
-  @inline def apply[A, B, Coll[_] : CollectionAPI](f: A ⇒ B): FastCompose[A, B, Coll] =
-    new FastCompose[A, B, Coll](CollectionAPI[Coll].pure(Function1CountingComposed(f.asInstanceOf[Any ⇒ Any])))
+  // Convenience method.
+  @inline def of[A, B, Coll[_] : CollectionAPI](f: FastCompose[A, B, Coll]): FastCompose[A, B, Coll] = f
 
-  @inline def apply[A, B, Coll[_]](function1CountingComposed: Function1CountingComposed[A, B])(implicit collAPI: CollectionAPI[Coll]): FastCompose[A, B, Coll] =
-    new FastCompose[A, B, Coll](collAPI.pure(function1CountingComposed.asInstanceOf[Function1CountingComposed[Any, Any]]))
+  //
+  //  @inline def apply[A, B, Coll[_]](countCompose: CountCompose[A, B])(implicit collAPI: CollectionAPI[Coll]): FastCompose[A, B, Coll] =
+  //    FastCompose[A, B, Coll](collAPI.pure(countCompose.asInstanceOf[CountCompose[Any, Any]]))
 
   @inline implicit class FastComposeOps[A, B, Coll[_]](val f: A ⇒ B)(implicit collAPI: CollectionAPI[Coll]) {
-    @inline def before[C](g: B ⇒ C): FastCompose[A, C, Coll] = new FastCompose(collAPI.pure(Function1CountingComposed((f andThen g).asInstanceOf[Any ⇒ Any])))
+    @inline def before[C](g: B ⇒ C): FastCompose[A, C, Coll] = f match {
+      case p@FastCompose(_) ⇒ p.before(g).asInstanceOf[FastCompose[A, C, Coll]]
+      case _ ⇒ FastCompose(collAPI.pure(CountCompose((f andThen g).asInstanceOf[Any ⇒ Any], 2)))
+    }
 
-    @inline def after[C](g: C ⇒ A): FastCompose[C, A, Coll] = new FastCompose(collAPI.pure(Function1CountingComposed((f compose g).asInstanceOf[Any ⇒ Any])))
+    @inline def after[C](g: C ⇒ A): FastCompose[C, A, Coll] = f match {
+      case p@FastCompose(_) ⇒ p.after(g).asInstanceOf[FastCompose[C, A, Coll]]
+      case _ ⇒ FastCompose(collAPI.pure(CountCompose((f compose g).asInstanceOf[Any ⇒ Any], 2)))
+    }
+
   }
 
+  def andThen[A, B, C, Coll[_]](f: FastCompose[A, B, Coll], g: FastCompose[B, C, Coll])(implicit collAPI: CollectionAPI[Coll]): FastCompose[A, C, Coll] = {
+    val chain1 = f.chain
+    val chain2 = g.chain
+    if (collAPI.isLengthOne(chain1)) {
+      val head1 = collAPI.head(chain1)
+      val head2 = collAPI.head(chain2)
+      if (head1.composedCount + head2.composedCount <= collAPI.directCompositionLimit)
+        FastCompose(collAPI.replaceHead(chain2, head1 andThen head2))
+      else // Cannot optimize at the end of chain:
+        FastCompose(collAPI.prepend(head1, chain2))
+    } else {
+      FastCompose(collAPI.concat(chain1, chain2))
+    }
+  }
 }
 
 // Wrap a function A => B and count the number of function compositions inside it.
-private final case class Function1CountingComposed[
+// Function composition will compose functions and add the counts.
+private[example] final case class CountCompose[
   @specialized(scala.Int, scala.Long, scala.Float, scala.Double) -A,
   @specialized(scala.Unit, scala.Boolean, scala.Int, scala.Float, scala.Long, scala.Double) +B
 ](f: A ⇒ B, composedCount: Int = 1) extends (A ⇒ B) {
 
   @inline override def apply(a: A): B = f(a)
 
-  @inline override def andThen[C](other: B ⇒ C): Function1CountingComposed[A, C] = other match {
-    case Function1CountingComposed(g, c) ⇒ Function1CountingComposed(f andThen g, composedCount + c)
-    case _ ⇒ Function1CountingComposed(f andThen other, composedCount + 1)
+  @inline override def andThen[C](other: B ⇒ C): CountCompose[A, C] = other match {
+    case CountCompose(g, c) ⇒ CountCompose(f andThen g, composedCount + c)
+    case _ ⇒ CountCompose(f andThen other, composedCount + 1)
   }
 
-  @inline override def compose[C](other: C ⇒ A): Function1CountingComposed[C, B] = other match {
-    case Function1CountingComposed(g, c) ⇒ Function1CountingComposed(f compose g, composedCount + c)
-    case _ ⇒ Function1CountingComposed(f compose other, composedCount + 1)
+  @inline override def compose[C](other: C ⇒ A): CountCompose[C, B] = other match {
+    case CountCompose(g, c) ⇒ CountCompose(f compose g, composedCount + c)
+    case _ ⇒ CountCompose(f compose other, composedCount + 1)
   }
 }
 
 
 // The `chain` contains a sequence of counted-composed functions.
 // The *first* function in the chain must have less than `directCompositionLimit` compositions.
-final class FastCompose[-A, +B, Coll[_]] private(private val chain: Coll[Function1CountingComposed[Any, Any]])(implicit collAPI: CollectionAPI[Coll]) extends (A ⇒ B) {
-  override def apply(a: A): B = collAPI.foldLeft(chain)(a: Any)((x, f) ⇒ f(x)).asInstanceOf[B]
+private[example] final case class FastCompose[-A, +B, Coll[_]] private(private val chain: Coll[CountCompose[Any, Any]])(implicit collAPI: CollectionAPI[Coll]) extends (A ⇒ B) {
+  @inline override def apply(a: A): B = collAPI.foldLeft(chain)(a: Any)((x, f) ⇒ f(x)).asInstanceOf[B]
 
-  override def andThen[C](g: B ⇒ C): A ⇒ C = before(g)
+  @inline override def andThen[C](g: B ⇒ C): A ⇒ C = before(g)
 
-  override def compose[C](g: C ⇒ A): C ⇒ B = after(g)
+  @inline override def compose[C](g: C ⇒ A): C ⇒ B = after(g)
 
-  private[example] def debugInfo: Coll[Int] = collAPI.fmap[Function1CountingComposed[Any, Any], Int](_.composedCount)(chain)
+  private[example] def debugInfo: Coll[Int] = collAPI.fmap[CountCompose[Any, Any], Int](_.composedCount)(chain)
 
   // Composing this FastCompose value before `other` can be optimized only if this value has length 1.
-  def before[C](other: B ⇒ C): FastCompose[A, C, Coll] = other match {
-    case g: FastCompose[B, C, Coll] ⇒ new FastCompose(collAPI.concat(chain, g.chain))
-    case f@Function1CountingComposed(g, c) ⇒ new FastCompose(collAPI.append(chain, f.asInstanceOf[Function1CountingComposed[Any, Any]]))
-    case _ ⇒ new FastCompose(collAPI.append(chain, Function1CountingComposed(other.asInstanceOf[Any ⇒ Any])))
-  }
+  @inline def before[C](other: B ⇒ C): FastCompose[A, C, Coll] = FastCompose.andThen(this, FastCompose.of(other))
 
   // In this case, we may optimize if the first element of the chain has less than max compositions.
-  def after[C](other: C ⇒ A): FastCompose[C, B, Coll] = other match {
-    case g: FastCompose[C, A, Coll] ⇒ new FastCompose(collAPI.concat(g.chain, chain))
-    case f: Function1CountingComposed[C, A] ⇒
-      val h = collAPI.head(chain)
-      if (h.composedCount + f.composedCount <= collAPI.directCompositionLimit)
-        new FastCompose(collAPI.replaceHead(chain, h compose f.asInstanceOf[Function1CountingComposed[Any, Any]]))
-      else
-        new FastCompose(collAPI.prepend(f.asInstanceOf[Function1CountingComposed[Any, Any]], chain))
-    case _ ⇒
-      val h = collAPI.head(chain)
-      if (h.composedCount + 1 <= collAPI.directCompositionLimit)
-        new FastCompose(collAPI.replaceHead(chain, h compose other.asInstanceOf[Any ⇒ Any]))
-      else
-        new FastCompose(collAPI.prepend(Function1CountingComposed(other.asInstanceOf[Any ⇒ Any]), chain))
-  }
+  @inline def after[C](other: C ⇒ A): FastCompose[C, B, Coll] = FastCompose.andThen(FastCompose.of(other), this)
 }
 
 trait CollectionAPI[Coll[_]] {
@@ -131,7 +144,8 @@ object CollectionAPI {
     override def directCompositionLimit: Int = limit
   }
 
-  implicit val collApiList: CollectionAPI[List] = collList(100)
+  //  implicit val collApiList: CollectionAPI[List] = collList(100)
+  implicit val collApi: CollectionAPI[Vector] = collVector(100)
 
   def collVector(limit: Int): CollectionAPI[Vector] = new CollectionAPI[Vector] {
     override def foldLeft[A, R](coll: Vector[A])(init: R)(update: (R, A) ⇒ R): R = coll.foldLeft(init)(update)

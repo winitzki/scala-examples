@@ -1,6 +1,5 @@
 package example
 
-import example.CollectionAPI.collApiList.directCompositionLimit
 import example.PipeOps.PipeOp
 import example.Utils.elapsed
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
@@ -18,9 +17,9 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     f1(true) shouldEqual 10
     f1(false) shouldEqual 11
     f2(1) shouldEqual "have 1"
-    val f1c = Function1CountingComposed(f1)
-    val f2c = Function1CountingComposed(f2)
-    val f3c = Function1CountingComposed(f3)
+    val f1c = CountCompose(f1)
+    val f2c = CountCompose(f2)
+    val f3c = CountCompose(f3)
     f1c.composedCount shouldEqual 1
     f2c.composedCount shouldEqual 1
     f3c.composedCount shouldEqual 1
@@ -37,12 +36,12 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
 
     import FastCompose.FastComposeOps
     val l = f3 before f1 before f2
+    l.debugInfo shouldEqual List(3)
     l(1) shouldEqual "have 11"
-    l.debugInfo shouldEqual List(1, 1) // ???
 
-    val m = f2 after f1 after f3
+    val m = f2 after f1 after f3 after f1 after f3
+    m.debugInfo shouldEqual List(5)
     m(1) shouldEqual "have 11"
-    m.debugInfo shouldEqual List(2) // ???
   }
 
   def postComposeMany[A](count: Int, func: A ⇒ A): A ⇒ A = {
@@ -54,6 +53,8 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     import FastCompose.FastComposeOps
     (1 to count).foldLeft[A ⇒ A](identity[A])((q, _) ⇒ q after func)
   }
+
+  val directCompositionLimit = implicitly[CollectionAPI[Vector]].directCompositionLimit
 
   it should "compose many functions and maintain chains" in {
     val increment = 10
@@ -72,16 +73,16 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     result2Post(0) shouldEqual increment * count2
 
     // ???
-    result1Pre.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(1)
-    result1Post.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(1)
-    result2Pre.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(1)
-    result2Post.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(1)
+    result1Pre.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(count1 + 1)
+    result1Post.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(count1 + 1)
+    result2Pre.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(count1 + 1, directCompositionLimit)
+    result2Post.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(directCompositionLimit) ++ List.fill(count1 + 1)(1)
 
   }
 
   behavior of "speed of FastCompose"
 
-  it should "build a long FastCompose chain of functions and run it" in {
+  it should "build a long FastCompose chain of functions and run it without causing a stack overflow" in {
     val repetitions = 1000
     val count = directCompositionLimit * repetitions
     val f: Int ⇒ Int = x ⇒ x + 1
@@ -96,5 +97,19 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     val runPre = elapsed(result1Pre._1(0))
     println(s"Running pre-composed $count functions took ${runPre._2} seconds")
 
+    /* Results for Coll = List:
+
+Post-composing 100000 functions took 42.26614339 seconds
+Pre-composing 100000 functions took 0.010626068 seconds
+Running post-composed 100000 functions took 0.013142418 seconds
+Running pre-composed 100000 functions took 0.004555858 seconds
+
+
+Post-composing 100000 functions took 0.063813275 seconds
+Pre-composing 100000 functions took 0.036010323 seconds
+Running post-composed 100000 functions took 0.009538363 seconds
+Running pre-composed 100000 functions took 0.004438007 seconds
+
+     */
   }
 }
