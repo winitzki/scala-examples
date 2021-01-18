@@ -2,7 +2,8 @@ package example
 
 import cats.data.Chain
 
-import scala.annotation.tailrec
+import java.util.ArrayList
+import scala.collection.mutable.ArrayBuffer
 
 /** Stack-safe and fast function composition. Reimplement SafeCompose with more sophisticated optimizations.
  *
@@ -84,7 +85,7 @@ private[example] final case class FastCompose[-A, +B, Coll[_]] private(private v
 
   @inline override def compose[C](g: C ⇒ A): C ⇒ B = after(g)
 
-  private[example] def debugInfo: Coll[Int] = collAPI.fmap[CountCompose[Any, Any], Int](_.composedCount)(chain)
+  private[example] def debugInfo: List[Int] = collAPI.foldLeft(chain)(Nil: List[Int])((l, a) ⇒ l :+ a.composedCount)
 
   // Composing this FastCompose value before `other` can be optimized only if this value has length 1.
   @inline def before[C](other: B ⇒ C): FastCompose[A, C, Coll] = FastCompose.andThen(this, FastCompose.of(other))
@@ -186,10 +187,79 @@ object CollectionAPI {
     override def isLengthOne[A](c: Chain[A]): Boolean = {
       val iter = c.iterator
       iter.hasNext && {
-        iter.next();
-        iter.hasNext
+        iter.next()
+        !iter.hasNext
       }
     }
+
+    override def directCompositionLimit: Int = limit
+  }
+
+  def collArrayList(limit: Int): CollectionAPI[ArrayList] = new CollectionAPI[ArrayList] {
+    override def foldLeft[A, R](coll: ArrayList[A])(init: R)(update: (R, A) ⇒ R): R = {
+      var result = init
+      for {i ← 0 until coll.size} {
+        result = update(result, coll.get(i))
+      }
+      result
+    }
+
+    override def head[A](c: ArrayList[A]): A = c.get(0)
+
+    override def replaceHead[A](c: ArrayList[A], a: A): ArrayList[A] = {
+      c.set(0, a)
+      c
+    }
+
+    override def pure[A](a: A): ArrayList[A] = {
+      val result = new ArrayList[A](1)
+      result.add(a)
+      result
+    }
+
+    override def concat[A](c1: ArrayList[A], c2: ArrayList[A]): ArrayList[A] = {
+      c1 addAll c2
+      c1
+    }
+
+    override def append[A](c: ArrayList[A], a: A): ArrayList[A] = {
+      c.add(a)
+      c
+    }
+
+    override def prepend[A](a: A, c: ArrayList[A]): ArrayList[A] = {
+      c.add(0, a)
+      c
+    }
+
+    override def fmap[A, B](f: A ⇒ B): ArrayList[A] ⇒ ArrayList[B] = ???
+
+    override def isLengthOne[A](c: ArrayList[A]): Boolean = c.size == 1
+
+    override def directCompositionLimit: Int = limit
+  }
+
+  def collArrayBuffer(limit: Int): CollectionAPI[ArrayBuffer] = new CollectionAPI[ArrayBuffer] {
+    override def foldLeft[A, R](coll: ArrayBuffer[A])(init: R)(update: (R, A) ⇒ R): R = coll.foldLeft(init)(update)
+
+    override def head[A](c: ArrayBuffer[A]): A = c(0)
+
+    override def replaceHead[A](c: ArrayBuffer[A], a: A): ArrayBuffer[A] = {
+      c(0) = a
+      c
+    }
+
+    override def pure[A](a: A): ArrayBuffer[A] = ArrayBuffer(a)
+
+    override def concat[A](c1: ArrayBuffer[A], c2: ArrayBuffer[A]): ArrayBuffer[A] = c1 ++ c2
+
+    override def append[A](c: ArrayBuffer[A], a: A): ArrayBuffer[A] = c :+ a
+
+    override def prepend[A](a: A, c: ArrayBuffer[A]): ArrayBuffer[A] = a +: c
+
+    override def fmap[A, B](f: A ⇒ B): ArrayBuffer[A] ⇒ ArrayBuffer[B] = _.map(f)
+
+    override def isLengthOne[A](c: ArrayBuffer[A]): Boolean = c.lengthCompare(1) == 0
 
     override def directCompositionLimit: Int = limit
   }
