@@ -31,7 +31,7 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     f1c(true) shouldEqual 10
     f1c(false) shouldEqual 11
     f2c(1) shouldEqual "have 1"
-    forAll { x: Boolean ⇒ x |> f1c |> f3c shouldEqual x }
+    forAll { x: Boolean ⇒ x |> f1c.f |> f3c.f shouldEqual x }
     val h = f3c andThen f1c andThen f2c
     h(1) shouldEqual "have 11"
     h.composedCount shouldEqual 3
@@ -81,26 +81,81 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     result2Post.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual List(directCompositionLimit) ++ List.fill(count1 + 1)(1)
   }
 
-  it should "verify correct operation for non-commuting function compositions" in {
-    val count = 100000
-    val directCompositionLimit = 100
-    implicit val collApi = makeCollImplicit(directCompositionLimit)
-
+  def createManyPostComposed[Coll[_] : CollectionAPI](count: Int): (Double, Double) = {
     val (bigCompose, elapsedTime) = elapsed {
-      (1 to count).foldLeft[Int ⇒ Int](identity)((f, i) ⇒ f before { x: Int ⇒ x * i } before { x: Int ⇒ x - i + 2 } before { x: Int ⇒ x / 2 })
+      (1 to count).foldLeft(FastCompose.of(identity[Int]))((f, i) ⇒ f before { x: Int ⇒ x * i } before { x: Int ⇒ x - i + 2 } before { x: Int ⇒ x / 2 })
     }
+    bigCompose.debugInfo shouldEqual Nil
     println(s"Composing ${4 * count} functions using `before` took $elapsedTime seconds")
     val (result, elapsedTime2) = elapsed {
       bigCompose(1)
     }
     println(s"Running ${4 * count} function compositions took $elapsedTime2 seconds")
     result shouldEqual 1
-    /*
+    (elapsedTime, elapsedTime2)
+  }
 
-Coll = ArrayList:
+  def createManyPreComposed[Coll[_] : CollectionAPI](count: Int): (Double, Double) = {
+    val (bigCompose, elapsedTime) = elapsed {
+      (1 to count).foldLeft[Int ⇒ Int](identity)((f, i) ⇒ f after { x: Int ⇒ x / 2 } after { x: Int ⇒ x - i + 2 } after { x: Int ⇒ x * i })
+    }
+    println(s"Composing ${4 * count} functions using `after` took $elapsedTime seconds")
+    val (result, elapsedTime2) = elapsed {
+      bigCompose(1)
+    }
+    println(s"Running ${4 * count} function compositions took $elapsedTime2 seconds")
+    result shouldEqual 1
+    (elapsedTime, elapsedTime2)
+  }
+
+  it should "verify correct operation for non-commuting function compositions" in {
+    val count = 10000000
+    val directCompositionLimit = 50
+    implicit val collApi = makeCollImplicit(directCompositionLimit)
+//    createManyPreComposed(count)
+    createManyPostComposed(count)
+    /* Coll = ArrayList:
+
+limit = 100
+
+
+Composing 400000 functions using `before` took 0.04870757 seconds
+Running 400000 function compositions took 0.013332446 seconds
+Composing 400000 functions using `after` took 0.033828999 seconds
+Running 400000 function compositions took 0.005606974 seconds
+
+
+Composing 400000 functions using `after` took 0.052702859 seconds
+Running 400000 function compositions took 0.006050703 seconds
+Composing 400000 functions using `before` took 0.025413493 seconds
+Running 400000 function compositions took 0.019187712 seconds
 
 Composing 400000 functions using `before` took 0.058695421 seconds
 Running 400000 function compositions took 0.013247751 seconds
+
+limit = 100
+Composing 400000 functions using `before` took 0.052108728 seconds
+Running 400000 function compositions took 0.016391999 seconds
+
+limit = 23
+Composing 400000 functions using `before` took 0.067324518 seconds
+Running 400000 function compositions took 0.017766714 seconds
+
+limit = 5
+Composing 400000 functions using `before` took 0.058479536 seconds
+Running 400000 function compositions took 0.015547031 seconds
+
+limit = 250
+Composing 400000 functions using `before` took 0.071186712 seconds
+Running 400000 function compositions took 0.01800784 seconds
+
+limit = 500
+Composing 400000 functions using `before` took 0.068326724 seconds
+Running 400000 function compositions took 0.021399614 seconds
+
+limit = 1000
+Composing 400000 functions using `before` took 0.072005326 seconds
+Running 400000 function compositions took 0.017424277 seconds
 
      */
   }
@@ -159,9 +214,31 @@ Pre-composing 100000 functions took 0.01365162 seconds
 Running post-composed 100000 functions took 0.00769413 seconds
 Running pre-composed 100000 functions took 0.004622205 seconds
 
-
      */
-
-
   }
+
+  it should "find the best value of the composition limit" in {
+    val count = 1000000
+    val result = for { directCompositionLimit ← Seq(50, 100, 250, 500, 1000, 2500, 5000, 10000)} yield {
+      implicit val collApi = makeCollImplicit(directCompositionLimit)
+      createManyPreComposed(count) // Priming.
+      createManyPreComposed(count)
+      val (x1, y1) = createManyPreComposed(count)
+      createManyPostComposed(count)
+      createManyPostComposed(count)
+      val (x2, y2) = createManyPostComposed(count)
+      directCompositionLimit → (x1, y1, x2, y2)
+    }
+    println(result)
+  }
+  /*
+  count = 1000000
+  List((10,(4.8418053,0.05670215,0.308235505,0.063292302)), (25,(0.886090931,0.054338366,0.177003849,0.041491461)), (50,(0.207546162,0.100359183,0.189550943,0.050619677)), (100,(0.158267517,0.053095597,0.110744037,0.065348905)), (250,(0.150410882,0.067370248,0.134540593,0.054340362)), (500,(0.088916163,0.077178511,0.092972602,0.047302149)), (1000,(0.090675661,0.069217648,0.125723396,0.049708735)))
+
+List((100,(0.325119938,0.050617831,0.331057854,0.056823426)), (250,(0.196862743,0.046109383,0.200273083,0.049606873)), (500,(0.074490338,0.052585702,0.182320997,0.062874869)), (1000,(0.116098613,0.041743209,0.11251719,0.053354365)), (2500,(0.234507355,0.043497473,0.1152335,0.065734138)), (5000,(0.092904441,0.073487101,0.090821451,0.055292123)))
+
+With priming:
+List((50,(0.33683487,0.042499188,0.184516974,0.044210406)), (100,(0.142561414,0.06555719,0.259711171,0.074015237)), (250,(0.15676254,0.086068574,0.246768819,0.071605716)), (500,(0.150476854,0.09355668,0.243468672,0.079160082)), (1000,(0.150113705,0.092442202,0.232436276,0.072355475)), (2500,(0.147476658,0.102836838,0.229639997,0.070580472)), (5000,(0.147906618,0.092157602,0.250010924,0.071155097)), (10000,(0.147953079,0.096197923,0.270158878,0.06759879)))
+
+   */
 }

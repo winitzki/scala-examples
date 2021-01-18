@@ -60,18 +60,16 @@ object FastCompose {
 private[example] final case class CountCompose[
   @specialized(scala.Int, scala.Long, scala.Float, scala.Double) -A,
   @specialized(scala.Unit, scala.Boolean, scala.Int, scala.Float, scala.Long, scala.Double) +B
-](f: A ⇒ B, composedCount: Int = 1) extends (A ⇒ B) {
+](f: A ⇒ B, composedCount: Int = 1) {
 
-  @inline override def apply(a: A): B = f(a)
+  @inline def apply(a: A): B = f(a)
 
-  @inline override def andThen[C](other: B ⇒ C): CountCompose[A, C] = other match {
-    case CountCompose(g, c) ⇒ CountCompose(f andThen g, composedCount + c)
-    case _ ⇒ CountCompose(f andThen other, composedCount + 1)
+  @inline def andThen[C](other: CountCompose[B, C]): CountCompose[A, C] = {
+    CountCompose(f andThen other.f, composedCount + other.composedCount)
   }
 
-  @inline override def compose[C](other: C ⇒ A): CountCompose[C, B] = other match {
-    case CountCompose(g, c) ⇒ CountCompose(f compose g, composedCount + c)
-    case _ ⇒ CountCompose(f compose other, composedCount + 1)
+  @inline def compose[C](other: CountCompose[C, A]): CountCompose[C, B] = {
+    CountCompose(f compose other.f, composedCount + other.composedCount)
   }
 }
 
