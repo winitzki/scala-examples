@@ -48,6 +48,14 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
     m(1) shouldEqual "have 11"
   }
 
+  it should "maintain optimal chains when length of chain is one" in {
+    implicit val collApi = makeCollImplicit(3)
+    val i = identity[Int] _
+    val f = FastCompose.of(i)
+    val g = f before i before i before i before i before i
+    g.debugInfo shouldEqual List(3, 3)
+  }
+
   def postComposeMany[A, Coll[_] : CollectionAPI](count: Int, func: A ⇒ A): A ⇒ A = {
     (1 to count).foldLeft[A ⇒ A](identity[A])((q, _) ⇒ q before func)
   }
@@ -83,9 +91,9 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
 
   def createManyPostComposed[Coll[_] : CollectionAPI](count: Int): (Double, Double) = {
     val (bigCompose, elapsedTime) = elapsed {
-      (1 to count).foldLeft(FastCompose.of(identity[Int]))((f, i) ⇒ f before { x: Int ⇒ x * i } before { x: Int ⇒ x - i + 2 } before { x: Int ⇒ x / 2 })
+      (1 to count).foldLeft[Int ⇒ Int](identity)((f, i) ⇒ f before { x: Int ⇒ x * i } before { x: Int ⇒ x - i + 2 } before { x: Int ⇒ x / 2 })
     }
-    bigCompose.debugInfo shouldEqual Nil
+//    bigCompose.asInstanceOf[FastCompose[_, _, List]].debugInfo shouldEqual Nil
     println(s"Composing ${4 * count} functions using `before` took $elapsedTime seconds")
     val (result, elapsedTime2) = elapsed {
       bigCompose(1)
@@ -109,10 +117,10 @@ class FastComposeSpec extends FlatSpec with Matchers with GeneratorDrivenPropert
   }
 
   it should "verify correct operation for non-commuting function compositions" in {
-    val count = 10000000
-    val directCompositionLimit = 50
+    val count = 100000
+    val directCompositionLimit = 100
     implicit val collApi = makeCollImplicit(directCompositionLimit)
-//    createManyPreComposed(count)
+    //    createManyPreComposed(count)
     createManyPostComposed(count)
     /* Coll = ArrayList:
 
@@ -218,8 +226,8 @@ Running pre-composed 100000 functions took 0.004622205 seconds
   }
 
   it should "find the best value of the composition limit" in {
-    val count = 1000000
-    val result = for { directCompositionLimit ← Seq(50, 100, 250, 500, 1000, 2500, 5000, 10000)} yield {
+    val count = 1000
+    val result = for {directCompositionLimit ← Seq(50, 100, 250, 500, 1000, 2500, 5000, 10000)} yield {
       implicit val collApi = makeCollImplicit(directCompositionLimit)
       createManyPreComposed(count) // Priming.
       createManyPreComposed(count)

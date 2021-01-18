@@ -3,6 +3,7 @@ package example
 import cats.data.Chain
 
 import java.util.ArrayList
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 /** Stack-safe and fast function composition. Reimplement SafeCompose with more sophisticated optimizations.
@@ -216,21 +217,24 @@ object CollectionAPI {
     }
 
     override def concat[A](c1: ArrayList[A], c2: ArrayList[A]): ArrayList[A] = {
-      c1 addAll c2
-      c1
+      val result = c1.clone.asInstanceOf[ArrayList[A]]
+      result addAll c2
+      result
     }
 
     override def append[A](c: ArrayList[A], a: A): ArrayList[A] = {
-      c.add(a)
-      c
+      val result = c.clone.asInstanceOf[ArrayList[A]]
+      result.add(a)
+      result
     }
 
     override def prepend[A](a: A, c: ArrayList[A]): ArrayList[A] = {
-      c.add(0, a)
-      c
+      val result = c.clone.asInstanceOf[ArrayList[A]]
+      result.add(0, a)
+      result
     }
 
-    override def fmap[A, B](f: A ⇒ B): ArrayList[A] ⇒ ArrayList[B] = ???
+    override def fmap[A, B](f: A ⇒ B): ArrayList[A] ⇒ ArrayList[B] = ??? // Not necessary.
 
     override def isLengthOne[A](c: ArrayList[A]): Boolean = c.size == 1
 
@@ -258,6 +262,32 @@ object CollectionAPI {
     override def fmap[A, B](f: A ⇒ B): ArrayBuffer[A] ⇒ ArrayBuffer[B] = _.map(f)
 
     override def isLengthOne[A](c: ArrayBuffer[A]): Boolean = c.lengthCompare(1) == 0
+
+    override def directCompositionLimit: Int = limit
+  }
+
+  def collMutBuffer(limit: Int): CollectionAPI[mutable.Buffer] = new CollectionAPI[mutable.Buffer] {
+    override def foldLeft[A, R](coll: mutable.Buffer[A])(init: R)(update: (R, A) ⇒ R): R = coll.foldLeft(init)(update)
+
+    override def head[A](c: mutable.Buffer[A]): A = c.head
+
+    override def replaceHead[A](c: mutable.Buffer[A], a: A): mutable.Buffer[A] = {
+      val result = c.clone
+      result(0) = a
+      result
+    }
+
+    override def pure[A](a: A): mutable.Buffer[A] = mutable.Buffer(a)
+
+    override def concat[A](c1: mutable.Buffer[A], c2: mutable.Buffer[A]): mutable.Buffer[A] = c1 ++ c2
+
+    override def append[A](c: mutable.Buffer[A], a: A): mutable.Buffer[A] = c :+ a
+
+    override def prepend[A](a: A, c: mutable.Buffer[A]): mutable.Buffer[A] = a +: c
+
+    override def fmap[A, B](f: A ⇒ B): mutable.Buffer[A] ⇒ mutable.Buffer[B] = _.map(f)
+
+    override def isLengthOne[A](c: mutable.Buffer[A]): Boolean = c.lengthCompare(1) == 0
 
     override def directCompositionLimit: Int = limit
   }
