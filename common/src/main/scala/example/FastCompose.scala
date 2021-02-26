@@ -5,7 +5,7 @@ import cats.data.Chain
 import java.util.ArrayList
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
+/*
 // TODO: Simplify code by eliminating CountComposed and instead storing the two composition counts - only for the head and tail of the chain.
 
 /** Stack-safe and fast function composition. Reimplement SafeCompose with more sophisticated optimizations.
@@ -327,3 +327,4 @@ object CollectionAPI {
   }
 }
 
+*/

@@ -1,5 +1,5 @@
 package example
-
+/*
 import example.CollectionAPI._
 import example.FastCompose.FastComposeOps
 import example.PipeOps.PipeOp
@@ -250,3 +250,4 @@ List((50,(0.33683487,0.042499188,0.184516974,0.044210406)), (100,(0.142561414,0.
 
    */
 }
+*/
