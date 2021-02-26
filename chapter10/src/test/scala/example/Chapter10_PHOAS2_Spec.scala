@@ -121,4 +121,24 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
     PHOAS2Term.eval(test1) shouldEqual PHOASVals.IntVal(5040)
   }
 
+  it should "compute expressions containing a junk term" in {
+    // An example of a "junk term" is Mu1 Var. This meaningless term type-checks. Let us perform a computation with it.
+    val junk: PHOAS2Term = new PHOAS2Term {
+
+      import PHOAS2AST._
+
+      override def term[V]: PHOAS2AST[V] = Mu1(x ⇒ Var(x))
+    }
+    the[StackOverflowError] thrownBy PHOAS2Term.eval(junk) should have message null
+    val junkLazy: PHOAS2Term = new PHOAS2Term {
+
+      import PHOAS2AST._
+
+      override def term[V]: PHOAS2AST[V] = Mu1(new LazyFunction1[V, PHOAS2AST[V]] {
+        override def apply(a: ⇒ V): PHOAS2AST[V] = Var(a)
+      })
+    }
+    the[StackOverflowError] thrownBy PHOAS2Term.eval(junkLazy) should have message null
+  }
+
 }
