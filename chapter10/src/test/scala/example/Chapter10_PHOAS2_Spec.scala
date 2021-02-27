@@ -91,6 +91,15 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
     }
   }
 
+  it should "compute factorial in Scala using LazyFunction1.fix" in {
+    val fact: Int ⇒ Int = LazyFunction1.fix[Int ⇒ Int](new LazyFunction1[Int ⇒ Int, Int ⇒ Int] {
+      override def apply(f: ⇒ (Int ⇒ Int)): Int ⇒ Int = { x ⇒
+        if (x <= 0) 1 else x * f(x - 1)
+      }
+    })
+    fact(10) shouldEqual 3628800
+  }
+
   it should "compute factorial using mu binder" in {
     // μ f. λ n → if (n ≡ 0) then 1 else n * f(n − 1)
     val factTerm: PHOAS2Term = new PHOAS2Term {
@@ -121,8 +130,9 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
     PHOAS2Term.eval(test1) shouldEqual PHOASVals.IntVal(5040)
   }
 
-  it should "compute expressions containing a junk term" in {
-    // An example of a "junk term" is Mu1 Var. This meaningless term type-checks. Let us perform a computation with it.
+  it should "obtain stack overflow by computing expressions containing a junk term" in {
+    // An example of a "junk term" is Mu1 Var. This term is meaningless but type-checks.
+    // Let us perform a computation with it. It should give a stack overflow exception.
     val junk: PHOAS2Term = new PHOAS2Term {
 
       import PHOAS2AST._

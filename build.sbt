@@ -1,7 +1,7 @@
-val scalaV = "2.12.11"
+val scalaV = "2.12.13"
 
 lazy val commonSettings = Seq(
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.3" cross CrossVersion.full),
   scalaVersion := scalaV,
   scalacOptions ++= Seq(
     "-deprecation",
