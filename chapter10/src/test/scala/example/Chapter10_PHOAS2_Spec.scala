@@ -86,8 +86,10 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
 
   object LazyFunction1 {
     def fix[A](f: LazyFunction1[A, A]): A = {
-      lazy val result: A = f(result)
-      result
+      f(fix(f))
+      // An alternative and more verbose implementation:
+      //      lazy val result: A = f(result)
+      //      result
     }
   }
 

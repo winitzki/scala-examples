@@ -94,11 +94,13 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
   }
 
   object Lazy {
-    def of[A](a: A): Lazy[A] = new Lazy(a)
+    def of[A](a: ⇒ A): Lazy[A] = new Lazy(a) // Important: the argument type must be lazy.
 
     def fix[A](f: Lazy[A] ⇒ A): A = {
-      def result: Lazy[A] = of(f(result))
-      result.value
+      f(of(fix(f)))
+      // Alternative implementation:
+      //      lazy val result: Lazy[A] = of(f(result))
+      //      result.value
     }
 
     def fixNEL[A](f: ::[Lazy[A]] ⇒ ::[A]): ::[A] = {
@@ -154,4 +156,13 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
     PHOAS3Term.eval(evenodd) shouldEqual PHOASVals.BoolVal(false)
   }
 
+  // TODO: prohibit invalid term Mu1(Var) by better typing
+  // sealed trait NonVar[V] extends PHOAS3AST[V]
+  // final case class Mu1[V](run: V => NonVar[V]) extends PHOAS3AST[V]
+
+  // TODO: use GADT to control result types
+
+  // TODO: use implicit conversions to make the DSL easier to use
+
+  // TODO: create a better user-facing DSL for cyclic structures
 }
