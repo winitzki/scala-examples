@@ -2,13 +2,13 @@ package example
 
 import org.scalatest.{FlatSpec, Matchers}
 
-class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
+class Chapter10_PHOAS2a_Spec extends FlatSpec with Matchers {
 
   // Implementing the PHOAS described in the paper:
   // Bruno C. de S. Oliveira. Functional programming with structured graphs.
   // https://www.cs.utexas.edu/~wcook/Drafts/2012/graphs.pdf
 
-  behavior of "simple PHOAS for untyped lambda calculus with mu binder"
+  behavior of "simple PHOAS for untyped lambda calculus with mu binder and no junk terms"
 
   trait PHOAS2Term {
     def term[V]: PHOAS2AST[V]
@@ -20,25 +20,27 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
 
   sealed trait PHOAS2AST[V]
 
+  sealed trait PHOAS2ASTP[V] extends PHOAS2AST[V]
+
   object PHOAS2AST {
 
     final case class Var[V](value: V) extends PHOAS2AST[V]
 
-    final case class IntVal[V](value: Int) extends PHOAS2AST[V]
+    final case class IntVal[V](value: Int) extends PHOAS2ASTP[V]
 
-    final case class BoolVal[V](value: Boolean) extends PHOAS2AST[V]
+    final case class BoolVal[V](value: Boolean) extends PHOAS2ASTP[V]
 
-    final case class FuncVal[V](run: V ⇒ PHOAS2AST[V]) extends PHOAS2AST[V]
+    final case class FuncVal[V](run: V ⇒ PHOAS2AST[V]) extends PHOAS2ASTP[V]
 
-    final case class ApplyFunc[V](func: PHOAS2AST[V], arg: PHOAS2AST[V]) extends PHOAS2AST[V]
+    final case class ApplyFunc[V](func: PHOAS2AST[V], arg: PHOAS2AST[V]) extends PHOAS2ASTP[V]
 
-    final case class IntFunc2[V](intFunc: (Int, Int) ⇒ Int, arg1: PHOAS2AST[V], arg2: PHOAS2AST[V]) extends PHOAS2AST[V]
+    final case class IntFunc2[V](intFunc: (Int, Int) ⇒ Int, arg1: PHOAS2AST[V], arg2: PHOAS2AST[V]) extends PHOAS2ASTP[V]
 
-    final case class IntEquals[V](value1: PHOAS2AST[V], value2: PHOAS2AST[V]) extends PHOAS2AST[V]
+    final case class IntEquals[V](value1: PHOAS2AST[V], value2: PHOAS2AST[V]) extends PHOAS2ASTP[V]
 
-    final case class If[V](cond: PHOAS2AST[V], thenThis: PHOAS2AST[V], elseThis: PHOAS2AST[V]) extends PHOAS2AST[V]
+    final case class If[V](cond: PHOAS2AST[V], thenThis: PHOAS2AST[V], elseThis: PHOAS2AST[V]) extends PHOAS2ASTP[V]
 
-    final case class Mu1[V](run: LazyFunction1[V, PHOAS2AST[V]]) extends PHOAS2AST[V]
+    final case class Mu1[V](run: LazyFunction1[V, PHOAS2ASTP[V]]) extends PHOAS2ASTP[V]
 
     def eval: PHOAS2AST[PHOASVals] ⇒ PHOASVals = {
       case PHOAS2AST.Var(value) ⇒ value
@@ -109,8 +111,8 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
       import PHOAS2AST._
 
       override def term[V]: PHOAS2AST[V] = Mu1 {
-        new LazyFunction1[V, PHOAS2AST[V]] {
-          override def apply(f: ⇒ V): PHOAS2AST[V] = FuncVal { n ⇒
+        new LazyFunction1[V, PHOAS2ASTP[V]] {
+          override def apply(f: ⇒ V): PHOAS2ASTP[V] = FuncVal { n ⇒
             If(
               IntEquals(Var(n), IntVal(0)),
               IntVal(1),
@@ -135,24 +137,8 @@ class Chapter10_PHOAS2_Spec extends FlatSpec with Matchers {
   it should "obtain stack overflow by computing expressions containing a junk term" in {
     // An example of a "junk term" is Mu1 Var. This term is meaningless but type-checks.
     // Let us perform a computation with it. It should give a stack overflow exception.
-    val junk: PHOAS2Term = new PHOAS2Term {
+    "val junk: PHOAS2Term = new PHOAS2Term { override def term[V]: PHOAS2AST[V] = PHOAS2AST.Mu1(new LazyFunction1[V, PHOAS2AST[V]] {override def apply(a: ⇒ V): PHOAS2AST[V] = PHOAS2AST.Var(a)})}" shouldNot compile
 
-      import PHOAS2AST._
-
-      override def term[V]: PHOAS2AST[V] = Mu1(new LazyFunction1[V, PHOAS2AST[V]] {
-        override def apply(a: ⇒ V): PHOAS2AST[V] = Var(a)
-      })
-    }
-    the[StackOverflowError] thrownBy PHOAS2Term.eval(junk) should have message null
-    val junkLazy: PHOAS2Term = new PHOAS2Term {
-
-      import PHOAS2AST._
-
-      override def term[V]: PHOAS2AST[V] = Mu1(new LazyFunction1[V, PHOAS2AST[V]] {
-        override def apply(a: ⇒ V): PHOAS2AST[V] = Var(a)
-      })
-    }
-    the[StackOverflowError] thrownBy PHOAS2Term.eval(junkLazy) should have message null
   }
 
 }

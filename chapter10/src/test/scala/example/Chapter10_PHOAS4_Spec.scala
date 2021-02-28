@@ -2,13 +2,13 @@ package example
 
 import org.scalatest.{FlatSpec, Matchers}
 
-class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
+class Chapter10_PHOAS4_Spec extends FlatSpec with Matchers {
 
   // Implementing the PHOAS described in the paper:
   // Bruno C. de S. Oliveira. Functional programming with structured graphs.
   // https://www.cs.utexas.edu/~wcook/Drafts/2012/graphs.pdf
 
-  behavior of "simple PHOAS for untyped lambda calculus with mu and mu2 binders"
+  behavior of "simple PHOAS for untyped lambda calculus with simplified mu2 binder"
 
   trait PHOAS3Term {
     def term[V]: PHOAS3AST[V]
@@ -40,7 +40,7 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
 
     final case class Mu1[V](run: Lazy[V] ⇒ PHOAS3AST[V]) extends PHOAS3AST[V]
 
-    final case class Mu2[V](run: ::[Lazy[V]] ⇒ ::[PHOAS3AST[V]]) extends PHOAS3AST[V]
+    final case class Mu2[V](run: Lazy[::[V]] ⇒ ::[PHOAS3AST[V]]) extends PHOAS3AST[V]
 
     def fmapEvalNEL[A, B](f: A ⇒ B): ::[Lazy[A]] ⇒ ::[B] = {
       case a :: as ⇒ ::(a.mapEval(f), as.map(_.mapEval(f)))
@@ -70,7 +70,7 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
         case PHOASVals.BoolVal(value) ⇒ if (value) PHOAS3AST.eval(thenThis) else PHOAS3AST.eval(elseThis)
       }
       case PHOAS3AST.Mu1(run) ⇒ Lazy.fix(run andThen PHOAS3AST.eval)
-      case PHOAS3AST.Mu2(run) ⇒ Lazy.fixNEL1(run andThen fmapNEL(PHOAS3AST.eval)).head // Safe because the `::` lists are not empty.
+      case PHOAS3AST.Mu2(run) ⇒ Lazy.fix(run andThen fmapNEL(PHOAS3AST.eval)).head // Safe because the `::` lists are not empty.
     }
   }
 
@@ -98,30 +98,9 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
 
     def fix[A](f: Lazy[A] ⇒ A): A = {
       f(of(fix(f)))
-      // Alternative implementation:
-      //      lazy val result: Lazy[A] = of(f(result))
-      //      result.value
     }
 
-    def ofList[A](as: ⇒ List[A], length: Int): List[Lazy[A]] = if (length == 0) List() else of(as.head) :: ofList(as.tail, length - 1)
-
-    def ofNEL1[A](as: ⇒ ::[A]): ::[Lazy[A]] = ::(
-      of(as.head),
-      as.tail.map(x => of(x))
-    )
-
-    def ofNEL2[A](length: Int)(as: ⇒ ::[A]): ::[Lazy[A]] = ::(
-      of(as.head),
-      ofList(as.tail, length - 1)
-    )
-
-    def fixNEL1[A](f: ::[Lazy[A]] ⇒ ::[A]): ::[A] = {
-      f(ofNEL1(fixNEL1(f)))
-    }
-
-    def fixNEL2[A](length: Int)(f: ::[Lazy[A]] ⇒ ::[A]): ::[A] = {
-      f(ofNEL2(length)(fixNEL2(length)(f)))
-    }
+    def unapply[T](lt: Lazy[T]): Option[T] = Some(lt.value)
   }
 
   it should "compute factorial in Scala using Lazy.fix" in {
@@ -129,17 +108,16 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
       x: Int ⇒
         if (x <= 0) 1 else x * lazyF.value.apply(x - 1)
     }
-
     fact(10) shouldEqual 3628800
   }
 
-  it should "fail to compute mutually recursive even/odd functions in Scala using Lazy.fixNEL1" in {
+  it should "fail to compute mutually recursive even/odd functions in Scala using Lazy.fix" in {
     the[StackOverflowError] thrownBy {
-      val is10odd: Int ⇒ Boolean = Lazy.fixNEL1[Int ⇒ Boolean] { case _ :: List(odd, even) ⇒ ::[Int ⇒ Boolean](
-        _ ⇒ odd.value.apply(10),
+      val is10odd: Int ⇒ Boolean = Lazy.fix[::[Int ⇒ Boolean]] { case Lazy(_ :: List(odd, even)) ⇒ ::[Int ⇒ Boolean](
+        _ ⇒ odd(10),
         List(
-          n ⇒ if (n == 0) false else even.value.apply(n - 1),
-          n ⇒ if (n == 0) true else odd.value.apply(n - 1),
+          n ⇒ if (n == 0) false else even(n - 1),
+          n ⇒ if (n == 0) true else odd(n - 1),
         )
       )
       }.head
@@ -148,23 +126,7 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
 
   }
 
-  it should "compute mutually recursive even/odd functions in Scala using Lazy.fixNEL2" in {
-    lazy val is10odd: Int ⇒ Boolean = Lazy.fixNEL2[Int ⇒ Boolean](3) { case _ :: List(odd, even) ⇒ ::[Int ⇒ Boolean](
-      _ ⇒ odd.value.apply(10),
-      List(
-        n ⇒ if (n == 0) false else even.value.apply(n - 1),
-        n ⇒ if (n == 0) true else odd.value.apply(n - 1),
-      )
-    )
-    }.head
-
-//    the[StackOverflowError] thrownBy {
-      is10odd(0) shouldEqual false
-//    } should have message null
-
-  }
-
-  it should "compute mutually recursive even/odd functions using mu2 binder" in {
+  it should "fail to compute mutually recursive even/odd functions using simplified mu2 binder" in {
     /*
     let rec
      odd = λ n → if (n ≡ 0) then False else even (n − 1)
@@ -176,12 +138,12 @@ class Chapter10_PHOAS3_Spec extends FlatSpec with Matchers {
       import PHOAS3AST._
 
       override def term[V]: PHOAS3AST[V] = Mu2 {
-        case _ :: List(odd, even)
+        case Lazy(_ :: List(odd, even))
         ⇒ ::(
-          ApplyFunc(Var(odd.value), IntVal(10)),
+          ApplyFunc(Var(odd), IntVal(10)),
           List(
-            FuncVal { n ⇒ If(IntEquals(Var(n), IntVal(0)), BoolVal(false), ApplyFunc(Var(even.value), IntFunc2(_ - _, Var(n), IntVal(1)))) },
-            FuncVal { n ⇒ If(IntEquals(Var(n), IntVal(0)), BoolVal(true), ApplyFunc(Var(odd.value), IntFunc2(_ - _, Var(n), IntVal(1)))) },
+            FuncVal { n ⇒ If(IntEquals(Var(n), IntVal(0)), BoolVal(false), ApplyFunc(Var(even), IntFunc2(_ - _, Var(n), IntVal(1)))) },
+            FuncVal { n ⇒ If(IntEquals(Var(n), IntVal(0)), BoolVal(true), ApplyFunc(Var(odd), IntFunc2(_ - _, Var(n), IntVal(1)))) },
           )
         )
       }
