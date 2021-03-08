@@ -30,4 +30,6 @@ local.*
 logs/
 *.log.txt.xz
 
+.bsp
+
 *.jfr

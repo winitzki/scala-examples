@@ -1,4 +1,5 @@
 val scalaV = "2.12.13"
+val scala3V = "3.0.0-RC1"
 
 lazy val commonSettings = Seq(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.3" cross CrossVersion.full),
@@ -22,14 +23,14 @@ lazy val commonSettings = Seq(
     , "io.chymyst" %% "curryhoward" % "0.3.7"
     , "com.eed3si9n.expecty" %% "expecty" % "0.11.0" % Test
     , "org.typelevel" %% "spire" % "0.16.0"
-//    , "co.fs2" %% "fs2-core" % "1.0.2"
+    //    , "co.fs2" %% "fs2-core" % "1.0.2"
   )
 )
 
 lazy val scala_examples = (project in file("."))
   .settings(commonSettings)
   .aggregate(common, chapter01, chapter02, chapter03, chapter04,
-    chapter05, chapter06, chapter07, chapter08, chapter09, chapter10, chapter11)
+    chapter05, chapter06, chapter07, chapter08, chapter09, chapter10, chapter11, trydotty)
 
 lazy val common = (project in file("common"))
   .settings(commonSettings)
@@ -105,6 +106,15 @@ lazy val chapter10 = (project in file("chapter10"))
 lazy val chapter11 = (project in file("chapter11"))
   .settings(commonSettings)
   .dependsOn(common)
+
+lazy val trydotty = project in file("trydotty") settings(
+  scalaVersion := scala3V,
+  libraryDependencies ++= Seq(
+    "org.scalatest" %% "scalatest" % "3.2.5" % Test,
+    "org.scalatest" %% "scalatest-flatspec" % "3.2.5" % Test,
+    "org.scalacheck" %% "scalacheck" % "1.15.3" % Test,
+  )
+)
 
 lazy val prokopecBook = (project in file("prokopec-book"))
   .settings(commonSettings)
