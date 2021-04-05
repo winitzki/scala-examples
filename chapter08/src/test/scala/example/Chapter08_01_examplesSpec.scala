@@ -86,6 +86,64 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
     def mapN[A, B](fa: List[Future[A]])(f: List[A] ⇒ B): Future[B] = Future.sequence(fa).map(f)
   }
 
+  it should "define zip for a binary tree" in {
+    sealed trait BTree[A]
+    final case class Leaf[A](a: A) extends BTree[A]
+    final case class Branch[A](left: BTree[A], right: BTree[A]) extends BTree[A]
+
+    {
+      def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = ???
+    }
+
+    {
+      def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = (ta, tb) match {
+        case (Leaf(x), Leaf(y)) => Leaf((x, y))
+        case (Branch(lx, rx), Leaf(y)) => ???
+        case (Leaf(x), Branch(ly, ry)) => ???
+        case (Branch(lx, rx), Branch(ly, ry)) => ???
+      }
+    }
+
+    {
+      def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = (ta, tb) match {
+        case (Leaf(x), Leaf(y)) => Leaf((x, y))
+        case (Branch(lx, rx), Leaf(y)) => map(Branch(lx, rx))(x => (x, y))
+        case (Leaf(x), Branch(ly, ry)) => map(Branch(ly, ry))(y => (x, y))
+        case (Branch(lx, rx), Branch(ly, ry)) => ???
+      }
+    }
+
+    def map[A, B](ta: BTree[A])(f: A => B): BTree[B] = ta match {
+      case Leaf(a) => Leaf(f(a))
+      case Branch(ta, tb) => Branch(map(ta)(f), map(tb)(f))
+    }
+
+    def zip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = (ta, tb) match {
+      case (Leaf(x), Leaf(y)) => Leaf((x, y))
+      case (xa, Leaf(b)) => map(xa)(a => (a, b))
+      case (Leaf(a), xb) => map(xb)(b => (a, b))
+      case (Branch(ax, ay), Branch(bx, by)) => Branch(zip(ax, bx), zip(ay, by))
+    }
+
+    val ta: BTree[Int] = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
+    val tb: BTree[String] = Branch(Leaf("a"), Leaf("b"))
+    val tc: BTree[String] = Branch(Branch(Leaf("c"), Branch(Leaf("d"), Leaf("e"))), Leaf("f"))
+
+    zip(ta, ta) shouldEqual Branch(Branch(Leaf((1, 1)), Leaf((2, 2))), Leaf((3, 3)))
+    zip(tb, tb) shouldEqual Branch(Leaf(("a", "a")), Leaf(("b", "b")))
+    zip(tb, tc) shouldEqual Branch(Branch(Leaf(("a", "c")), Branch(Leaf(("a", "d")), Leaf(("a", "e")))), Leaf(("b", "f")))
+
+    // Show that the zip method is not equivalent to that defined via monadic flatMap.
+    def flatMap[A, B](ta: BTree[A])(f: A => BTree[B]): BTree[B] = ta match {
+      case Leaf(a) => f(a)
+      case Branch(ta, tb) => Branch(flatMap(ta)(f), flatMap(tb)(f))
+    }
+
+    def mzip[A, B](ta: BTree[A], tb: BTree[B]): BTree[(A, B)] = flatMap[A, (A, B)](ta)(a => map[B, (A, B)](tb)(b => (a, b)))
+
+    mzip(tb, tb) shouldEqual Branch(Branch(Leaf(("a", "a")), Leaf(("a", "b"))), Branch(Leaf(("b", "a")), Leaf(("b", "b"))))
+  }
+
   it should "use map2 with reader monad" in {
     // Reader monad always has independent and commutative effects.
 
