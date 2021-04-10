@@ -52,13 +52,13 @@ object HList3 {
     def ::[A](a: A): prepend[A]
   }
 
-  case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
-    override type prepend[A] = |:[A, |:[H, Tail]]
+  final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
+    override type prepend[A] = A |: H |: Tail
 
     override def ::[A](a: A): prepend[A] = |:(a, this)
   }
 
-  case object HNil extends HList {
+  final case object HNil extends HList {
     override type prepend[A] = |:[A, HNil.type]
 
     override def ::[A](a: A): prepend[A] = |:(a, this)
@@ -77,6 +77,38 @@ object HList3 {
   }
 
   // Would like to have a type function to determine the type of head. Not sure if it is possible.
+}
+
+// see https://apocalisp.wordpress.com/2010/07/06/type-level-programming-in-scala-part-6a-heterogeneous-list%C2%A0basics/
+object HList4 {
+  sealed trait HList {
+    type prepend[A] <: HList
+
+    def |:[A](a: A): prepend[A]
+  }
+
+  final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
+    override type prepend[A] = A |: H |: Tail
+
+    override def |:[A](a: A): prepend[A] = new |:(a, this)
+  }
+
+  final case object HNil extends HList {
+    override type prepend[A] = A |: HNil
+
+    override def |:[A](a: A): prepend[A] = new |:(a, this)
+  }
+
+  type HNil = HNil.type
+
+  implicit final class PostfixHList[A](val x: A) extends AnyVal {
+    def | : (A |: HNil) = x |: HNil
+  }
+
+  import scala.language.postfixOps
+
+  val example1 = 1 |: "abc".|
+  example1.head
 }
 
 class Chapter08_03_mapN_with_HList extends FlatSpec with Matchers {
