@@ -34,12 +34,14 @@ object HList2 {
 
   private val example1: HL[Nothing] = HN
   private val example2: HL[Int |: Nothing] = 1 |: HN
-  private val example3: HL[Int |: String |: Nothing] = 1 |: "xyz" |: HN
+  private val example3: HL[Int |: (String |: Nothing)] = 1 |: "xyz" |: HN
 
   // Not clear how to develop a type notation for this. We are using GADTs to create a list at the type level.
 
   // The `head` function must return an initially unknown type `A`. So, it must have `A` as a type parameter.
-  def headOption[A, B <: HL[B]](hl: HL[B]): Option[A] = ???
+  def head[A, B <: HL[B], C <: HL[C]](hl: HL[C]): A = ???
+
+  private val example4 = head[Int, Nothing, Int |: Nothing](example2) // This does not work.
 }
 
 class Chapter08_03_mapN_with_HList extends FlatSpec with Matchers {
