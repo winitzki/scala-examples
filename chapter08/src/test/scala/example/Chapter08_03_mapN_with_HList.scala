@@ -81,22 +81,14 @@ object HList3 {
 
 // see https://apocalisp.wordpress.com/2010/07/06/type-level-programming-in-scala-part-6a-heterogeneous-list%C2%A0basics/
 object HList4 {
-  sealed trait HList {
-    type prepend[A] <: HList
-
-    def |:[A](a: A): prepend[A]
-  }
+  sealed trait HList
 
   final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
-    override type prepend[A] = A |: H |: Tail
-
-    override def |:[A](a: A): prepend[A] = new |:(a, this)
+    def |:[A](a: A): A |: H |: Tail = new |:(a, this)
   }
 
   final case object HNil extends HList {
-    override type prepend[A] = A |: HNil
-
-    override def |:[A](a: A): prepend[A] = new |:(a, this)
+    def |:[A](a: A): A |: HNil = new |:(a, this)
   }
 
   type HNil = HNil.type
