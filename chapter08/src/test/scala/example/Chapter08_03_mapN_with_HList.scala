@@ -21,6 +21,35 @@ object HList1 {
   def head: HL ⇒ Any = ???
 }
 
+object HList1a {
+  // Trying to fix the unusability of HList1.
+  trait HL {
+    type Head
+
+    def |:[A](head: A): HL = |:(head, this)
+  }
+
+  final case object HN extends HL {
+    type Head = Nothing
+  }
+
+  final case class |:[A](head: A, tail: HL) extends HL {
+    type Head = A
+  }
+
+  private val example1: HL = HN
+  private val example2: HL = 1 |: HN
+  private val example3: HL = 1 |: "xyz" |: HN
+
+  // Cannot read the types inside HL - they are all hidden.
+  // HL = 1 + ∃A. A × HL
+  def headOption(hl: HL): Option[hl.Head] = hl match {
+    case HN ⇒ None
+    case h |: _ ⇒ Some(h.asInstanceOf[hl.Head]) // A typecast is required here.
+  }
+  // The type of a HList does not show whether the list is empty or what types are in it.
+}
+
 object HList2 {
   // Trying to capture the type of the list in the type argument. The result goes out of hand quickly.
   trait HL[B <: HL[B]] {
@@ -81,15 +110,13 @@ object HList3 {
 
 // see https://apocalisp.wordpress.com/2010/07/06/type-level-programming-in-scala-part-6a-heterogeneous-list%C2%A0basics/
 object HList4 {
-  sealed trait HList
-
-  final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
-    def |:[A](a: A): A |: H |: Tail = new |:(a, this)
+  sealed trait HList {
+    final def |:[A](a: A): A |: this.type = new |:(a, this)
   }
 
-  final case object HNil extends HList {
-    def |:[A](a: A): A |: HNil = new |:(a, this)
-  }
+  final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList
+
+  final case object HNil extends HList
 
   type HNil = HNil.type
 
@@ -99,8 +126,12 @@ object HList4 {
 
   import scala.language.postfixOps
 
-  val example1 = 1 |: "abc".|
-  example1.head
+  val example1 = 1 |: "abc" |: true.|
+  val x: Boolean |: HNil = example1.tail.tail
+
+  val y: String = example1 match {
+    case _ |: z |: _ |: HNil ⇒ z
+  }
 }
 
 class Chapter08_03_mapN_with_HList extends FlatSpec with Matchers {
