@@ -124,7 +124,7 @@ object HList4 {
   }
 
   final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
-    def |:[A](a: A): A |: H |: Tail = new |:(a, this) // Cannot define the type signature as def |:[A](a: A): A |: this.type because pattern-matching will then fail to compile. 
+    def |:[A](a: A): A |: H |: Tail = new |:(a, this) // Cannot define the type signature as def |:[A](a: A): A |: this.type because pattern-matching will then fail to compile.
   }
 
   final case object HNil extends HList {
@@ -144,6 +144,31 @@ object HList4 {
 
   val y: String = example1 match {
     case _ |: z |: _ |: HNil ⇒ z
+  }
+}
+
+object HList4a {
+  sealed trait HList
+
+  final case class ::[H, Tail <: HList](head: H, tail: Tail) extends HList {
+    def ::[A](a: A): A :: H :: Tail = new ::(a, this)
+  }
+
+  final case object HNil extends HList {
+    def ::[A](a: A): A :: HNil = new ::(a, this)
+  }
+
+  type HNil = HNil.type
+
+  implicit final class InfixHList[A](val x: A) extends AnyVal {
+    def :: : A :: HNil = x :: HNil
+  }
+
+  val example1 = 1 :: "abc" :: true.::
+  val x: Boolean :: HNil = example1.tail.tail
+
+  val y: String = example1 match {
+    case _ :: z :: _ ⇒ z
   }
 }
 
