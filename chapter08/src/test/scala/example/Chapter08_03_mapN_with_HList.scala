@@ -37,9 +37,9 @@ object HList1a {
     type Head = A
   }
 
-  private val example1: HL = HN
-  private val example2: HL = 1 |: HN
-  private val example3: HL = 1 |: "xyz" |: HN
+  private val example1 = HN
+  private val example2 = 1 |: HN
+  private val example3 = true |: "xyz" |: HN
 
   // Cannot read the types inside HL - they are all hidden.
   // HL = 1 + ∃A. A × HL
@@ -48,6 +48,10 @@ object HList1a {
     case h |: _ ⇒ Some(h.asInstanceOf[hl.Head]) // A typecast is required here.
   }
   // The type of a HList does not show whether the list is empty or what types are in it.
+
+  val example1h: Option[Nothing] = headOption(example1)
+  //  val example2h: Option[Int] = headOption(example2) // Does not compile.
+  //  val example3h: Option[Boolean] = headOption(example3) // Does not compile.
 }
 
 object HList2 {
@@ -96,13 +100,18 @@ object HList3 {
   type HNil = HNil.type
 
   private val example1: Int |: HNil = 1 :: HNil
+  private val example2 = true :: "abc" :: HNil
 
   //  def head[A](hl: A |: HList): A = hl.head // Not needed since we already called them `head` and `tail`.
 
-  private val example2: Int = example1.head
+  private val example3: Int = example1.head
 
-  val example3: Int = example1 match {
+  val example1a: Int = example1 match {
     case a |: _ ⇒ a
+  }
+
+  val example2a: String = example2 match {
+    case _ |: z |: _ ⇒ z
   }
 
   // Would like to have a type function to determine the type of head. Not sure if it is possible.
@@ -111,22 +120,26 @@ object HList3 {
 // see https://apocalisp.wordpress.com/2010/07/06/type-level-programming-in-scala-part-6a-heterogeneous-list%C2%A0basics/
 object HList4 {
   sealed trait HList {
-    final def |:[A](a: A): A |: this.type = new |:(a, this)
+//    final def |:[A](a: A): A |: this.type = new |:(a, this) // Does not work with pattern-matching in a subtle way. Need to copy this definition to each case class and substitute this.type by the concrete type each time!
   }
 
-  final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList
+  final case class |:[H, Tail <: HList](head: H, tail: Tail) extends HList {
+    def |:[A](a: A): A |: H |: Tail = new |:(a, this) // Cannot define the type signature as def |:[A](a: A): A |: this.type because pattern-matching will then fail to compile. 
+  }
 
-  final case object HNil extends HList
+  final case object HNil extends HList {
+    def |:[A](a: A): A |: HNil = new |:(a, this)
+  }
 
   type HNil = HNil.type
 
   implicit final class PostfixHList[A](val x: A) extends AnyVal {
-    def | : (A |: HNil) = x |: HNil
+    def :| : (A |: HNil) = x |: HNil
   }
 
   import scala.language.postfixOps
 
-  val example1 = 1 |: "abc" |: true.|
+  val example1 = 1 |: "abc" |: true |: HNil
   val x: Boolean |: HNil = example1.tail.tail
 
   val y: String = example1 match {

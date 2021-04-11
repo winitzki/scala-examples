@@ -31,7 +31,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     // "zippable profunctor" = "invariant semigroupal"
 
-    implicit def applyFld[Z]: InvariantSemigroupal[Fold0[Z, ?]] = new InvariantSemigroupal[Fold0[Z, ?]] {
+    implicit def applyFld[Z]: InvariantSemigroupal[Fold0[Z, *]] = new InvariantSemigroupal[Fold0[Z, *]] {
       override def imap[A, B](fa: Fold0[Z, A])(f: A ⇒ B)(g: B ⇒ A): Fold0[Z, B] = implement
 
       override def product[A, B](fa: Fold0[Z, A], fb: Fold0[Z, B]): Fold0[Z, (A, B)] = implement
@@ -77,8 +77,8 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     def zip[B, T](otherFld: Fold1[Z, B, T]): Fold1[Z, (A, B), (R, T)] = implement
   }
 
-  // Now `Fold1[Z, C, ?]` is a functor. (This is the "free functor" construction.)
-  implicit def functorFold1[Z, C]: Functor[Fold1[Z, C, ?]] = new Functor[Fold1[Z, C, ?]] {
+  // Now `Fold1[Z, C, *]` is a functor. (This is the "free functor" construction.)
+  implicit def functorFold1[Z, C]: Functor[Fold1[Z, C, *]] = new Functor[Fold1[Z, C, *]] {
     override def map[A, B](fa: Fold1[Z, C, A])(f: A ⇒ B): Fold1[Z, C, B] = implement
   }
 

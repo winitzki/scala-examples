@@ -45,7 +45,7 @@ class AkkaHttpFreeMonad extends FlatSpec with Matchers with ScalatestRouteTest {
     import cats.instances.all._
 
     // Define an interpreter from RteProg to Writer[String, ?].
-    val toWriter: RteProg ~> Writer[String, ?] = new (RteProg ~> Writer[String, ?]) {
+    val toWriter: RteProg ~> Writer[String, *] = new (RteProg ~> Writer[String, *]) {
       override def apply[A](fa: RteProg[A]): Writer[String, A] = (fa match {
         case GetD ⇒ Writer(s"GET ", ())
         case PathPrefixD(pathPrefix) ⇒ Writer(s"/$pathPrefix", ())

@@ -175,7 +175,7 @@ class FreeMonadPresentation extends FlatSpec with Matchers {
 
   // Convert HdfsOps to `Writer[String, ?]`. This interpreter will only create log messages.
   // We use `cats.~>` for the transformation of HdfsOps[A] to Try[A] for all A.
-  val toWriter: HdfsOps ~> Writer[String, ?] = new (HdfsOps ~> Writer[String, ?]) {
+  val toWriter: HdfsOps ~> Writer[String, *] = new (HdfsOps ~> Writer[String, *]) {
     override def apply[A](fa: HdfsOps[A]): Writer[String, A] = (fa match {
       case Delete(fs, path) ⇒ Writer(s"deleting $path\n", true)
       case Create(fs, path) ⇒ Writer(s"creating $path\n", null)
