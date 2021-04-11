@@ -216,7 +216,7 @@ object HList4b {
   val example1a: HList = 1 :: "abc" :: true :: HNil
 
   def headOption(hl: HList): Option[hl.Head] = hl match {
-    case x: ::[_, _] ⇒ Some(x.head.asInstanceOf[hl.Head])
+    case h :: t ⇒ Some(h.asInstanceOf[hl.Head])
     case HNil ⇒ None
   }
 
