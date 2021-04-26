@@ -9,7 +9,9 @@ import org.scalatest.{FlatSpec, Matchers}
 import spire.implicits._
 import spire.math.Numeric
 
-import scala.Predef.{any2stringadd => _, _} // ridiculous
+import java.util.ArrayDeque
+import scala.Predef.{any2stringadd ⇒ _, _}
+import scala.collection.JavaConverters.asScalaIteratorConverter // ridiculous
 
 class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
@@ -138,25 +140,49 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
   it should "implement fold fusion with arithmetic syntax as in Section 11.2.5" in {
     import io.chymyst.ch._ // Import some symbols from the `curryhoward` library.
 
+    //    def bad[A, B]: (() ⇒ A, A ⇒ B) ⇒  B = implement // curryhoward does not support function0[A]???
+    //        def bad[A, B]: (Unit ⇒ A, A ⇒ B) ⇒  B = implement // curryhoward does not support Unit???
+
     final case class FoldOp[Z, R, A](init: R, update: (R, Z) => R, transform: R => A)
     implicit class FoldOpSyntax[Z](zs: Seq[Z]) {
       def runFold[R, A](op: FoldOp[Z, R, A]): A = op.transform(zs.foldLeft(op.init)(op.update))
     }
     implicit class FoldOpZip[Z, R, A](op: FoldOp[Z, R, A]) {
       def zip[S, B](other: FoldOp[Z, S, B]): FoldOp[Z, (R, S), (A, B)] = implement
+
       def map[B](f: A => B): FoldOp[Z, R, B] = implement
+
       def map2[S, B, C](other: FoldOp[Z, S, B])(f: (A, B) => C): FoldOp[Z, (R, S), C] = implement
     } // The type signatures unambiguously determine the implementations.
     implicit class FoldOpMath[Z, R](op: FoldOp[Z, R, Double]) {
       def binaryOp[S](other: FoldOp[Z, S, Double])(f: (Double, Double) => Double): FoldOp[Z, (R, S), Double] = op.map2(other) { case (x, y) => f(x, y) }
+
       def +[S](other: FoldOp[Z, S, Double]): FoldOp[Z, (R, S), Double] = op.binaryOp(other)(_ + _)
+
       def /[S](other: FoldOp[Z, S, Double]): FoldOp[Z, (R, S), Double] = op.binaryOp(other)(_ / _)
     } // May need to define more operations here.
-    
-    val sum = FoldOp[Double, Double, Double](0, (s, i) => s + i, identity)
-    val length = FoldOp[Double, Double, Double](0, (s, _) => s + 1, identity)
+
+    val sum = new FoldOp[Double, Double, Double](0, (s, i) => s + i, identity)
+    val length = new FoldOp[Double, Double, Double](0, (s, _) => s + 1, identity)
 
     Seq(1.0, 2.0, 3.0).runFold(sum / length) shouldEqual 2.0
+
+    implicit class FoldOpScan[Z](zs: Seq[Z]) {
+      def runScan[R, A](op: FoldOp[Z, R, A]): Seq[A] = zs.scanLeft(op.init)(op.update).drop(1).map(op.transform)
+    }
+    val average = sum / length
+
+    def window_sum(n: Int): FoldOp[Double, IndexedSeq[Double], Double] = FoldOp(IndexedSeq.fill(n)(0.0),
+      update = (window, x) ⇒ window.drop(1) :+ x, transform = _.sum)
+
+    def constfold(x: Double): FoldOp[Double, Double, Double] = FoldOp(x, (_, _) ⇒ x, _ ⇒ x)
+
+    def window_average(n: Int) = window_sum(n) / constfold(n)
+
+    (0 to 10).map(_.toDouble).runFold(average) shouldEqual 5.0
+    (0 to 10).map(_.toDouble).runScan(average) shouldEqual (0 to 10).map(_.toDouble / 2)
+    (0 to 10).map(_.toDouble).runFold(window_average(3)) shouldEqual 9.0
+    (0 to 10).map(_.toDouble).runScan(window_average(3)) shouldEqual Vector(0.0, 0.3333333333333333, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0)
   }
 
   behavior of "scans"
