@@ -218,7 +218,7 @@ class Chapter08_01_examplesSpec extends FlatSpec with Matchers {
         val transposedTails = tails match {
           case Nil ⇒
             // Special case: no tails, transposing a single row, heads :: List().
-            // Need to produce a list of single-element lists.
+            // Need to produce a list of single-element lists. We prepare a list of empty lists here.
             heads.map(_ ⇒ Nil)
           // General case: transposing tails recursively.
           case _ ⇒ transpose(tails)

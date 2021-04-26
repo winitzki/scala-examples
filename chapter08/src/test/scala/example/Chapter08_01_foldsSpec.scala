@@ -53,7 +53,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     // This fold is performed in a single traversal.
     val result = list10.fld(twoFold)
 
-    result shouldEqual((10, 55))
+    result shouldEqual ((10, 55))
 
     val average = result._2 / result._1
 
@@ -64,7 +64,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
   // rather than work with tupled results. So, add a `transform: A ⇒ R` to `Fold0`.
   // The new `Fold1` will be applied to a sequence with items of type `Z`, 
   // will accumulate a value of type `A`, and will output a result value of type `R`.
-  
+
   case class Fold1[Z, A, R](init: A, update: (A, Z) ⇒ A, transform: A ⇒ R)
 
   // Syntax for Foldable.
@@ -135,6 +135,30 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     result shouldEqual 5.5
   }
 
+  it should "implement fold fusion with arithmetic syntax as in Section 11.2.5" in {
+    import io.chymyst.ch._ // Import some symbols from the `curryhoward` library.
+
+    final case class FoldOp[Z, R, A](init: R, update: (R, Z) => R, transform: R => A)
+    implicit class FoldOpSyntax[Z](zs: Seq[Z]) {
+      def runFold[R, A](op: FoldOp[Z, R, A]): A = op.transform(zs.foldLeft(op.init)(op.update))
+    }
+    implicit class FoldOpZip[Z, R, A](op: FoldOp[Z, R, A]) {
+      def zip[S, B](other: FoldOp[Z, S, B]): FoldOp[Z, (R, S), (A, B)] = implement
+      def map[B](f: A => B): FoldOp[Z, R, B] = implement
+      def map2[S, B, C](other: FoldOp[Z, S, B])(f: (A, B) => C): FoldOp[Z, (R, S), C] = implement
+    } // The type signatures unambiguously determine the implementations.
+    implicit class FoldOpMath[Z, R](op: FoldOp[Z, R, Double]) {
+      def binaryOp[S](other: FoldOp[Z, S, Double])(f: (Double, Double) => Double): FoldOp[Z, (R, S), Double] = op.map2(other) { case (x, y) => f(x, y) }
+      def +[S](other: FoldOp[Z, S, Double]): FoldOp[Z, (R, S), Double] = op.binaryOp(other)(_ + _)
+      def /[S](other: FoldOp[Z, S, Double]): FoldOp[Z, (R, S), Double] = op.binaryOp(other)(_ / _)
+    } // May need to define more operations here.
+    
+    val sum = FoldOp[Double, Double, Double](0, (s, i) => s + i, identity)
+    val length = FoldOp[Double, Double, Double](0, (s, _) => s + 1, identity)
+
+    Seq(1.0, 2.0, 3.0).runFold(sum / length) shouldEqual 2.0
+  }
+
   behavior of "scans"
 
   // Syntax for scanLeft with Fold1.
@@ -180,7 +204,7 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     def ave1Ave1[N: Numeric]: Fold1[N, _, N] = average1.flatMap(x ⇒ Fold1[N, N, N](0, (a, z) ⇒ a + x, identity) / len1)
 
     list10.scanl1(ave1Ave1).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
-    
+
     // Use the for/yield syntax for the monadic folds. This depends on having both `map` and `flatMap`.
     // This syntax is much more visual.
     def ave1ave1forYield[N: Numeric]: Fold1[N, _, N] = for {
@@ -192,4 +216,22 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
     list10.scanl1(ave1ave1forYield).tail shouldEqual List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
   }
 
+  it should "implement code example 1 in new section 11.2.5" in {
+    final case class Fold[Z, R](init: R, update: (R, Z) => R)
+
+    def run[Z, R](as: Seq[Z], fold: Fold[Z, R]): R = as.foldLeft(fold.init)(fold.update)
+
+    def zipFold[Z, R1, R2](op1: Fold[Z, R1], op2: Fold[Z, R2]): Fold[Z, (R1, R2)] =
+      Fold((op1.init, op2.init), (r, z) => (op1.update(r._1, z), op2.update(r._2, z)))
+
+    val sum = Fold[Double, Double](0, _ + _)
+    val length = Fold[Double, Int](0, (n, _) ⇒ n + 1)
+    val sumLength: Fold[Double, (Double, Int)] = zipFold(sum, length)
+
+    val res: (Double, Int) = run(Seq(1.0, 2.0, 3.0), sumLength)
+
+    val average = res._1 / res._2
+
+    average shouldEqual 2.0
+  }
 }

@@ -247,7 +247,9 @@ class Chapter08_03_mapN_with_HList extends FlatSpec with Matchers {
     u shouldEqual Some(1)
   }
 
-  it should "define mapN using type-level list" in {
-
+  it should "define mapN for Either[String, *] using type-level list from shapeless" in {
+    import shapeless.HList
+    type L[A] = Either[String, A]
+    def fmapN(f: HList)(ls: HList) = ???
   }
 }

@@ -174,7 +174,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     // Extract values of type A from an F[A], for all A.
     // Important: The trait is parameterized by F, but not by A. The `apply` method is parameterized by A.
     // This is important because we need to extract values from F[A] for any A, since the DSL program may have values of arbitrary types before computing the final value,
-    // so that run[A]:DSL[A] ⇒ A may need to call Extractor.apply[B] several times with different types B.
+    // so that run[A]: DSL[A] ⇒ A may need to call Extractor.apply[B] several times with different types B.
     // The type of `apply: F[X] ⇒ X` is similar to a natural transformation between F and the Id functor,
     // except that F is not a functor, so there are no laws with fmap that the transformation would have to satisfy.
     // In the cats library: trait ~>[F,G] { def apply[X]: F[X] ⇒ G[X] }

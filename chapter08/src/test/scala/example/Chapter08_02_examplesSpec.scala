@@ -32,6 +32,21 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
       case head :: tl ⇒ map2(head, mapN1(tl)) { (x, t) ⇒ x :: t }
     }
 
+    {
+      def zipEither[A, B](x: Either[String, A], y: Either[String, B]): Either[String, (A, B)] = (x, y) match {
+        case (Left(m), Left(n)) ⇒ Left(m + n)
+        case (Right(_), Left(n)) ⇒ Left(n)
+        case (Left(m), Right(_)) ⇒ Left(m)
+        case (Right(a), Right(b)) ⇒ Right((a, b))
+      }
+
+      def zipN[A](xs: List[Either[String, A]]): Either[String, List[A]] = xs match {
+        case Nil            => Right(Nil)
+        case head :: tail   => zipEither(head, zipN(tail)).map { case (h, t) => h :: t }
+      }
+    }
+
+
     // 2. Define a curried version of `map2`, called `fmap2`:
     /*
         def fmap2[A, B, Z](f: A ⇒ B ⇒ Z): Op[A] ⇒ Op[B] ⇒ Op[Z] = {
