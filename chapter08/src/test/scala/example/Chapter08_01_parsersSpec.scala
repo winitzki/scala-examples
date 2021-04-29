@@ -52,6 +52,14 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     case s ⇒ (Left(NoNumber), s)
   }
 
+  val intP: String ⇒ (Either[Err, Int], String) = {
+    val numRegex = "^([0-9]+)(.*)$".r;
+    { // Otherwise Scala gets confused with the syntax.
+      case numRegex(num, rest) => (Right(num.toInt), rest)
+      case s => (Left(NoNumber), s)
+    }
+  }
+
   val TagRegex = "^(</?sqrt>)(.*)$".r
 
   val openTag: Parser[String] = Parser {
@@ -191,5 +199,97 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     parseLanguage2("<a><b>123</a>") shouldEqual Left(NotClosedTag("a", "b") ++ NotClosed)
     parseLanguage2("<a><b>123</a></b>") shouldEqual Left(NotClosedTag("a", "b") ++ NotClosedTag("b", "a"))
     parseLanguage2("junk <a>123") shouldEqual Left(NotOpened ++ JunkAtEnd) // We don't see "tag not closed" error.
+  }
+
+  it should "define parsers as in Section 11.2.7" in {
+    final case class P[A](run: String => (Either[Err, A], String))
+    type Err = List[String] // A list of error messages.
+
+    val intP: P[Int] = P {
+      val numRegex = "^([0-9]+)(.*)$".r
+      s =>
+        s match {
+          case numRegex(num, rest) => (Right(num.toInt), rest)
+          case s => (Left(List("no number")), s)
+        }
+    }
+
+    def constP(prefix: String, error: String = "no prefix"): P[String] = P { s =>
+      if (s startsWith prefix) (Right(prefix), s.stripPrefix(prefix)) else (Left(List(error)), s)
+    }
+
+    val emptyP: P[Unit] = P { s => if (s.isEmpty) (Right(()), s) else (Left(List("junk at end")), s) }
+    val nonemptyP: P[Unit] = P { s => if (s.isEmpty) (Left(List("no input")), s) else (Right(()), s) }
+    val trueP: P[Unit] = P {
+      (Right(()), _)
+    }
+
+    def falseP(message: String): P[Unit] = P {
+      (Left(List(message)), _)
+    }
+
+    intP.run("123xyz") shouldEqual(Right(123), "xyz")
+    constP("<sqrt>").run("<sqrt>1</sqrt>") shouldEqual(Right("<sqrt>"), "1</sqrt>")
+    emptyP.run("abc") shouldEqual(Left(List("junk at end")), "abc")
+    nonemptyP.run("abc") shouldEqual(Right(()), "abc")
+
+    implicit class ParserZipOps[A](parserA: P[A]) {
+      def zip[B](parserB: P[B]): P[(A, B)] = P { s =>
+        val (resultA, rest) = parserA.run(s)
+        val (resultB, restB) = parserB.run(rest)
+        val result = (resultA, resultB) match {
+          case (Right(x), Right(y)) => Right((x, y))
+          case (Left(x), Right(_)) => Left(x)
+          case (Right(_), Left(y)) => Left(y)
+          case (Left(x), Left(y)) => Left(x ++ y)
+        }
+        (result, restB)
+      }
+    }
+
+    val p1 = constP("<sqrt>", "tag must be open") zip intP zip constP("</sqrt>", "tag must be closed")
+    p1.run("<sqrt>123</sqrt>") shouldEqual(Right((("<sqrt>", 123), "</sqrt>")), "")
+    p1.run("<sqrt></sqrt>") shouldEqual(Left(List("no number")), "")
+    p1.run("abc") shouldEqual(Left(List("tag must be open", "no number", "tag must be closed")), "abc")
+
+    implicit class ParserMonadOps[A](parserA: P[A]) {
+      def flatMap[B](f: A => P[B]): P[B] = P { s =>
+        val (result, rest) = parserA.run(s)
+        result match {
+          case Left(err) => (Left(err), rest)
+          case Right(x) => f(x).run(rest)
+        }
+      }
+
+      def map[B](f: A => B): P[B] = P { s =>
+        val (result, rest) = parserA.run(s)
+        (result.map(f), rest)
+      }
+
+      def withFilter(p: A => Boolean): P[A] = flatMap { x =>
+        (if (p(x)) trueP else falseP(s"match error: $x")).map(_ ⇒ x)
+      }
+    }
+
+    val p3: P[Int] = for {
+      x <- intP
+      _ <- constP("=")
+      _ <- constP(x.toString, s"integer $x not found")
+      _ <- emptyP
+    } yield x
+
+    p3.run("1=1") shouldEqual(Right(1), "")
+    p3.run("123=123") shouldEqual(Right(123), "")
+    p3.run("1=2") shouldEqual(Left(List("integer 1 not found")), "2")
+
+    val p4: P[Int] = for {
+      (x, _) <- intP zip constP("=")
+      _ <- constP(x.toString, s"integer $x not found") zip emptyP
+    } yield x
+
+    p4.run("1=1") shouldEqual(Right(1), "")
+    p4.run("123=123") shouldEqual(Right(123), "")
+    p4.run("1=2") shouldEqual(Left(List("integer 1 not found", "junk at end")), "2")
+
   }
 }

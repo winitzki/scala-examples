@@ -220,13 +220,17 @@ class Chapter08_01_foldsSpec extends FlatSpec with Matchers {
 
     val expected = List(1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0, 3.25)
     list10.runScan(average).runScan(average) shouldEqual expected
-    val average2 = average.flatMap(x ⇒ FoldOp[Double, Double, Double](0, (a, _) ⇒ a + x, identity) / length)
+
+    def add(x: Double) = FoldOp[Double, Double, Double](0, (a, _) => a + x, identity)
+
+    val average2 = average.flatMap(x ⇒ add(x) / length)
     list10.runScan(average2) shouldEqual expected
     val average2a = for {
-      x ← average
-      acc ← FoldOp[Double, Double, Double](0, (a, _) ⇒ a + x, identity)
+      x ← sum
       n ← length
-    } yield acc / n
+      acc ← add(x / n)
+      p ← length
+    } yield acc / p
     list10.runScan(average2a) shouldEqual expected
   }
 
