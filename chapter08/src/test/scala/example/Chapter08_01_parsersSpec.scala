@@ -252,6 +252,22 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     p1.run("<sqrt></sqrt>") shouldEqual(Left(List("no number")), "")
     p1.run("abc") shouldEqual(Left(List("tag must be open", "no number", "tag must be closed")), "abc")
 
+
+    implicit class ParserCombineOps[A](parserA: P[A]) {
+      def or(parserB: => P[A]): P[A] = P { s =>
+        val (result, rest) = parserA.run(s)
+        result match {
+          case Left(err)   => parserB.run(s)
+          case Right(x)    => (Right(x), rest)
+        }
+      }
+    }
+
+    implicit class ParserMoreZipOps[A](parserA: P[A]) {
+      def zipLeft[B](parserB: P[B]): P[A] = (parserA zip parserB).map(_._1)
+      def zipRight[B](parserB: P[B]): P[B] = (parserA zip parserB).map(_._2)
+    }
+
     implicit class ParserMonadOps[A](parserA: P[A]) {
       def flatMap[B](f: A => P[B]): P[B] = P { s =>
         val (result, rest) = parserA.run(s)
@@ -271,6 +287,14 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
       }
     }
 
+    val openTag = constP("<sqrt>", "tag must be open")
+    val closeTag = constP("</sqrt>", "tag must be closed")
+
+    def p2: P[Int] = intP or (openTag zipRight p2 zipLeft closeTag).map(x => math.sqrt(x).toInt)
+
+    p2.run("121")._1.right.get shouldEqual 121
+    p2.run("<sqrt>121</sqrt>")._1.right.get shouldEqual 11
+
     val p3: P[Int] = for {
       x <- intP
       _ <- constP("=")
@@ -283,7 +307,8 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     p3.run("1=2") shouldEqual(Left(List("integer 1 not found")), "2")
 
     val p4: P[Int] = for {
-      (x, _) <- intP zip constP("=")
+      x <- intP
+      _ <- constP("=")
       _ <- constP(x.toString, s"integer $x not found") zip emptyP
     } yield x
 
