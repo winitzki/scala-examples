@@ -534,4 +534,13 @@ class Chapter08_02_examplesSpec extends FlatSpec with Matchers {
   
   In this way, we have defined `zip` for any combination of terms from F[A].  
    */
+
+  it should "define zip via ap and vice versa as in Section 11.3.1" in {
+    type L[A] = List[A]
+    def zip[A, B](la: L[A], lb: L[B]): L[(A, B)] =    // Assuming that `ap` is already defined.
+      ap[B, (A, B)](la.map {a => (b: B) => (a, b)} )(lb)
+
+    def ap[A, B](r: L[A => B])(la: L[A]): L[B] =     // Assuming that `zip` is already defined.
+      zip(r, la).map { case (f, a) => f(a) }
+  }
 }
