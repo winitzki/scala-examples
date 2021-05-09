@@ -77,7 +77,7 @@ class DependentPairSpec extends FlatSpec with Matchers {
 
   it should "create a dependent pair" in {
 
-  makePair[Int](SourceValue[Int, Boolean](1))
+   val dp1 = makePair(1.toType[Boolean])(true) // Does not work! It cannot know the type Boolean.
   }
 
 }
