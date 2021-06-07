@@ -139,4 +139,12 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     withParams[Int, String]()
   }
 
+
+  it should "verify run-time error in invalid nesting" in {
+    """val result = for {
+      x ← List(1, 2)
+      (a, (b, c)) ← List(1, 2, 3) zip List("a", "b", "c") zip List(true, false, true)
+    } yield a""" shouldNot compile
+
+  }
 }
