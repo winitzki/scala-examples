@@ -2,12 +2,8 @@ package example
 
 import cats.syntax.contravariant._
 import cats.syntax.functor._
-import cats.syntax.invariant._
-import cats.syntax.profunctor
-import cats.{Contravariant, Functor, Invariant}
+import cats.{Contravariant, Functor}
 import example.ContraWuZip._
-import example.ProWuZip.ProWuZipSyntax
-import javax.jws.soap.SOAPBinding.Use
 import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
@@ -121,6 +117,26 @@ class Chapter08_02_contrafunctorsSpec extends FlatSpec with Matchers {
     
     So the identity laws hold. 
      */
+  }
+
+  it should "verify that exponential construction does not work for applicative functors" in {
+    def withParams[P, Q]() = {
+      import io.chymyst.ch._
+      type S[A] = (A ⇒ P) ⇒ Q
+
+      "def zip[A, B](p: S[A], q: S[B]): ((A, B) ⇒ P) ⇒ Q = implement" shouldNot typeCheck
+
+      "def zip[A, B](p: S[A], q: S[B]): S[(A, B)] = implement" shouldNot typeCheck
+
+      type R[A] = (A ⇒ P) ⇒ Option[A]
+
+      def zip[A, B]: (R[A], R[B]) ⇒ R[(A, B)] = implement
+
+      val zip1 = zip.lambdaTerm.prettyPrint
+      zip1 shouldEqual "a ⇒ b ⇒ (None() + 0)"
+    }
+
+    withParams[Int, String]()
   }
 
 }
