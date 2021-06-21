@@ -306,29 +306,32 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     p3.run("123=123") shouldEqual(Right(123), "")
     p3.run("1=2") shouldEqual(Left(List("integer 1 not found")), "2")
 
-    val p4: P[Int] = for {
+    val p4a: P[Int] = for {
       x <- intP
       _ <- constP("=")
       _ <- constP(x.toString, s"integer $x not found") zip emptyP
     } yield x
 
-    p4.run("1=1") shouldEqual(Right(1), "")
-    p4.run("123=123") shouldEqual(Right(123), "")
-    p4.run("1=2") shouldEqual(Left(List("integer 1 not found", "junk at end")), "2")
+    p4a.run("1=1") shouldEqual(Right(1), "")
+    p4a.run("123=123") shouldEqual(Right(123), "")
+    p4a.run("1=2") shouldEqual(Left(List("integer 1 not found", "junk at end")), "2")
 
-    def failure(message: String): P[Unit] = P { s => (Left(List(message)), s) }
-    def expect(n: Int): P[Unit] = intP.flatMap { x ⇒
-        if (x == n) constP("").map(_ ⇒ ())
-        else failure(s"got $x but expected $n")
+    // Implement better error reporting.
+    val success: P[Unit] = P { s => (Right(()), s) }  // Always-succeeding parser that consumes no input.
+    def failure(message: String): P[Unit] = P { s => (Left(List(message)), s) } // Always-failing parser.
+
+    def expect(n: Int): P[Unit] = intP.flatMap { x =>
+      if (x == n) success else failure(s"got $x but expected $n")
     }
-    val p4a: P[Int] = for {
+
+    val p4: P[Int] = for {
       x <- intP zipLeft constP("=")
       _ <- expect(x) zip emptyP
     } yield x
 
-    p4a.run("1=1") shouldEqual(Right(1), "")
-    p4a.run("123=123") shouldEqual(Right(123), "")
-    p4a.run("1=2abc") shouldEqual(Left(List("got 2 but expected 1", "junk at end")), "abc")
+    p4.run("1=1") shouldEqual(Right(1), "")
+    p4.run("123=123") shouldEqual(Right(123), "")
+    p4.run("1=2abc") shouldEqual(Left(List("got 2 but expected 1", "junk at end")), "abc")
 
   }
 }
