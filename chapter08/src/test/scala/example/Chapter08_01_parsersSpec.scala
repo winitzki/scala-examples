@@ -333,5 +333,8 @@ class Chapter08_01_parsersSpec extends FlatSpec with Matchers {
     p4.run("123=123") shouldEqual(Right(123), "")
     p4.run("1=2abc") shouldEqual(Left(List("got 2 but expected 1", "junk at end")), "abc")
 
+    sealed trait T3[A]
+    case class Leaf[A](a: A) extends T3[A]
+    case class Branch[A](left: T3[A], center: T3[A], right: T3[A]) extends T3[A]
   }
 }
