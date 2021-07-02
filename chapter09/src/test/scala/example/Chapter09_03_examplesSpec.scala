@@ -1,7 +1,7 @@
 package example
 
 import org.scalatest.{FlatSpec, Matchers}
-import cats.{Applicative, Bifunctor, Bitraverse, Eval, Functor, Monoid, Traverse}
+import cats.{Applicative, Apply, Bifunctor, Bitraverse, Eval, Functor, Monoid, Traverse}
 import org.scalatest.{FlatSpec, Matchers}
 import cats.syntax.functor._
 import cats.instances._
@@ -185,5 +185,20 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
 
     import cats.instances.int._
     t3.foldMap(identity) shouldEqual 10
+  }
+
+  it should "implement traversal for a regular-shaped tree" in {
+    sealed trait RTree[A]
+    final case class Leaf[A](a: A) extends RTree[A]
+    final case class Branch[A](t: RTree[(A, A)]) extends RTree[A]
+    import cats.syntax.apply._
+    import cats.syntax.applicative._
+    import cats.syntax.semigroupal._
+
+    def trav[A, B, F[_] : Applicative](f: A => F[B])(t: RTree[A]): F[RTree[B]] = t match {
+      case Leaf(a) => f(a).map(b => Leaf(b)) // Reproduce the Leaf structure under F.
+      case Branch(t) => (trav[(A, A), (B, B), F] { case (a1, a2) => f(a1) product f(a2) }(t)
+        ).map(x => Branch(x)) // Reproduce the Branch structure under F.
+    }
   }
 }
