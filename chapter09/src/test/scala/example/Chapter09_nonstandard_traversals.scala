@@ -258,7 +258,7 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     _ ← State.set(s + 1)
   } yield s
 
-  def zipWithIndex[A](t: T2[A]): T2[(A, Int)] = {
+  def zipWithIndexBFS[A](t: T2[A]): T2[(A, Int)] = {
     val tDecorated = travBFS { leaf: A ⇒ makeLabel.map(x ⇒ (leaf, x)) }(t)
     tDecorated.run(0).value._2
   }
@@ -267,7 +267,7 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     // Use a state monad as the applicative effect.
 
     val t2 = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
-    zipWithIndex(t2) shouldEqual Branch(Leaf((8, 0)), Branch(Branch(Leaf((3, 2)), Leaf((5, 3))), Leaf((4, 1))))
+    zipWithIndexBFS(t2) shouldEqual Branch(Leaf((8, 0)), Branch(Branch(Leaf((3, 2)), Leaf((5, 3))), Leaf((4, 1))))
 
     val t2decorated = travBFS { leaf: Int ⇒ makeLabel.map(x ⇒ (leaf, s"order = $x")) }(t2)
     val result: T2[(Int, String)] = t2decorated.run(0).value._2
