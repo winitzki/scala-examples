@@ -252,16 +252,35 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
       head.map2(t) { (lb, tb) ⇒ Two(lb, tb) }
   }
 
+  type S[X] = State[Int, X]
+  val makeLabel: S[Int] = for {
+    s ← State.get
+    _ ← State.set(s + 1)
+  } yield s
+
+  def zipWithIndex[A](t: T2[A]): T2[(A, Int)] = {
+    val tDecorated = travBFS { leaf: A ⇒ makeLabel.map(x ⇒ (leaf, x)) }(t)
+    tDecorated.run(0).value._2
+  }
+
   it should "decorate a tree using a BFS traversal with the State monad" in {
     // Use a state monad as the applicative effect.
-    type S[X] = State[Int, X]
-    val makeLabel: S[Int] = for {
-      s ← State.get
-      _ ← State.set(s + 1)
-    } yield s
+
     val t2 = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
+    zipWithIndex(t2) shouldEqual Branch(Leaf((8, 0)), Branch(Branch(Leaf((3, 2)), Leaf((5, 3))), Leaf((4, 1))))
+
     val t2decorated = travBFS { leaf: Int ⇒ makeLabel.map(x ⇒ (leaf, s"order = $x")) }(t2)
     val result: T2[(Int, String)] = t2decorated.run(0).value._2
     result shouldEqual Branch(Leaf((8, "order = 0")), Branch(Branch(Leaf((3, "order = 2")), Leaf((5, "order = 3"))), Leaf((4, "order = 1"))))
+  }
+
+  def zipWithDepth[A](initial: Int = 0): T2[A] ⇒ T2[(A, Int)] = {
+    case Leaf(a) ⇒ Leaf((a, initial))
+    case Branch(l, r) ⇒ Branch(zipWithDepth(initial + 1)(l), zipWithDepth(initial + 1)(r))
+  }
+
+  it should "implement zipWithDepth" in {
+    val t2 = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
+    zipWithDepth()(t2) shouldEqual Branch(Leaf((8, 1)), Branch(Branch(Leaf((3, 3)), Leaf((5, 3))), Leaf((4, 2))))
   }
 }
