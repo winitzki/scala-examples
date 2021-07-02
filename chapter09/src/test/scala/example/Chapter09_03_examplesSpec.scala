@@ -175,7 +175,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     implicit val travBTree: Trav[BTree] = new Trav[BTree] {
       override def seq[F[_] : WuZip : Functor, A](t: BTree[F[A]]): F[BTree[A]] = t match {
         case BLeaf(fa) ⇒ fa.map(BLeaf.apply)
-        case BBranch(bfafa) ⇒ // Have B[(F[A], F[A])], but need F[B[(A, A)]]. Use zip for F.
+        case BBranch(bfafa) ⇒ // Have bfafa: BTree[(F[A], F[A])], but need F[BTree[(A, A)]]. Use zip for F.
           seq[F, (A, A)](bfafa.map { case (fa1, fa2) ⇒ fa1 zip fa2 })
             .map(BBranch.apply)
       }
