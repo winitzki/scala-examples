@@ -66,7 +66,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     override def seq[F[_] : WuZip : Functor, A](t: Tree[F[A]]): F[Tree[A]] = t match {
       case Leaf(fa) ⇒ fa.map(Leaf.apply)
       case Branch(left, right) ⇒
-        seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y) }
+        seq[F, A](left) zip seq[F, A](right) map { case (x, y) ⇒ Branch(x, y): Tree[A] }
     }
   }
 
