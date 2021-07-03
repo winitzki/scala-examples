@@ -1,12 +1,11 @@
 package example
 
-import cats.data.{IndexedStateT, State}
-import org.scalatest.{Assertion, FlatSpec, Matchers}
-import cats.{Applicative, Eval, Monoid}
-import cats.syntax.monoid._
-import cats.syntax.applicative._
+import cats.data.State
 import cats.syntax.apply._
 import cats.syntax.functor._
+import cats.syntax.monoid._
+import cats.{Applicative, Monoid}
+import org.scalatest.{Assertion, FlatSpec, Matchers}
 
 class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
 

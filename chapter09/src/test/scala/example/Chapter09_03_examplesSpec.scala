@@ -201,4 +201,51 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
         ).map(x => Branch(x)) // Reproduce the Branch structure under F.
     }
   }
+
+  it should "implement DFS traversal using a simple State monad" in {
+    sealed trait T2[A]
+
+    final case class Leaf[A](a: A) extends T2[A]
+
+    final case class Branch[A](l: T2[A], r: T2[A]) extends T2[A]
+
+    implicit class ZipOp[F[_] : Applicative, A](fa: F[A]) {
+
+      import cats.syntax.semigroupal._
+
+      def zip[B](fb: F[B]): F[(A, B)] = fa.product(fb)
+    }
+
+    def trav[A, B, F[_] : Applicative](f: A => F[B])(t: T2[A]): F[T2[B]] = t match {
+      case Leaf(a) => f(a).map(b => Leaf(b)) // Reproduce the Leaf structure under F.
+      case Branch(t1, t2) =>
+        val (r1, r2) = (trav(f)(t1), trav(f)(t2)) // Traverse the two branches and obtain two results.
+        (r1 zip r2).map { case (b1, b2) => Branch(b1, b2) } // Reproduce the Branch structure under F.
+    }
+
+    final case class St[A](run: Int => (A, Int)) { // A State monad with internal state of type Int.
+      def flatMap[B](f: A ⇒ St[B]): St[B] = implement
+
+      def map[B](f: A ⇒ B): St[B] = implement
+    }
+    // Assume that we have defined Applicative and Functor instances for St.
+    {
+      def f[A]: A => St[(A, Int)] = ??? // Define the "decoration" function.
+    }
+
+    def f[A]: A => St[(A, Int)] = a => St { i => ((a, i), i + 1) }
+
+    implicit val applicativeSt: Applicative[St] = new Applicative[St] {
+      override def pure[A](x: A): St[A] = implement
+
+      override def ap[A, B](ff: St[A ⇒ B])(fa: St[A]): St[B] = ff.flatMap { k ⇒ fa.map(a ⇒ k(a)) }
+    }
+
+    def zipWithIndexDFS[A](tree: T2[A]): T2[(A, Int)] = {
+      val afterTraverse: St[T2[(A, Int)]] = trav[A, (A, Int), St](f)(tree)
+      afterTraverse.run(0)._1 // Run the State monad and get the result value.
+    }
+    val t2: T2[Int] = Branch(Branch(Leaf(8), Branch(Leaf(3), Leaf(5))), Leaf(4))
+    zipWithIndexDFS(t2) shouldEqual Branch(Branch(Leaf((8,0)),Branch(Leaf((3,1)),Leaf((5,2)))),Leaf((4,3)))
+  }
 }
