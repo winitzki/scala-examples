@@ -158,76 +158,75 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
    */
   sealed trait TD[A]
 
-  final case class L[A](a: List[A]) extends TD[A]
+  final case class Last[A](a: List[A]) extends TD[A]
 
-  final case class Two[A](a: List[A], tail: TD[Either[A, A]]) extends TD[A]
+  final case class More[A](a: List[A], tail: TD[Either[A, A]]) extends TD[A]
 
-  def toTreeBFS[A]: T2[A] ⇒ TD[A] = {
-    case Leaf(a) ⇒ L(List(a))
-    case Branch(l, r) ⇒ tdMerge(pushDownLeft(toTreeBFS(l)), pushDownRight(toTreeBFS(r)))
+  def t2ToTD[A]: T2[A] => TD[A] = {
+    case Leaf(a)        => Last(List(a))
+    case Branch(l, r)   => More( List(), tdMerge( addLeft(t2ToTD(l)), addRight(t2ToTD(r)) ) )
   }
 
-  def pushDownLeft[A]: TD[A] ⇒ TD[A] = td ⇒ Two(List(), mapLeft(td))
-
-  def pushDownRight[A]: TD[A] ⇒ TD[A] = td ⇒ Two(List(), mapRight(td))
-
-  // Special methods that wrap with Left and Right outside rather than inside.
-  def mapLeft[A]: TD[A] ⇒ TD[Either[A, A]] = {
-    case L(a) ⇒ L(a.map(Left.apply))
-    case Two(a, tail) ⇒ Two(a.map(Left.apply), mapLeft(tail))
+  def addLeft[A]: TD[A] ⇒ TD[Either[A, A]] = {
+    case Last(a) ⇒ Last(a.map(Left.apply))
+    case More(a, tail) ⇒ More(a.map(Left.apply), addLeft[Either[A, A]](tail))
   }
-
-  def mapRight[A]: TD[A] ⇒ TD[Either[A, A]] = {
-    case L(a) ⇒ L(a.map(Right.apply))
-    case Two(a, tail) ⇒ Two(a.map(Right.apply), mapRight(tail))
+  def addRight[A]: TD[A] ⇒ TD[Either[A, A]] = {
+    case Last(a) ⇒ Last(a.map(Right.apply))
+    case More(a, tail) ⇒ More(a.map(Right.apply), addRight[Either[A, A]](tail))
   }
-
+  /* Note: here we need wrap: [A] => A => Either[A, A], or else the code does not compile!
+  def addLayer[A](wrap: A => Either[A, A]): TD[A] => TD[Either[A, A]] = {
+    case Last(a)         => Last(a.map(wrap))
+    case More(a, tail)   => More(a.map(wrap), addLayer[Either[A, A]](wrap)(tail))
+  }
+*/
   def getLeft[A]: List[Either[A, A]] ⇒ List[A] = _.collect { case Left(x) ⇒ x }
 
   def getRight[A]: List[Either[A, A]] ⇒ List[A] = _.collect { case Right(x) ⇒ x }
 
   def filterLeft[A]: TD[Either[A, A]] ⇒ TD[A] = {
-    case L(la) ⇒ L(getLeft(la))
-    case Two(la, tail) ⇒ Two(getLeft(la), filterLeft(tail))
+    case Last(la) ⇒ Last(getLeft(la))
+    case More(la, tail) ⇒ More(getLeft(la), filterLeft(tail))
   }
 
   def filterRight[A]: TD[Either[A, A]] ⇒ TD[A] = {
-    case L(la) ⇒ L(getRight(la))
-    case Two(la, tail) ⇒ Two(getRight(la), filterRight(tail))
+    case Last(la) ⇒ Last(getRight(la))
+    case More(la, tail) ⇒ More(getRight(la), filterRight(tail))
   }
 
   def tdMerge[A](l: TD[A], r: TD[A]): TD[A] = (l, r) match {
-    case (L(la), L(lb)) ⇒ L(la ++ lb)
-    case (L(la), Two(lb, tail)) ⇒ Two(la ++ lb, tail)
-    case (Two(la, tail), L(lb)) ⇒ Two(la ++ lb, tail)
-    case (Two(la, tailA), Two(lb, tailB)) ⇒ Two(la ++ lb, tdMerge(tailA, tailB))
+    case (Last(la), Last(lb)) ⇒ Last(la ++ lb)
+    case (Last(la), More(lb, tail)) ⇒ More(la ++ lb, tail)
+    case (More(la, tail), Last(lb)) ⇒ More(la ++ lb, tail)
+    case (More(la, tailA), More(lb, tailB)) ⇒ More(la ++ lb, tdMerge(tailA, tailB))
   }
 
-  def tdToTree[A]: TD[A] ⇒ T2[A] = { // The argument is assumed to be a top-level tree.
-    case L(List(a)) ⇒ Leaf(a) // We may disallow all other cases here.
-    case Two(List(a), tail) ⇒ // Here `tail` must consist of empty lists.
+  def tdToT2[A]: TD[A] ⇒ T2[A] = { // The argument is assumed to be a top-level tree.
+    case Last(List(a)) ⇒ Leaf(a) // We may disallow all other cases here.
+    case More(List(a), tail) ⇒ // Here `tail` must consist of empty lists.
       Leaf(a)
-    case Two(List(), tail) ⇒
+    case More(List(), tail) ⇒
       val left = filterLeft(tail)
       val right = filterRight(tail)
-      Branch(tdToTree(left), tdToTree(right))
+      Branch(tdToT2(left), tdToT2(right))
   }
 
   it should "convert trees to BFS tree descriptors and back without loss of information" in {
-    val td2: TD[Int] = toTreeBFS(t2)
+    val td2: TD[Int] = t2ToTD(t2)
     td2 shouldEqual
-      Two[Int](
-        List(), Two(
-          List(Left(1)), Two(
-            List(Right(Right(2))), L(
+      More[Int](
+        List(), More(
+          List(Left(1)), More(
+            List(Right(Right(2))), Last(
               List(Right(Left(Left(3))), Right(Left(Right(4))))
             ))))
 
-    val t2new: T2[Int] = tdToTree(td2)
+    val t2new: T2[Int] = tdToT2(td2)
     t2new shouldEqual t2
 
-    val td3: TD[Int] = toTreeBFS(t3)
-    val t3new: T2[Int] = tdToTree(td3)
+    val td3: TD[Int] = t2ToTD(t3)
+    val t3new: T2[Int] = tdToT2(td3)
     t3 shouldEqual t3new
   }
 
@@ -236,19 +235,19 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     case head :: tail ⇒ f(head).map2(travList(f)(tail)) { (x, y) ⇒ x :: y }
   }
 
-  def travBFS[A, B, F[_] : Applicative](f: A ⇒ F[B])(t2: T2[A]): F[T2[B]] = travTD(f)(toTreeBFS(t2)).map(tdToTree)
+  def travBFS[A, B, F[_] : Applicative](f: A ⇒ F[B])(t2: T2[A]): F[T2[B]] = travTD(f)(t2ToTD(t2)).map(tdToT2)
 
-  def mapEither[A, B, F[_] : Applicative](f: A ⇒ F[B])(e: Either[A, A]): F[Either[B, B]] = e match {
+  def travEither[A, B, F[_] : Applicative](f: A ⇒ F[B])(e: Either[A, A]): F[Either[B, B]] = e match {
     case Left(a) ⇒ f(a).map(Left.apply)
     case Right(a) ⇒ f(a).map(Right.apply)
   }
 
   def travTD[A, B, F[_] : Applicative](f: A ⇒ F[B])(td: TD[A]): F[TD[B]] = td match {
-    case L(a) ⇒ travList(f)(a).map(L.apply)
-    case Two(a, tail) ⇒
+    case Last(a) ⇒ travList(f)(a).map(Last.apply)
+    case More(a, tail) ⇒
       val head: F[List[B]] = travList(f)(a)
-      val t: F[TD[Either[B, B]]] = travTD { x: Either[A, A] ⇒ mapEither(f)(x) }(tail)
-      head.map2(t) { (lb, tb) ⇒ Two(lb, tb) }
+      val t: F[TD[Either[B, B]]] = travTD { x: Either[A, A] ⇒ travEither(f)(x) }(tail)
+      head.map2(t) { (lb, tb) ⇒ More(lb, tb) }
   }
 
   type S[X] = State[Int, X]
