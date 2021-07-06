@@ -163,18 +163,20 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
   final case class More[A](a: List[A], tail: TD[Either[A, A]]) extends TD[A]
 
   def t2ToTD[A]: T2[A] => TD[A] = {
-    case Leaf(a)        => Last(List(a))
-    case Branch(l, r)   => More( List(), tdMerge( addLeft(t2ToTD(l)), addRight(t2ToTD(r)) ) )
+    case Leaf(a) => Last(List(a))
+    case Branch(l, r) => More(List(), tdMerge(addLeft(t2ToTD(l)), addRight(t2ToTD(r))))
   }
 
   def addLeft[A]: TD[A] ⇒ TD[Either[A, A]] = {
     case Last(a) ⇒ Last(a.map(Left.apply))
     case More(a, tail) ⇒ More(a.map(Left.apply), addLeft[Either[A, A]](tail))
   }
+
   def addRight[A]: TD[A] ⇒ TD[Either[A, A]] = {
     case Last(a) ⇒ Last(a.map(Right.apply))
     case More(a, tail) ⇒ More(a.map(Right.apply), addRight[Either[A, A]](tail))
   }
+
   /* Note: here we need wrap: [A] => A => Either[A, A], or else the code does not compile!
   def addLayer[A](wrap: A => Either[A, A]): TD[A] => TD[Either[A, A]] = {
     case Last(a)         => Last(a.map(wrap))
@@ -280,5 +282,21 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
   it should "implement zipWithDepth" in {
     val t2 = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
     zipWithDepth()(t2) shouldEqual Branch(Leaf((8, 1)), Branch(Branch(Leaf((3, 3)), Leaf((5, 3))), Leaf((4, 2))))
+  }
+
+  it should "implement printLaTeX" in {
+    def printLaTeX[A](t: T2[A])(toString: A => String): String = {
+
+      def printLaTeXSubtree: T2[A] => String = {
+        case Leaf(a)        => toString(a)
+        case Branch(l, r)   => "[ " + printLaTeXSubtree(l) + " " + printLaTeXSubtree(r) + " ]"
+      }
+
+      "\\Tree" + printLaTeXSubtree(t)
+    }
+
+    val t2: T2[Int] = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
+
+    printLaTeX(t2)(_.toString) shouldEqual "\\Tree[ 8 [ [ 3 5 ] 4 ] ]"
   }
 }
