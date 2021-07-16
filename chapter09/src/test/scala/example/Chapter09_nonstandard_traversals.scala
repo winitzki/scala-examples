@@ -4,7 +4,8 @@ import cats.data.State
 import cats.syntax.apply._
 import cats.syntax.functor._
 import cats.syntax.monoid._
-import cats.{Applicative, Monoid}
+import cats.{Applicative, Functor, Monoid}
+import io.chymyst.ch.implement
 import org.scalatest.{Assertion, FlatSpec, Matchers}
 
 class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
@@ -288,8 +289,8 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     def printLaTeX[A](t: T2[A])(toString: A => String): String = {
 
       def printLaTeXSubtree: T2[A] => String = {
-        case Leaf(a)        => toString(a)
-        case Branch(l, r)   => "[ " + printLaTeXSubtree(l) + " " + printLaTeXSubtree(r) + " ]"
+        case Leaf(a) => toString(a)
+        case Branch(l, r) => "[ " + printLaTeXSubtree(l) + " " + printLaTeXSubtree(r) + " ]"
       }
 
       "\\Tree" + printLaTeXSubtree(t)
@@ -298,5 +299,211 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     val t2: T2[Int] = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
 
     printLaTeX(t2)(_.toString) shouldEqual "\\Tree[ 8 [ [ 3 5 ] 4 ] ]"
+  }
+
+  it should "implement printLaTeX via recursion schemes" in {
+    type S[A, R] = Either[A, (R, R)]
+    final case class T2[A](run: S[A, T2[A]])
+
+    def fmapR[A, R, T](f: R => T): S[A, R] => S[A, T] = _.map { case (r1, r2) => (f(r1), f(r2)) }
+
+    def foldT2[A, Z](f: S[A, Z] => Z)(tree: T2[A]): Z = f(fmapR(foldT2(f))(tree.run))
+
+    def toLaTeX[A]: S[A, String] => String = {
+      case Left(a) => a.toString
+      case Right((l, r)) => s"[ $l $r ]"
+    }
+
+    def printLaTeX[A](tree: T2[A]): String = "\\Tree" + foldT2[A, String](toLaTeX)(tree)
+
+    val t2: T2[Int] = T2(Right((T2(Right((T2(Left(8)), T2(Right((T2(Left(3)), T2(Left(5)))))))), T2(Left(4)))))
+
+    printLaTeX(t2) shouldEqual "\\Tree[ [ 8 [ 3 5 ] ] 4 ]"
+  }
+
+  sealed trait NEL[A] {
+    def mkString(suffix: String): String
+
+    def map[B](f: A ⇒ B): NEL[B]
+
+    def length: Int
+
+    def fold(update: (A, A) ⇒ A): A
+  }
+
+  final case class One[A](a: A) extends NEL[A] {
+    override def mkString(suffix: String): String = a.toString
+
+    override def map[B](f: A ⇒ B): NEL[B] = One(f(a))
+
+    override def length: Int = 1
+
+    override def fold(update: (A, A) ⇒ A): A = a
+  }
+
+  final case class Two[A](head: A, tail: NEL[A]) extends NEL[A] {
+    override def mkString(suffix: String): String = head.toString + suffix + tail.mkString(suffix)
+
+    override def map[B](f: A ⇒ B): NEL[B] = Two(f(head), tail map f)
+
+    override def length: Int = 1 + tail.length
+
+    override def fold(update: (A, A) ⇒ A): A = update(head, tail.fold(update))
+  }
+
+  object NEL {
+    def apply[A](head: A, tail: A*): NEL[A] = tail.toList match {
+      case Nil ⇒ One(head)
+      case hd :: tl ⇒ Two(head, NEL.apply(hd, tl: _*))
+    }
+
+    def max[A](nel: NEL[A])(implicit ord: Ordering[A]): A = nel.fold(ord.max)
+  }
+
+  implicit class NelOps[A](nel: NEL[A]) {
+    def max(implicit ord: Ordering[A]): A = NEL.max(nel)
+  }
+
+  sealed trait TreeN[A]
+
+  object TreeN {
+    final case class Leaf[A](a: A) extends TreeN[A]
+
+    final case class Branch[A](ts: NEL[TreeN[A]]) extends TreeN[A]
+  }
+
+  it should "implement several printLaTeX functions via recursion schemes" in {
+    type S1[A, R] = Option[(A, R)] // For List.
+    type S2[A, R] = Either[A, (A, R)] // For NEL.
+    type S3[A, R] = Either[A, NEL[R]] // For TreeN.
+    final case class Fix[S[_, _], A](unfix: S[A, Fix[S, A]])
+
+    // Define some values of these types.
+    // Equivalent to List(1, 2, 3)
+    val x1 = Fix[S1, Int](Some((1, Fix[S1, Int](Some((2, Fix[S1, Int](Some((3, Fix[S1, Int](None))))))))))
+
+    // Equivalent to NEL(1, 2, 3)
+    val x2 = Fix[S2, Int](Right((1, Fix[S2, Int](Right((2, Fix[S2, Int](Left(3))))))))
+
+    // Equivalent to the tree t2 used earlier.
+    val x3 = Fix[S3, Int](Right(NEL(Fix[S3, Int](Right(NEL(Fix[S3, Int](Left(8)), Fix[S3, Int](Right(NEL(Fix[S3, Int](Left(3)), Fix[S3, Int](Left(5)))))))), Fix[S3, Int](Left(4)))))
+
+    implicit def functorS1[X]: Functor[S1[X, *]] = new Functor[S1[X, *]] {
+      override def map[A, B](fa: S1[X, A])(f: A ⇒ B): S1[X, B] = implement
+    }
+
+    implicit def functorS2[X]: Functor[S2[X, *]] = new Functor[S2[X, *]] {
+      override def map[A, B](fa: S2[X, A])(f: A ⇒ B): S2[X, B] = implement
+    }
+
+    implicit def functorS3[X]: Functor[S3[X, *]] = new Functor[S3[X, *]] {
+      override def map[A, B](fa: S3[X, A])(f: A ⇒ B): S3[X, B] = fa match {
+        case Left(x) ⇒ Left(x)
+        case Right(nel) ⇒ Right(nel.map(f))
+      }
+    }
+
+    import cats.syntax.functor._
+    def fold[A, Z, S[_, _]](f: S[A, Z] => Z)(t: Fix[S, A])(implicit fs: Functor[S[A, *]]): Z =
+      f(t.unfix.map(fold(f)))
+
+    def toLaTeX1[A]: S1[A, String] => String = {
+      case None => "Nil"
+      case Some((head, tail)) => head.toString + ", " + tail
+    }
+
+    def toLaTeX2[A]: S2[A, String] => String = {
+      case Left(a) => a.toString
+      case Right((head, tail)) => head.toString + ", " + tail
+    }
+
+    def toLaTeX3[A]: S3[A, String] => String = {
+      case Left(a) => a.toString
+      case Right(nel) => "[ " + nel.mkString(" ") + " ]" // Assume mkString() is defined for NEL.
+    }
+
+    def listToLaTeX[A](t: Fix[S1, A]): String = "[ " + fold[A, String, S1](toLaTeX1)(t) + " ]"
+
+    def nelToLaTeX[A](t: Fix[S2, A]): String = "[ " + fold[A, String, S2](toLaTeX2)(t) + " ]"
+
+    def treeNToLaTeX[A](t: Fix[S3, A]): String = "\\Tree" + fold[A, String, S3](toLaTeX3)(t)
+
+    listToLaTeX(x1) shouldEqual "[ 1, 2, 3, Nil ]"
+
+    nelToLaTeX(x2) shouldEqual "[ 1, 2, 3 ]"
+
+    treeNToLaTeX(x3) shouldEqual "\\Tree[ [ 8 [ 3 5 ] ] 4 ]"
+  }
+
+  it should "define and test foldTreeN" in {
+    type S3[A, R] = Either[A, NEL[R]] // For TreeN.
+
+    def foldT2[A, Z](f: Either[A, (Z, Z)] => Z): T2[A] => Z = {
+      case Leaf(a) => f(Left(a))
+      case Branch(l, r) => f((Right(foldT2(f)(l), foldT2(f)(r))))
+    }
+
+    import TreeN.{Leaf ⇒ LeafN, Branch ⇒ BranchN}
+
+    def foldTreeN[A, Z](f: Either[A, NEL[Z]] => Z): TreeN[A] => Z = {
+      case LeafN(a) => f(Left(a))
+      case BranchN(ts) => f(Right(ts.map(foldTreeN(f))))
+    }
+
+    def toLaTeX3[A]: S3[A, String] => String = {
+      case Left(a) => a.toString
+      case Right(nel) => "[ " + nel.mkString(" ") + " ]" // Assume mkString() is defined for NEL.
+    }
+
+    def printLaTeX[A](tree: TreeN[A]): String = "\\Tree" + foldTreeN[A, String](toLaTeX3)(tree)
+
+    val x3a: TreeN[Int] = BranchN(NEL(LeafN(8), BranchN(NEL(BranchN(NEL(LeafN(3), LeafN(5))), LeafN(4)))))
+    printLaTeX(x3a) shouldEqual "\\Tree[ 8 [ [ 3 5 ] 4 ] ]"
+    val x3b: TreeN[Int] = BranchN(NEL(BranchN(NEL(LeafN(8), BranchN(NEL(LeafN(3), LeafN(5))))), LeafN(4)))
+    printLaTeX(x3b) shouldEqual "\\Tree[ [ 8 [ 3 5 ] ] 4 ]"
+
+    def maxBranching[A]: TreeN[A] => Int = foldTreeN[A, Int] {
+      case Left(_) => 0
+      case Right(nel) => math.max(nel.max, nel.length) // The `max` and `length` methods must be defined.
+    }
+
+    maxBranching(x3a) shouldEqual 2
+    maxBranching(x3b) shouldEqual 2
+  }
+
+  it should "define and test unfoldList" in {
+
+    type S[A, R] = Option[(A, R)]
+
+    def unfoldList[A, Z](f: Z => S[A, Z])(init: Z): List[A] = f(init) match {
+      case None => Nil
+      case Some((a, z)) => a :: unfoldList(f)(z)
+    }
+
+    def f(n: Long): Long => Option[(Long, Long)] = { z =>
+      if (z >= n) None else Some((z, z * 2))
+    }
+
+    def powersOf2UpTo(n: Long): List[Long] = unfoldList(f(n))(1)
+
+    powersOf2UpTo(1000) shouldEqual List(1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
+  }
+
+  it should "define and test unfoldT2" in {
+    type S[A, R] = Either[A, (R, R)]
+
+    def unfoldT2[A, Z](f: Z => S[A, Z])(init: Z): T2[A] = f(init) match {
+      case Left(a) => Leaf(a)
+      case Right((z1, z2)) => Branch(unfoldT2(f)(z1), unfoldT2(f)(z2))
+    }
+
+    type Z = (Int, Int)
+
+    def fullBinaryTree(n: Int): T2[Int] = unfoldT2[Int, Z] {
+      case (1, i) => Left(i)
+      case (d, i) => Right(((d / 2, i), (d / 2, i + d / 2)))
+    }((1 << n, 0))
+
+    fullBinaryTree(2) shouldEqual Branch(Branch(Leaf(0), Leaf(1)), Branch(Leaf(2), Leaf(3)))
   }
 }
