@@ -497,19 +497,39 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
       case Right((z1, z2)) => Branch(unfoldT2(f)(z1), unfoldT2(f)(z2))
     }
 
-    type Z = (Int, Int)
-
-
-
     def fullBinaryTree(n: Int): T2[Int] = {
+      type Z = (Int, Int)
       val init: Z = (0, 1 << n)
       val f: Z => Either[Int, (Z, Z)] = {
-        case (k, m) if m == 1   => Left(k)
-        case (k, m)             => Right(((k, m / 2), (k + m / 2, m / 2)))
+        case (k, m) if m == 1 => Left(k)
+        case (k, m) => Right(((k, m / 2), (k + m / 2, m / 2)))
       }
       unfoldT2[Int, Z](f)(init)
     }
 
     fullBinaryTree(2) shouldEqual Branch(Branch(Leaf(0), Leaf(1)), Branch(Leaf(2), Leaf(3)))
+  }
+
+  it should "define and test evenOdd for T2" in {
+    type S[A, R] = Either[A, (R, R)]
+
+    def unfoldT2[A, Z](f: Z => S[A, Z])(init: Z): T2[A] = f(init) match {
+      case Left(a) => Leaf(a)
+      case Right((z1, z2)) => Branch(unfoldT2(f)(z1), unfoldT2(f)(z2))
+    }
+
+    def evenOdd(n: Int): T2[Int] = {
+      type Z = (Int, Boolean)
+      val init: Z = (n, true)
+      val f: Z => Either[Int, (Z, Z)] = {
+        case (n, true) if n > 0 && n % 2 == 0 => Right(((n - 1, true), (n, false)))
+        case (n, true) if n > 0 && n % 2 == 1 => Right(((n, false), (n - 1, true)))
+        case (n, _) => Left(n)
+      }
+      unfoldT2[Int, Z](f)(init)
+    }
+
+    evenOdd(3) shouldEqual Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2)))
+    evenOdd(4) shouldEqual Branch(Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2))), Leaf(4))
   }
 }
