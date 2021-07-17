@@ -499,10 +499,16 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
 
     type Z = (Int, Int)
 
-    def fullBinaryTree(n: Int): T2[Int] = unfoldT2[Int, Z] {
-      case (1, i) => Left(i)
-      case (d, i) => Right(((d / 2, i), (d / 2, i + d / 2)))
-    }((1 << n, 0))
+
+
+    def fullBinaryTree(n: Int): T2[Int] = {
+      val init: Z = (0, 1 << n)
+      val f: Z => Either[Int, (Z, Z)] = {
+        case (k, m) if m == 1   => Left(k)
+        case (k, m)             => Right(((k, m / 2), (k + m / 2, m / 2)))
+      }
+      unfoldT2[Int, Z](f)(init)
+    }
 
     fullBinaryTree(2) shouldEqual Branch(Branch(Leaf(0), Leaf(1)), Branch(Leaf(2), Leaf(3)))
   }
