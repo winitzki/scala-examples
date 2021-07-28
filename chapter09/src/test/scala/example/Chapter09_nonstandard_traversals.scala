@@ -372,11 +372,12 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     final case class Branch[A](ts: NEL[TreeN[A]]) extends TreeN[A]
   }
 
+  final case class Fix[S[_, _], A](unfix: S[A, Fix[S, A]])
+
   it should "implement several printLaTeX functions via recursion schemes" in {
     type S1[A, R] = Option[(A, R)] // For List.
     type S2[A, R] = Either[A, (A, R)] // For NEL.
     type S3[A, R] = Either[A, NEL[R]] // For TreeN.
-    final case class Fix[S[_, _], A](unfix: S[A, Fix[S, A]])
 
     // Define some values of these types.
     // Equivalent to List(1, 2, 3)
@@ -519,17 +520,47 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     }
 
     def evenOdd(n: Int): T2[Int] = {
-      type Z = (Int, Boolean)
-      val init: Z = (n, true)
+      final case class Z(startAt: Int, makeLeaf: Boolean)
+      val init = Z(startAt = n, makeLeaf = false)
       val f: Z => Either[Int, (Z, Z)] = {
-        case (n, true) if n > 0 && n % 2 == 0 => Right(((n - 1, true), (n, false)))
-        case (n, true) if n > 0 && n % 2 == 1 => Right(((n, false), (n - 1, true)))
-        case (n, _) => Left(n)
+        case Z(n, false) if n > 0 && n % 2 == 0 => Right((Z(n - 1, false), Z(n, true)))
+        case Z(n, false) if n > 0 && n % 2 == 1 => Right((Z(n, true), Z(n - 1, false)))
+        case Z(n, _) => Left(n) // Make a leaf when n == 0 or makeLeaf == true.
       }
       unfoldT2[Int, Z](f)(init)
     }
 
     evenOdd(3) shouldEqual Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2)))
     evenOdd(4) shouldEqual Branch(Branch(Leaf(3), Branch(Branch(Leaf(1), Leaf(0)), Leaf(2))), Leaf(4))
+  }
+
+  it should "use unfold to generate an unbounded tree" in {
+    type S[A, R] = Either[A, Unit => (R, R)]
+    sealed trait UT[A]
+    final case class ULeaf[A](a: A) extends UT[A]
+    final case class UBranch[A](run: Unit ⇒ (UT[A], UT[A])) extends UT[A]
+
+    def unfoldUT[A, Z](f: Z ⇒ S[A, Z])(init: Z): UT[A] = f(init) match {
+      case Left(a) ⇒ ULeaf(a)
+      case Right(func) ⇒ UBranch { _ ⇒ // Important to delay the evaluation of func().
+        val (z1, z2) = func(())
+        (unfoldUT(f)(z1), unfoldUT(f)(z2))
+      }
+    }
+
+    val tree1toInf = unfoldUT[Int, (Int, Boolean)] { case (z, makeLeaf) ⇒
+      if (makeLeaf) Left(z) else Right(_ ⇒ ((z + 1, true), (z + 1, false)))
+    }((0, false))
+
+    def toT2[A](default: A, maxDepth: Int = 0): UT[A] ⇒ T2[A] = {
+      case ULeaf(a) ⇒ Leaf(a)
+      case UBranch(func) ⇒ if (maxDepth > 0) {
+        val (z1, z2) = func(())
+        Branch(toT2(default, maxDepth - 1)(z1), toT2(default, maxDepth - 1)(z2))
+      } else Leaf(default)
+    }
+
+    toT2(-1, 3)(tree1toInf) shouldEqual Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Leaf(-1))))
+
   }
 }
