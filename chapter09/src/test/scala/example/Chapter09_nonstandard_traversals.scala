@@ -18,6 +18,13 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
 
   final case class Branch[A](l: T2[A], r: T2[A]) extends T2[A]
 
+  implicit class FunctorT2[A](t2: T2[A]) {
+    def map[B](f: A ⇒ B): T2[B] = t2 match {
+      case Leaf(a) ⇒ Leaf(f(a))
+      case Branch(l, r) ⇒ Branch(l map f, r map f)
+    }
+  }
+
   def foldMap[A, M: Monoid](f: A => M)(t: T2[A]): M = t match {
     case Leaf(a) => f(a)
     case Branch(t1, t2) => foldMap(f)(t1) |+| foldMap(f)(t2)
@@ -253,8 +260,8 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
       head.map2(t) { (lb, tb) ⇒ More(lb, tb) }
   }
 
-  type S[X] = State[Int, X]
-  val makeLabel: S[Int] = for {
+  type St[X] = State[Int, X]
+  val makeLabel: St[Int] = for {
     s ← State.get
     _ ← State.set(s + 1)
   } yield s
@@ -561,6 +568,32 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     }
 
     toT2(-1, 3)(tree1toInf) shouldEqual Branch(Leaf(1), Branch(Leaf(2), Branch(Leaf(3), Leaf(-1))))
+
+  }
+
+  it should "implement zipWithDepth as a traversal with recursion scheme" in {
+    type S[A, R] = Either[A, (R, R)] // Recursion scheme for T2.
+
+    def travS[A, B, F[_]](f: S[A, F[T2[B]]] => F[T2[B]]): T2[A] => F[T2[B]] = {
+      case Leaf(a) => f(Left(a))
+      case Branch(l, r) => f(Right((travS(f)(l), travS(f)(r))))
+    }
+    //
+    //    def makeLabel[A](a: A): St[(A, Int)] = for {
+    //      s ← State.get
+    //      _ ← State.set(s + 1)
+    //    } yield (a, s)
+
+    travS[Int, (Int, Int), St] {
+      case Left(a) ⇒ makeLabel.map(s ⇒ Leaf((a, s)))
+      case Right((l, r)) ⇒ for {
+        _ ← makeLabel // Increment depth by 1.
+        s ← State.get
+        x ← l // Start both left and right subtrees at the same depth.
+        _ ← State.set(s)
+        y ← r
+      } yield Branch(x, y)
+    }(t2).run(0).value._2 shouldEqual Branch(Leaf((1, 1)), Branch(Branch(Leaf((3, 3)), Leaf((4, 3))), Leaf((2, 2))))
 
   }
 }
