@@ -578,11 +578,6 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
       case Leaf(a) => f(Left(a))
       case Branch(l, r) => f(Right((travS(f)(l), travS(f)(r))))
     }
-    //
-    //    def makeLabel[A](a: A): St[(A, Int)] = for {
-    //      s ← State.get
-    //      _ ← State.set(s + 1)
-    //    } yield (a, s)
 
     travS[Int, (Int, Int), St] {
       case Left(a) ⇒ makeLabel.map(s ⇒ Leaf((a, s)))
