@@ -226,6 +226,8 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     final case class St[A](run: Int => (A, Int)) { // A State monad with internal state of type Int.
       def flatMap[B](f: A ⇒ St[B]): St[B] = implement
 
+//      def zip[B](sb: St[B]): St[(A, B)] = implement // 2 inequivalent implementations!
+
       def map[B](f: A ⇒ B): St[B] = implement
     }
     // Assume that we have defined Applicative and Functor instances for St.
@@ -245,7 +247,8 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
       val afterTraverse: St[T2[(A, Int)]] = trav[A, (A, Int), St](f)(tree)
       afterTraverse.run(0)._1 // Run the State monad and get the result value.
     }
+
     val t2: T2[Int] = Branch(Branch(Leaf(8), Branch(Leaf(3), Leaf(5))), Leaf(4))
-    zipWithIndexDFS(t2) shouldEqual Branch(Branch(Leaf((8,0)),Branch(Leaf((3,1)),Leaf((5,2)))),Leaf((4,3)))
+    zipWithIndexDFS(t2) shouldEqual Branch(Branch(Leaf((8, 0)), Branch(Leaf((3, 1)), Leaf((5, 2)))), Leaf((4, 3)))
   }
 }

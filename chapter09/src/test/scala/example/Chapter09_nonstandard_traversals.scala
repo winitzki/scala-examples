@@ -571,7 +571,7 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
 
   }
 
-  it should "implement zipWithDepth as a traversal with recursion scheme" in {
+  it should "implement zipWithDepth as a traversal with recursion scheme and cats.state" in {
     type S[A, R] = Either[A, (R, R)] // Recursion scheme for T2.
 
     def travS[A, B, F[_]](f: S[A, F[T2[B]]] => F[T2[B]]): T2[A] => F[T2[B]] = {
@@ -590,5 +590,41 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
       } yield Branch(x, y)
     }(t2).run(0).value._2 shouldEqual Branch(Leaf((1, 1)), Branch(Branch(Leaf((3, 3)), Leaf((4, 3))), Leaf((2, 2))))
 
+  }
+
+  it should "implement zipWithDepth as a traversal with recursion scheme and simple State monad" in {
+    type S[A, R] = Either[A, (R, R)] // Recursion scheme for T2.
+
+    def travS[A, B, F[_]](f: S[A, F[T2[B]]] => F[T2[B]]): T2[A] => F[T2[B]] = {
+      case Leaf(a) => f(Left(a))
+      case Branch(l, r) => f(Right((travS(f)(l), travS(f)(r))))
+    }
+
+    final case class St[A](run: Int => (A, Int)) { // A State monad with internal state of type Int.
+
+      import io.chymyst.ch.implement
+
+      def flatMap[B](f: A => St[B]): St[B] = implement
+
+      def map[B](f: A => B): St[B] = implement
+    }
+
+    def incrementAndGet: St[Int] = St(s => (s + 1, s + 1)) // Increment the current state value.
+
+    def get: St[Int] = St(s => (s, s)) // Fetch the current state value.
+
+    def set(s: Int): St[Unit] = St(_ => ((), s)) // Set the state, ignore previous state value.
+
+    def zipWithDepth[A](tree: T2[A]): T2[(A, Int)] = travS[A, (A, Int), St] {
+      case Left(a)         => for { s <- get } yield Leaf((a, s)) // Put the current depth into the Leaf value.
+      case Right((l, r))   => for {
+        s <- incrementAndGet // Read the current depth after incrementing it.
+        x <- l // Traverse the left branch starting from the new current depth.
+        _ <- set(s) // Set the same depth before traversing the right branch.
+        y <- r        // Traverse the right branch.
+      } yield Branch(x, y)
+    }(tree).run(0)._1
+    val t2: T2[Int] = Branch(Branch(Leaf(8), Branch(Leaf(3), Leaf(5))), Leaf(4))
+    zipWithDepth(t2) shouldEqual Branch(Leaf((8, 1)), Branch(Branch(Leaf((3, 3)), Leaf((5, 3))), Leaf((4, 2))))
   }
 }
