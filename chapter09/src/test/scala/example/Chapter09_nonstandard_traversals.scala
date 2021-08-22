@@ -191,18 +191,18 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
     case More(a, tail)   => More(a.map(wrap), addLayer[Either[A, A]](wrap)(tail))
   }
 */
-  def getLeft[A]: List[Either[A, A]] ⇒ List[A] = _.collect { case Left(x) ⇒ x }
+  def removeLeft[A]: List[Either[A, A]] ⇒ List[A] = _.collect { case Left(x) ⇒ x }
 
-  def getRight[A]: List[Either[A, A]] ⇒ List[A] = _.collect { case Right(x) ⇒ x }
+  def removeRight[A]: List[Either[A, A]] ⇒ List[A] = _.collect { case Right(x) ⇒ x }
 
   def filterLeft[A]: TD[Either[A, A]] ⇒ TD[A] = {
-    case Last(la) ⇒ Last(getLeft(la))
-    case More(la, tail) ⇒ More(getLeft(la), filterLeft(tail))
+    case Last(la) ⇒ Last(removeLeft(la))
+    case More(la, tail) ⇒ More(removeLeft(la), filterLeft(tail))
   }
 
   def filterRight[A]: TD[Either[A, A]] ⇒ TD[A] = {
-    case Last(la) ⇒ Last(getRight(la))
-    case More(la, tail) ⇒ More(getRight(la), filterRight(tail))
+    case Last(la) ⇒ Last(removeRight(la))
+    case More(la, tail) ⇒ More(removeRight(la), filterRight(tail))
   }
 
   def tdMerge[A](l: TD[A], r: TD[A]): TD[A] = (l, r) match {

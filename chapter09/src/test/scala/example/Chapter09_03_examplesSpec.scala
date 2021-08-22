@@ -101,7 +101,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     _ ← State.set(s + 1)
   } yield s
 
-  def wuzipFromState[St]: WuZip[State[St, ?]] = new WuZip[State[St, ?]] {
+  def wuzipFromState[St]: WuZip[State[St, *]] = new WuZip[State[St, *]] {
     override def wu: State[St, Unit] = State.pure(())
 
     override def zip[A, B](fa: State[St, A], fb: State[St, B]): State[St, (A, B)] = for {
@@ -157,7 +157,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     scanLeft(t2)(0) { (s, i) ⇒ i + s.length } shouldEqual Branch(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))), Leaf(4))
   }
 
-  it should "implement traversal for a non-monadic rigid tree" in {
+  it should "implement traversal for a non-monadic perfect-shaped tree" in {
     sealed trait BTree[A]
 
     final case class BLeaf[A](x: A) extends BTree[A]
@@ -226,7 +226,7 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     final case class St[A](run: Int => (A, Int)) { // A State monad with internal state of type Int.
       def flatMap[B](f: A ⇒ St[B]): St[B] = implement
 
-//      def zip[B](sb: St[B]): St[(A, B)] = implement // 2 inequivalent implementations!
+      //      def zip[B](sb: St[B]): St[(A, B)] = implement // 2 inequivalent implementations!
 
       def map[B](f: A ⇒ B): St[B] = implement
     }
@@ -251,4 +251,71 @@ class Chapter09_03_examplesSpec extends FlatSpec with Matchers {
     val t2: T2[Int] = Branch(Branch(Leaf(8), Branch(Leaf(3), Leaf(5))), Leaf(4))
     zipWithIndexDFS(t2) shouldEqual Branch(Branch(Leaf((8, 0)), Branch(Leaf((3, 1)), Leaf((5, 2)))), Leaf((4, 3)))
   }
+
+  it should "implement scanLeft via traverse with simple State monad" in {
+    trait Traversable[L[_]] {
+      def trav[A, B, F[_] : Applicative : Functor](f: A => F[B])(la: L[A]): F[L[B]]
+    }
+    implicit class TraversableOps[L[_] : Traversable, A](la: L[A]) {
+      def traverse[B, F[_] : Applicative : Functor](f: A => F[B]): F[L[B]] =
+        implicitly[Traversable[L]].trav(f)(la)
+    }
+    // Assume that the type constructor L[_] and the corresponding trav() are defined.
+    final case class State[Z, A](run: Z => (A, Z)) {
+      def map[B](f: A ⇒ B): State[Z, B] = implement
+
+      def flatMap[B](f: A ⇒ State[Z, B]): State[Z, B] = implement
+    }
+    // Assume that the State monad has Applicative and Functor instances in scope.
+
+    implicit def applicativeState[Z]: Applicative[State[Z, *]] = new Applicative[State[Z, *]] {
+      override def pure[A](x: A): State[Z, A] = implement
+
+      override def ap[A, B](ff: State[Z, A ⇒ B])(fa: State[Z, A]): State[Z, B] = for {
+        func ← ff
+        oldVal ← fa
+      } yield func(oldVal)
+    }
+
+    def accum[A, Z](a: A, f: (A, Z) => Z): State[Z, Z] = State { z =>
+      val newZ = f(a, z) // Update the internal state using `f`.
+      (newZ, newZ) // Store the internal state, and also return it as a result value.
+    }
+
+    implicit class TraversableScanOps[L[_] : Traversable, A](la: L[A]) {
+      def scanLeft[Z](init: Z)(f: (A, Z) ⇒ Z): L[Z] = la.traverse(a ⇒ accum(a, f)).run(init)._1
+    }
+
+    sealed trait T2[A]
+
+    final case class Leaf[A](a: A) extends T2[A]
+
+    final case class Branch[A](l: T2[A], r: T2[A]) extends T2[A]
+
+    implicit class ZipOp[F[_] : Applicative, A](fa: F[A]) {
+
+      import cats.syntax.semigroupal._
+
+      def zip[B](fb: F[B]): F[(A, B)] = fa.product(fb)
+    }
+
+    def travT2[A, B, F[_] : Applicative](f: A => F[B])(t: T2[A]): F[T2[B]] = t match {
+      case Leaf(a) => f(a).map(b => Leaf(b)) // Reproduce the Leaf structure under F.
+      case Branch(t1, t2) =>
+        val (r1, r2) = (travT2(f)(t1), travT2(f)(t2)) // Traverse the two branches and obtain two results.
+        (r1 zip r2).map { case (b1, b2) => Branch(b1, b2) } // Reproduce the Branch structure under F.
+    }
+
+    // To test this, use a DFS traversal for T2 trees to implement zipWithIndex.
+    implicit val traversableT2: Traversable[T2] = new Traversable[T2] {
+      override def trav[A, B, F[_] : Applicative : Functor](f: A ⇒ F[B])(la: T2[A]): F[T2[B]] = travT2(f)(la)
+    }
+
+    def zipWithIndexDFS[A]: T2[A] ⇒ T2[(A, Int)] = _.scanLeft[(A, Int)]((null.asInstanceOf[A], -1)) { case (a, (_, i)) ⇒ (a, i + 1) }
+
+    val t2 = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
+
+    zipWithIndexDFS(t2) shouldEqual Branch(Leaf((8, 0)), Branch(Branch(Leaf((3, 1)), Leaf((5, 2))), Leaf((4, 3))))
+  }
+
 }
