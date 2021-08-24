@@ -2,25 +2,29 @@ let Prelude = https://prelude.dhall-lang.org/v20.2.0/package.dhall
 
 let Arith = ./naturals.dhall
 
-let Void = forall (x: Type) -> x -- there can be no values of type Void
+let div: Natural -> Natural -> Natural = \(x: Natural) -> \(y: Natural) -> Prelude.Optional.default Natural 0 (Arith.div x y)
 
-let NonzeroTypeWrapper = < Zero: Void | Nonzero: Natural >
+let Unit: Type = < Unit >
 
-let WrapNonzero: Natural -> NonzeroTypeWrapper = \(x: Natural) -> if Prelude.Natural.isZero x then NonzeroTypeWrapper.Zero Void else NonzeroTypeWrapper.Nonzero Natural
+let unit = Unit.Unit : Unit
 
--- does not work
+-- There can be no values of type Void.
+let Void = forall (x: Type) -> x
 
-let isNonzero: forall (y: Natural) -> WrapNonzero (y + 1) = \(y: Natural) ->
-    let z: NonzeroTypeWrapper.Nonzero (y + 1) = y
-    in
-    z
+-- Having a value of type Void is enough to produce a value of any type.
+let absurd: forall (t: Type) -> Void -> t = \(t: Type) -> \(v: Void) -> v t
+
+let Nonzero: Natural -> Type = \(y: Natural) -> if Natural/isZero y then Void else Unit
+
+let test = unit : Nonzero 1
 
 -- division where we require the divisor to be nonzero
-let divide: Natural -> (y: Natural) -> WrapNonzero y -> Natural =
-  \(x: Natural) -> \(y: Natural) -> \(nonzero: WrapNonzero y) ->
-    Prelude.Optional.default Natural 0 (Arith.div x y)
+let divide: Natural -> forall (y: Natural) -> Nonzero y -> Natural =
+  \(x: Natural) -> \(y: Natural) -> \(nonzero: Nonzero y) ->
+   div x y
 
-let test = assert : divide 40 20 (isNonzero 19) === 2
+let test = assert : divide 40 20 unit === 2
+-- let test = assert : divide 40 0 unit === 2   -- This fails to typecheck!
 
 
 in {divide}
