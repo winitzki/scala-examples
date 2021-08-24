@@ -1,6 +1,6 @@
 -- Implement some arithmetical operations for Natural numbers.
 
--- Division with remainder, integer binary logarithm, integer square root, greatest common divisor, primality test.
+-- Division with remainder, integer binary logarithm, integer square root, integer power, greatest common divisor.
 
 let Prelude = https://prelude.dhall-lang.org/v20.2.0/package.dhall
 
