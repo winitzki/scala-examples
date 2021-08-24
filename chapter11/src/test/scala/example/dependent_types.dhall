@@ -26,5 +26,13 @@ let divide: Natural -> forall (y: Natural) -> Nonzero y -> Natural =
 let test = assert : divide 40 20 unit === 2
 -- let test = assert : divide 40 0 unit === 2   -- This fails to typecheck!
 
+{- This does not work:
+let xdiv: forall (y: Natural) -> Nonzero y -> Natural = \(y: Natural) -> \(x: Nonzero y) ->
+   if Natural/isZero y then absurd Natural x else div x y
+
+let test = assert : xdiv 20 40 === 2
+-- let test = assert : xdiv 0 40 === 2
+
+-}
 
 in {divide}
