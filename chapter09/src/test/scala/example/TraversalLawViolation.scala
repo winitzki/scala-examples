@@ -85,6 +85,20 @@ class TraversalLawViolation extends FlatSpec with Matchers {
   val f1f2: Int ⇒ F[Int] = i ⇒ F(f1(i).map(f2))
 
   {
+    val result1: F[L[Int]] = trav2L[Int, Int, F](f1f2)(l)
+    val result2: F[L[Int]] = {
+      val x: S[(Int, Int)] = trav2L[Int, Int, S](f1)(l)
+      val y: S[S[(Int, Int)]] = x.map(trav2L[Int, Int, S](f2))
+      F(y)
+    }
+    result1.eval(0, 0) should not be result2.eval(0, 0)
+    result1.eval(0, 0) shouldEqual (((3, 7), 2, 7))
+    result2.eval(0, 0) shouldEqual (((4, 8), 2, 8))
+    trav2L[Int, Int, S](f1)(l).run(0) shouldEqual (((2, 2), 2))
+    trav2L[Int, Int, S](f2)((2, 2)).run(0) shouldEqual (((4, 8), 8))
+  }
+
+  {
     val result1: F[L[Int]] = travL[Int, Int, F](f1f2)(l)
     val result2: F[L[Int]] = {
       val x: S[(Int, Int)] = travL[Int, Int, S](f1)(l)
@@ -96,20 +110,6 @@ class TraversalLawViolation extends FlatSpec with Matchers {
     result2.eval(0, 0) shouldEqual (((1, 2), 1, 2))
     travL[Int, Int, S](f1)(l).run(0) shouldEqual (((1, 1), 1))
     travL[Int, Int, S](f2)((1, 1)).run(0) shouldEqual (((1, 2), 2))
-  }
-
-  {
-    val result1: F[L[Int]] = trav2L[Int, Int, F](f1f2)(l)
-    val result2: F[L[Int]] = {
-      val x: S[(Int, Int)] = trav2L[Int, Int, S](f1)(l)
-      val y: S[S[(Int, Int)]] = x.map(trav2L[Int, Int, S](f2))
-      F(y)
-    }
-    result1.eval(0, 0) shouldEqual (((3, 7), 2, 7))
-    result2.eval(0, 0) shouldEqual (((4, 8), 2, 8))
-    result1.eval(0, 0) should not be result2.eval(0, 0)
-    trav2L[Int, Int, S](f1)(l).run(0) shouldEqual (((2, 2), 2))
-    trav2L[Int, Int, S](f2)((2, 2)).run(0) shouldEqual (((4, 8), 8))
   }
 
 }
