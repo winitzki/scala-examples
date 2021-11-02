@@ -108,7 +108,8 @@ class TraversalLawViolation extends FlatSpec with Matchers {
       val y: S[S[(Int, Int)]] = x.map(trav2L[Int, Int, S](f2))
       F(y)
     }
-    result1.eval(0, 0) shouldEqual result2.eval(0, 0)
+    result1.eval(0, 0) shouldEqual (((3, 1), 0, 0))
+    result2.eval(0, 0) shouldEqual (((4, 0), 0, 0))
   }
 
 }
