@@ -3,7 +3,7 @@ package example
 import cats.Functor
 import cats.syntax.functor._
 import org.scalatest.{FlatSpec, Matchers}
-import io.chymyst.ch._
+import io.chymyst.ch.implement
 
 trait Zippable[F[_]] {
   def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)]
@@ -28,7 +28,7 @@ class TraversalLawViolation extends FlatSpec with Matchers {
   type L[A] = (A, A) // A very simple but nontrivial traversable functor.
 
   implicit val functorL: Functor[L] = new Functor[L] {
-    override def map[A, B](fa: (A, A))(f: A ⇒ B): (B, B) = (f(fa._1), f(fa._2))
+    override def map[A, B](fa: (A, A))(f: A ⇒ B): (B, B) = implement
   }
 
   import Zippable.ZipOp
@@ -39,8 +39,8 @@ class TraversalLawViolation extends FlatSpec with Matchers {
     case (l1, l2) ⇒ l1 zip l2
   }
 
-  def trav2L[A, B, F[_] : Zippable : Functor](f: A ⇒ F[B])(la: L[A]): F[L[B]] = la.map(f) match {
-    case (l1, l2) ⇒ (l1 zipRight l1) zip (l2 zipRight l2)
+  def trav2[A, B, F[_] : Zippable : Functor](f: A ⇒ F[B])(la: L[A]): F[L[B]] = la.map(f) match {
+    case (f1, f2) => (f1 zip f1 zip f2).map { case ((_, y), z) ⇒ (y, z)}
   }
 
   // Define State[Int, *] as a Zippable Functor
@@ -59,6 +59,10 @@ class TraversalLawViolation extends FlatSpec with Matchers {
       ((a, b), k)
     }
   }
+
+  val su: S[Unit]  = S { i ⇒ ((), i) }
+
+  su.run(123) shouldEqual (((), 120))
 
   // Define F[A] as the composition S[S[A]] and implement Zippable and Functor instances.
   final case class F[A](run: S[S[A]]) {
@@ -85,20 +89,20 @@ class TraversalLawViolation extends FlatSpec with Matchers {
   val f1f2: Int ⇒ F[Int] = i ⇒ F(f1(i).map(f2))
 
   {
-    val result1: F[L[Int]] = trav2L[Int, Int, F](f1f2)(l)
+    val result1: F[L[Int]] = trav2[Int, Int, F](f1f2)(l)
     val result2: F[L[Int]] = {
-      val x: S[(Int, Int)] = trav2L[Int, Int, S](f1)(l)
-      val y: S[S[(Int, Int)]] = x.map(trav2L[Int, Int, S](f2))
+      val x: S[(Int, Int)] = trav2[Int, Int, S](f1)(l)
+      val y: S[S[(Int, Int)]] = x.map(trav2[Int, Int, S](f2))
       F(y)
     }
     result1.eval(0, 0) should not be result2.eval(0, 0)
-    result1.eval(0, 0) shouldEqual (((3, 7), 2, 7))
-    result2.eval(0, 0) shouldEqual (((4, 8), 2, 8))
-    trav2L[Int, Int, S](f1)(l).run(0) shouldEqual (((2, 2), 2))
-    trav2L[Int, Int, S](f2)((2, 2)).run(0) shouldEqual (((4, 8), 8))
+    result1.eval(0, 0) shouldEqual (((3, 5), 2, 5))
+    result2.eval(0, 0) shouldEqual (((4, 6), 2, 6))
+//    trav2L[Int, Int, S](f1)(l).run(0) shouldEqual (((2, 2), 2))
+//    trav2L[Int, Int, S](f2)((2, 2)).run(0) shouldEqual (((4, 8), 8))
   }
 
-  {
+  { // The standard `traverse` satisfies the law.
     val result1: F[L[Int]] = travL[Int, Int, F](f1f2)(l)
     val result2: F[L[Int]] = {
       val x: S[(Int, Int)] = travL[Int, Int, S](f1)(l)
