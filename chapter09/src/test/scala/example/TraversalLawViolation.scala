@@ -10,6 +10,9 @@ trait Zippable[F[_]] {
 }
 
 object Zippable {
+
+  def apply[F[_]: Zippable]: Zippable[F] = implicitly[Zippable[F]]
+
   implicit class ZipOp[F[_] : Zippable, A](fa: F[A]) {
     def zip[B](fb: F[B]): F[(A, B)] = implicitly[Zippable[F]].zip(fa, fb)
 
