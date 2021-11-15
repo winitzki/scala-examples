@@ -30,7 +30,6 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
     def apply[N: AllValues]: AllValues[N] = implicitly[AllValues[N]]
   }
 
-
   {
     sealed abstract class SqSize[N: AllValues, A]
     final case class Matrix[N: AllValues, A](byIndex: ((N, N)) => A) extends SqSize[N, A]
@@ -144,5 +143,33 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
     )
 
   }
+
+}
+
+class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
+
+  final case class Finite[L[_]]()
+
+  type Id[A] = A
+
+  implicit def finiteId: Finite[Id] = Finite()
+
+  implicit def finiteInc[L[_] : Finite]: Finite[λ[A ⇒ (A, L[A])]] = Finite()
+
+  sealed abstract class SqSize[L[_] : Finite, A]
+
+  final case class Matrix[L[_] : Finite, A](data: L[L[A]]) extends SqSize[L, A]
+
+  final case class Next[L[_] : Finite, A](next: SqSize[λ[A ⇒ (A, L[A])], A]) extends SqSize[L, A]
+
+  type Sq[A] = SqSize[Id, A]
+
+  val matrix2x2: Sq[Int] = Next(Matrix[λ[A ⇒ (A, Id[A])], Int](
+    (
+      (1, 2),
+      (3, 4),
+    )
+  ))
+
 
 }
