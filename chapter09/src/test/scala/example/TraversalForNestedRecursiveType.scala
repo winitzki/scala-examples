@@ -154,7 +154,11 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
 
   implicit def finiteId: Finite[Id] = Finite()
 
-  implicit def finiteInc[L[_] : Finite]: Finite[λ[A ⇒ (A, L[A])]] = Finite()
+  implicitly[Finite[Id]]
+
+  implicit def finiteInc[L[_] : Finite]: Finite[λ[A ⇒ (A, L[A])]] = Finite[λ[A ⇒ (A, L[A])]]()
+
+  implicitly[Finite[λ[A ⇒ (A, A)]]
 
   sealed abstract class SqSize[L[_] : Finite, A]
 
