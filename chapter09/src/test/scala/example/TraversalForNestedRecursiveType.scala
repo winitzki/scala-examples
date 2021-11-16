@@ -165,23 +165,6 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
 
   type Id[A] = A
 
-  //  final case class Id[A](a: A)
-
-  //  implicit def finiteId: Finite[Id] = Finite()
-
-  //  implicit def finiteTuple: Finite[Tuple1] = Finite()
-
-  //  type Pair[A] = (A, A)
-  //
-  //  implicit def finitePair: Finite[Pair] = Finite()
-
-  //  implicit def finiteInc[L[_] : Finite]: Finite[λ[A ⇒ (A, L[A])]] = Finite[λ[A ⇒ (A, L[A])]]()
-
-  //  implicit def finiteProduct[L[A] <: Product with Serializable]: Finite[L] = Finite()
-
-  //  implicit def finiteP[L[_], A](implicit f: Finite[L, A]): Finite[λ[X ⇒ (X, L[X])], A] =
-  //    Finite[λ[X ⇒  (X, L[X])], A] { case (head:A, tail:L[A]) ⇒ head +: Finite[L, A].toList(tail) }
-
   sealed abstract class SqSize[L[_], A](implicit f: Finite[A, L[A]])
 
   final case class Matrix[L[_], A](data: L[L[A]])(implicit f: Finite[A, L[A]]) extends SqSize[L, A]
@@ -205,20 +188,5 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
     )
   )))
 
-  /*  val matrix2x2: Sq[Int] = Next(Matrix[λ[A ⇒ (A, Tuple1[A])], Int](
-      (
-        (1, Tuple1(2)),
-        Tuple1((3, Tuple1(4))),
-      )
-    ))
-
-    val matrix3x3: Sq[Int] = Next(Next(Matrix(
-      (
-        (1, (2, Tuple1(3))),
-        ((4, (5, Tuple1(6))),
-          Tuple1((7, (8, Tuple1(9))))),
-      )
-    )))
-  */
 
 }
