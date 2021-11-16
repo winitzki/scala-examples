@@ -192,8 +192,8 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
 
   val matrix2x2: Sq[Int] = Next[Id, Int](Matrix[λ[A ⇒ (A, A)], Int](
     (
-      (1, (2)),
-      ((3, (4))),
+      (1, 2),
+      (3, 4),
     )
   ))
 
