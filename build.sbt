@@ -1,8 +1,8 @@
 val scalaV = "2.12.13"
-val scala3V = "3.0.0-RC1"
+val scala3V = "3.1.0"
 
 lazy val commonSettings = Seq(
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.3" cross CrossVersion.full),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.2" cross CrossVersion.full),
   scalaVersion := scalaV,
   scalacOptions ++= Seq(
     "-deprecation",
@@ -20,7 +20,7 @@ lazy val commonSettings = Seq(
     , "org.typelevel" %% "kittens" % "1.0.0-RC2" // 1.0.0-RC3 has an API change for derive.functor
     //    , "org.scalaz" %% "scalaz-core" % "7.2.24"
     , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.6" % Test
-    , "io.chymyst" %% "curryhoward" % "0.3.7"
+    , "io.chymyst" %% "curryhoward" % "0.3.8"
     , "com.eed3si9n.expecty" %% "expecty" % "0.11.0" % Test
     , "org.typelevel" %% "spire" % "0.16.0"
     //    , "co.fs2" %% "fs2-core" % "1.0.2"
@@ -110,9 +110,9 @@ lazy val chapter11 = (project in file("chapter11"))
 lazy val trydotty = project in file("trydotty") settings(
   scalaVersion := scala3V,
   libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.2.5" % Test,
-    "org.scalatest" %% "scalatest-flatspec" % "3.2.5" % Test,
-    "org.scalacheck" %% "scalacheck" % "1.15.3" % Test,
+    "org.scalatest" %% "scalatest" % "3.2.10" % Test,
+    "org.scalatest" %% "scalatest-flatspec" % "3.2.10" % Test,
+    "org.scalacheck" %% "scalacheck" % "1.15.4" % Test,
   )
 )
 
