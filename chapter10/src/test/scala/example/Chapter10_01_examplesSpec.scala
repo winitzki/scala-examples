@@ -533,7 +533,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
     final case class Map[F[_], A, B](ffa: FF[F, A], f: A ⇒ B) extends FF[F, B]
 
-    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+    implicit def functorFF[F[_]]: Functor[FF[F, *]] = new Functor[FF[F, *]] {
       def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = Map(ffa, f)
     }
 

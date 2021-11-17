@@ -173,10 +173,13 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
 
   type Sq[A] = SqSize[Id, A]
 
-  def toListList[L[_],A](implicit f: Finite[A, L[A]], g: Finite[L[A], L[L[A]]]): SqSize[L, A] ⇒ List[List[A]] = {
+  def toListList[L[_], A](implicit f: Finite[A, L[A]], g: Finite[L[A], L[L[A]]]): SqSize[L, A] ⇒ List[List[A]] = {
     case Matrix(data) ⇒ g.toList(data).map(f.toList)
     case Next(next: SqSize[λ[A ⇒ (A, L[A])], A]) ⇒
-      toListList[λ[A ⇒ (A, L[A])], A](finiteLL[A, L[A]](f), finiteLL[L[A], L[L[A]]](g)).apply(next)
+      val newF: Finite[A, (A, L[A])] = finiteLL(f)
+      val h: Finite[(A, L[A]), L[(A, L[A])]] = ???
+      val newG: Finite[(A, L[A]), ((A, L[A]), L[(A, L[A])])] = finiteLL(h)
+      toListList[λ[A ⇒ (A, L[A])], A](newF, newG).apply(next)
   }
 
   val matrix2x2: Sq[Int] = Next[Id, Int](Matrix[λ[A ⇒ (A, A)], Int](
@@ -195,4 +198,55 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
   )))
 
 
+}
+
+class TraversalWithNestedRecursiveTypes3 extends FlatSpec with Matchers {
+
+  trait Finite[L[_]] {
+    def toList[A]: L[A] ⇒ List[A]
+  }
+
+  object Finite {
+    def apply[L[_] : Finite]: Finite[L] = implicitly[Finite[L]]
+  }
+
+  type Id[A] = A
+
+//  implicit def finiteId: Finite[Id] = new Finite[Id] {
+//    override def toList[A]: Id[A] ⇒ List[A] = List(_)
+//  }
+
+  implicit def finiteA: Finite[λ[A ⇒ A]] = new Finite[λ[A ⇒ A]] {
+    override def toList[A]: A ⇒ List[A] = List(_)
+  }
+
+
+  implicit def finiteNext[L[_]: Finite]: Finite[λ[A ⇒ (A, L[A])]] = new Finite[λ[A ⇒ (A, L[A])]] {
+    override def toList[A]: ((A, L[A])) ⇒ List[A] = {
+      case (head, tail) ⇒ head +: Finite[L].toList(tail)
+    }
+  }
+
+  sealed abstract class SqSize[L[_] : Finite, A]
+
+  final case class Matrix[L[_] : Finite, A](data: L[L[A]]) extends SqSize[L, A]
+
+  final case class Next[L[_] : Finite, A](next: SqSize[λ[A ⇒ (A, L[A])], A])(implicit f: Finite[λ[A ⇒ (A, L[A])]]) extends SqSize[L, A]
+
+  type Sq[A] = SqSize[Id, A]
+
+  val matrix2x2: Sq[Int] = Next[Id, Int](Matrix[λ[A ⇒ (A, A)], Int](
+    (
+      (1, 2),
+      (3, 4),
+    )
+  ))
+
+  val matrix3x3: Sq[Int] = Next[Id, Int](Next[λ[A ⇒ (A, A)], Int](Matrix[λ[A ⇒ (A, (A, A))], Int](
+    (
+      (1, (2, 3)),
+      ((4, (5, 6)),
+        (7, (8, 9))),
+    )
+  )))
 }
