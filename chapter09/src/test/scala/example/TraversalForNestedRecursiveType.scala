@@ -173,6 +173,12 @@ class TraversalWithNestedRecursiveTypes2 extends FlatSpec with Matchers {
 
   type Sq[A] = SqSize[Id, A]
 
+  def toListList[L[_],A](implicit f: Finite[A, L[A]], g: Finite[L[A], L[L[A]]]): SqSize[L, A] ⇒ List[List[A]] = {
+    case Matrix(data) ⇒ g.toList(data).map(f.toList)
+    case Next(next: SqSize[λ[A ⇒ (A, L[A])], A]) ⇒
+      toListList[λ[A ⇒ (A, L[A])], A](finiteLL[A, L[A]](f), finiteLL[L[A], L[L[A]]](g)).apply(next)
+  }
+
   val matrix2x2: Sq[Int] = Next[Id, Int](Matrix[λ[A ⇒ (A, A)], Int](
     (
       (1, 2),
