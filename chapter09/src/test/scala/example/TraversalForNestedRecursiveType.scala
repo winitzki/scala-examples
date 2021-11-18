@@ -54,7 +54,7 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
     }
 
     // Convert Sq[A] to a Seq[Seq[A]].
-    def toSeq[N: Finite, A](s: SqSize[N, A]): Seq[Seq[A]] = {
+    def toSeqSeq[N: Finite, A](s: SqSize[N, A]): Seq[Seq[A]] = {
       val length = dimension(s)
       (0 until length).map(i => (0 until length).map(j => access(s, i, j)))
     }
@@ -80,7 +80,7 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
 
     dimension(matrix2x2) shouldEqual 2
 
-    toSeq(matrix2x2) shouldEqual List(
+    toSeqSeq(matrix2x2) shouldEqual List(
       List(11, 12),
       List(21, 22),
     )
@@ -95,8 +95,7 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
         val allValuesFa: List[F[((N, N), A)]] = for {
           i <- Finite[N]
           j <- Finite[N]
-          fa = byIndex((i, j))
-        } yield fa.map(a => ((i, j), a))
+        } yield byIndex((i, j)).map(a => ((i, j), a))
 
         val fList: F[List[((N, N), A)]] = sequenceNonEmptyList(allValuesFa)
         fList.map { values =>
@@ -104,16 +103,17 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
           Matrix[N, A](valuesMap)
         }
 
-      case Next(next) =>
-        implicit val finiteOptionN: Finite[Option[N]] = Finite(Finite[N].map(Some(_)) :+ None)
-        sequence[Option[N], F, A](next).map(Next(_))
+      case Next(next) => sequence[Option[N], F, A](next).map(Next(_))
     }
 
     // Test: use List as a Zippable Functor.
-    import cats.instances.list.catsStdInstancesForList
 
     implicit val zippableList: Zippable[List] = new Zippable[List] {
       override def zip[A, B](fa: List[A], fb: List[B]): List[(A, B)] = fa zip fb
+    }
+
+    implicit val functorList: Functor[List] = new Functor[List] {
+      override def map[A, B](fa: List[A])(f: A ⇒ B): List[B] = fa map f
     }
 
     val matrix2x2List: Sq[List[Int]] = Next(Matrix {
@@ -127,18 +127,18 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
 
     list2x2Matrix.length shouldEqual 3
 
-    list2x2Matrix.map(x => toSeq(x)) shouldEqual Seq(
-      Seq(
-        Seq(0, 1),
-        Seq(2, 3),
+    list2x2Matrix.map(x => toSeqSeq(x)) shouldEqual List(
+      List(
+        List(0, 1),
+        List(2, 3),
       ),
-      Seq(
-        Seq(10, 11),
-        Seq(12, 13),
+      List(
+        List(10, 11),
+        List(12, 13),
       ),
-      Seq(
-        Seq(100, 101),
-        Seq(102, 103),
+      List(
+        List(100, 101),
+        List(102, 103),
       )
     )
 
