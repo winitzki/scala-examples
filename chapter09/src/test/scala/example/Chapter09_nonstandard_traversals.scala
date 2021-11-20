@@ -323,9 +323,14 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
 
     def printLaTeX[A](tree: T2[A]): String = "\\Tree" + foldT2[A, String](toLaTeX)(tree)
 
-    val t2: T2[Int] = T2(Right((T2(Right((T2(Left(8)), T2(Right((T2(Left(3)), T2(Left(5)))))))), T2(Left(4)))))
+    val t2a: T2[Int] = T2(Right((T2(Right((T2(Left(8)), T2(Right((T2(Left(3)), T2(Left(5)))))))), T2(Left(4)))))
 
-    printLaTeX(t2) shouldEqual "\\Tree[ [ 8 [ 3 5 ] ] 4 ]"
+    printLaTeX(t2a) shouldEqual "\\Tree[ [ 8 [ 3 5 ] ] 4 ]"
+
+    val t2: T2[Int] = T2(Right((T2(Left(8)), T2(Right((T2(Right((T2(Left(3)), T2(Left(5))))), T2(Left(4))))))))
+
+    printLaTeX(t2) shouldEqual "\\Tree[ 8 [ [ 3 5 ] 4 ] ]"
+
   }
 
   sealed trait NEL[A] {
@@ -624,7 +629,7 @@ class Chapter09_nonstandard_traversals extends FlatSpec with Matchers {
         y <- r        // Traverse the right branch.
       } yield Branch(x, y)
     }(tree).run(0)._1
-    val t2: T2[Int] = Branch(Branch(Leaf(8), Branch(Leaf(3), Leaf(5))), Leaf(4))
+    val t2: T2[Int] = Branch(Leaf(8), Branch(Branch(Leaf(3), Leaf(5)), Leaf(4)))
     zipWithDepth(t2) shouldEqual Branch(Leaf((8, 1)), Branch(Branch(Leaf((3, 3)), Leaf((5, 3))), Leaf((4, 2))))
   }
 }
