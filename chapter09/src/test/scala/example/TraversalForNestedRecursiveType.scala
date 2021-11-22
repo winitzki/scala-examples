@@ -36,9 +36,9 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
     final case class Next[N: Finite, A](next: SqSize[Option[N], A]) extends SqSize[N, A]
     type Sq[A] = SqSize[Unit, A]
 
-    implicit val allValuesUnit: Finite[Unit] = List(())
+    implicit val finiteUnit: Finite[Unit] = List(())
 
-    implicit def allValues[N: Finite]: Finite[Option[N]] = None +: Finite[N].map(Some(_))
+    implicit def finiteOptionN[N: Finite]: Finite[Option[N]] = None +: Finite[N].map(Some(_))
 
     // Access the matrix element at zero-based index (i, j).
     def access[N: Finite, A](s: SqSize[N, A], i: Int, j: Int): A = s match {
@@ -92,12 +92,12 @@ class TraversalForNestedRecursiveType extends FlatSpec with Matchers {
 
     def sequence[N: Finite, F[_] : Zippable : Functor, A](sq: SqSize[N, F[A]]): F[SqSize[N, A]] = sq match {
       case Matrix(byIndex) =>
-        val allValuesFa: List[F[((N, N), A)]] = for {
+        val allValuesF: List[F[((N, N), A)]] = for {
           i <- Finite[N]
           j <- Finite[N]
         } yield byIndex((i, j)).map(a => ((i, j), a))
 
-        val fList: F[List[((N, N), A)]] = sequenceNonEmptyList(allValuesFa)
+        val fList: F[List[((N, N), A)]] = sequenceNonEmptyList(allValuesF)
         fList.map { values =>
           val valuesMap: ((N, N)) => A = values.toMap.apply
           Matrix[N, A](valuesMap)
