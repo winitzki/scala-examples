@@ -58,14 +58,13 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers {
 
   assert(runComplex(prgComplex2) == Complex(x = 2.000000000000001, y = 11.0))
 
-  def safeRotate(complex: Complex, phase: Complex): PrgComplex[Complex] =
-    if (phase.x != 0 && phase.y != 0) Rotate(Val(complex), Phase(Val(phase)))
-    else Val(complex)
+  def safeRotate(prg: PrgComplex[Complex], phase: Complex): PrgComplex[Complex] =
+    if (phase.x != 0 && phase.y != 0) Rotate(prg, Phase(Val(phase)))
+    else prg
 
   val prgComplex3: PrgComplex[Complex] = for {
-    result1 ← prgComplex1
     phase ← Val(Complex(0, 1))
-    result2 ← safeRotate(result1, phase)
+    result2 ← safeRotate(prgComplex1, phase)
   } yield result2
 
   assert(runComplex(prgComplex3) == runComplex(prgComplex2))
