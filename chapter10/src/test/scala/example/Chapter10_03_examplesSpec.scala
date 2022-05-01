@@ -23,7 +23,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     def wrap[F[_], B](fb: F[B]): FreeCF[F, B] = Wrap(fb)
 
     // Contrafunctor instance.
-    implicit def contraFree[F[_]]: Contravariant[FreeCF[F, ?]] = new Contravariant[FreeCF[F, ?]] {
+    implicit def contraFree[F[_]]: Contravariant[FreeCF[F, *]] = new Contravariant[FreeCF[F, *]] {
       def contramap[A, B](fa: FreeCF[F, A])(f: B ⇒ A): FreeCF[F, B] = Contramap(fa, f)
     }
 
@@ -42,7 +42,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     def wrapR[F[_], B](fb: F[B]): FreeCFR[F, B] = Reduced(fb, identity)
 
     // Contrafunctor instance.
-    implicit def contraFreeR[F[_]]: Contravariant[FreeCFR[F, ?]] = new Contravariant[FreeCFR[F, ?]] {
+    implicit def contraFreeR[F[_]]: Contravariant[FreeCFR[F, *]] = new Contravariant[FreeCFR[F, *]] {
       def contramap[A, B](fa: FreeCFR[F, A])(f: B ⇒ A): FreeCFR[F, B] = fa match {
         case Reduced(fx, g) ⇒ Reduced(fx, f before g) // Stack-safe. 
       }
@@ -104,7 +104,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     case class Reduced[F[_], B, A](fa: F[A], f: A ⇒ B) extends FreePFR[F, B]
 
     // Implement a functor instance.
-    implicit def functorFreePFR[F[_]]: Functor[FreePFR[F, ?]] = new Functor[FreePFR[F, ?]] {
+    implicit def functorFreePFR[F[_]]: Functor[FreePFR[F, *]] = new Functor[FreePFR[F, *]] {
       def map[A, B](fra: FreePFR[F, A])(f: A ⇒ B): FreePFR[F, B] = fra match {
         case PointR(x) ⇒ PointR(f(x))
         case Reduced(fa, g) ⇒ Reduced(fa, g before f)
@@ -187,7 +187,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Functor instance for Free[C, Z] with respect to Z.
-    implicit def functorFreeCZ[C[_] : Functor]: Functor[Free[C, ?]] = new Functor[Free[C, ?]] {
+    implicit def functorFreeCZ[C[_] : Functor]: Functor[Free[C, *]] = new Functor[Free[C, *]] {
       def map[A, B](fa: Free[C, A])(f: A ⇒ B): Free[C, B] = fa match {
         case Wrap(z) ⇒ Wrap(f(z))
         case Ops(cf) ⇒ Ops(cf.map(fca ⇒ map(fca)(f))) // Recursive call of `map`.
@@ -309,7 +309,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
     final case class Map[F[_], B, A](fb: F[B], f: B ⇒ A) extends FF[F, A]
 
-    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+    implicit def functorFF[F[_]]: Functor[FF[F, *]] = new Functor[FF[F, *]] {
       def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = ffa match {
         case Wrap(fa) ⇒ Map(fa, f)
         case Map(fz, g) ⇒ Map(fz, f after g)
@@ -353,7 +353,7 @@ class Chapter10_03_examplesSpec extends FlatSpec with Matchers {
     }
     // Note: This is a fully generic encoding; works for any typeclass and for any number of generators.
 
-    // Define functor instance for FreeFC[?].
+    // Define functor instance for FreeFC[*].
     implicit def functorFF: Functor[FreeFC] = new Functor[FreeFC] {
       def map[A, B](fa: FreeFC[A])(f: A ⇒ B): FreeFC[B] = new FreeFC[B] {
         def run[G[_] : ExF1 : ExF2 : ExF3 : Functor]: G[B] = fa.run[G].map(f) // Not stack-safe.

@@ -230,12 +230,12 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     // Syntax of the "kind projector" plugin:
     // Lambda[X ⇒ F[Z, X]] -- works
     // type Q[X] = F[Z, X] -- does not work
-    // F[Z, ?] -- works
+    // F[Z, *] -- works
     /////
     // f(z, x)
     // x ⇒ f(z, x)
     // f(z, _)
-    "implicit def functorF[Z] = derive.functor[F[Z, ?]]" shouldNot compile
+    "implicit def functorF[Z] = derive.functor[F[Z, *]]" shouldNot compile
 
     /* What we need to define a functor instance for F[Z, A] with respect to A:
     implicit def functorF[Z] = new Functor[ ??? ] { ... }
@@ -247,23 +247,23 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
      implicit def functorF[Z] = new Functor[  Q,  where Q is defined as `type Q[X] = F[Z, X] `   ]
      A valid Scala syntax for this would be to define `type Q[X]` inside an object and then extract Q from the object's type:
      implicit def functorF[Z] = new Functor[ new Functor[ ({ type Q[X] = F[Z, X] })#Q ] { ... }
-     But this is quite long and unreadable. The "kind projector" provides a shorter syntax: F[Z, ?].
+     But this is quite long and unreadable. The "kind projector" provides a shorter syntax: F[Z, *].
      */
 
     // curryhoward's `implement` works here.
-    implicit def functorF[Z] = new Functor[F[Z, ?]] {
+    implicit def functorF[Z] = new Functor[F[Z, *]] {
       override def map[A, B](fa: F[Z, A])(f: A ⇒ B): F[Z, B] = implement
     }
 
-    implicit def filterableF[Z] = new FilterableWithFilter[F[Z, ?]]() {
+    implicit def filterableF[Z] = new FilterableWithFilter[F[Z, *]]() {
       override def withFilter[A](p: A ⇒ Boolean)(fa: F[Z, A]): F[Z, A] = fa match {
         case Left(_) ⇒ fa
         case Right((_, z, x, y)) ⇒ if (p(x) && p(y)) fa else Left(z)
       }
     }
 
-    checkFilterableLawsWithFilter[F[Boolean, ?], Int, Boolean]()
-    checkFilterableLawsWithFilter[F[Int, ?], String, Double]()
+    checkFilterableLawsWithFilter[F[Boolean, *], Int, Boolean]()
+    checkFilterableLawsWithFilter[F[Int, *], String, Double]()
   }
 
   // The functor F[Z, A] = 1 + Z + Int × A × List[A]
@@ -275,7 +275,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     final case class HaveList[Z, A](n: Int, x: A, l: List[A]) extends F[Z, A]
 
     // curryhoward's `implement` does not work here because it doesn't know about List being a functor.
-    implicit def functorF[Z] = new Functor[F[Z, ?]] {
+    implicit def functorF[Z] = new Functor[F[Z, *]] {
       override def map[A, B](fa: F[Z, A])(f: A ⇒ B): F[Z, B] = fa match {
         case Empty() ⇒ Empty()
         case HaveZ(z) ⇒ HaveZ(z)
@@ -283,7 +283,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
       }
     }
 
-    implicit def filterableF[Z] = new FilterableWithFilter[F[Z, ?]] {
+    implicit def filterableF[Z] = new FilterableWithFilter[F[Z, *]] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: F[Z, A]): F[Z, A] = fa match {
         case HaveList(n, x, l) ⇒
           if (p(x))
@@ -296,7 +296,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
       }
     }
 
-    checkFilterableLawsWithFilter[F[Boolean, ?], Int, String]()
+    checkFilterableLawsWithFilter[F[Boolean, *], Int, String]()
   }
 
   it should "ex08" in {
@@ -304,7 +304,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     type C[-A, +Z] = A ⇒ Option[Z]
 
     // No automatic derivation seems to be available in cats.derive._ for contrafunctors.
-    implicit def contraC[Z] = new Contravariant[C[?, Z]] {
+    implicit def contraC[Z] = new Contravariant[C[*, Z]] {
       override def contramap[A, B](fa: C[A, Z])(f: B ⇒ A): C[B, Z] = implement
     }
 
@@ -314,7 +314,7 @@ class Chapter06_01_workedExamplesSpec extends FlatSpec with FilterableLawCheckin
     // cats.derive.functor works only for polynomial types, fails for exponential types.
     "implicit val functorX = derive.functor[X]" shouldNot compile
 
-    implicit def contrafilterC[Z] = new ContraFilterableWithFilter[C[?, Z]] {
+    implicit def contrafilterC[Z] = new ContraFilterableWithFilter[C[*, Z]] {
       override def withFilter[A](p: A ⇒ Boolean)(fa: C[A, Z]): C[A, Z] = {
         (x: A) ⇒ if (p(x)) fa(x) else None
       }

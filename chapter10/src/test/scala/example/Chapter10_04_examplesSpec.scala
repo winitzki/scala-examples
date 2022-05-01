@@ -37,7 +37,7 @@ class Chapter10_04_examplesSpec extends FlatSpec with Matchers {
         implicitly[Applicative[G]].ap(gg)(g)
     }
 
-    // Interpret FreeMA[F, ?] into Future[?], keeping track of parallelism.
+    // Interpret FreeMA[F, *] into Future[*], keeping track of parallelism.
     def runFMATFuture[F[_], A](ex: F ~> Future)(fmat: FreeMA[F, A])(implicit ec: ExecutionContext): Future[A] = fmat match {
       case Wrap(fa) ⇒ ex(fa)
       case Pure(b) ⇒ Future.successful(b)
@@ -58,10 +58,10 @@ class Chapter10_04_examplesSpec extends FlatSpec with Matchers {
         } yield y(x)
     }
 
-    // Implement various typeclass instances for FreeMA[F, ?], preserving the parallel/sequential execution.
+    // Implement various typeclass instances for FreeMA[F, *], preserving the parallel/sequential execution.
 
     // Implement Functor with some simplifications.
-    implicit def functorFreeMA[F[_]]: Functor[FreeMA[F, ?]] = new Functor[FreeMA[F, ?]] {
+    implicit def functorFreeMA[F[_]]: Functor[FreeMA[F, *]] = new Functor[FreeMA[F, *]] {
       def map[B, C](fa: FreeMA[F, B])(f: B ⇒ C): FreeMA[F, C] = fa match {
         case Wrap(fb) ⇒ Ap(Wrap(fb), Pure(f))
         case Pure(x) ⇒ Pure(f(x))
@@ -79,7 +79,7 @@ class Chapter10_04_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Implement CatsMonad with some simplifications.
-    implicit def catsMonadFreeMA[F[_]]: CatsMonad[FreeMA[F, ?]] = new CatsMonad[FreeMA[F, ?]] {
+    implicit def catsMonadFreeMA[F[_]]: CatsMonad[FreeMA[F, *]] = new CatsMonad[FreeMA[F, *]] {
       def pure[A](x: A): FreeMA[F, A] = Pure(x)
 
       def flatMap[B, C](fa: FreeMA[F, B])(f: B ⇒ FreeMA[F, C]): FreeMA[F, C] = fa match {
@@ -98,8 +98,8 @@ class Chapter10_04_examplesSpec extends FlatSpec with Matchers {
     }
 
     // Implement Applicative with minimal simplifications.
-    implicit def wuZipFreeMA[F[_]]: WuZip[FreeMA[F, ?]] = new WuZip[FreeMA[F, ?]] {
-      val ffma: Functor[FreeMA[F, ?]] = functorFreeMA[F]
+    implicit def wuZipFreeMA[F[_]]: WuZip[FreeMA[F, *]] = new WuZip[FreeMA[F, *]] {
+      val ffma: Functor[FreeMA[F, *]] = functorFreeMA[F]
 
       def wu: FreeMA[F, Unit] = Pure(())
 

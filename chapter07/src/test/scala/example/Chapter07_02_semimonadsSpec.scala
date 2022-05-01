@@ -15,19 +15,19 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
   it should "verify construction 1: constant functor" in {
     type C[Z, A] = Z
 
-    // The functor is going to be C[Z, ?], for a fixed Z.
+    // The functor is going to be C[Z, *], for a fixed Z.
 
-    implicit def functorC[Z]: Functor[C[Z, ?]] = new Functor[C[Z, ?]] {
+    implicit def functorC[Z]: Functor[C[Z, *]] = new Functor[C[Z, *]] {
       override def map[A, B](fa: C[Z, A])(f: A ⇒ B): C[Z, B] = fa
     }
 
-    implicit def semimonadC[Z]: Semimonad[C[Z, ?]] = new Semimonad[C[Z, ?]] {
+    implicit def semimonadC[Z]: Semimonad[C[Z, *]] = new Semimonad[C[Z, *]] {
       override def flatMap[A, B](fa: C[Z, A])(f: A ⇒ C[Z, B]): C[Z, B] = fa
     }
 
     // Flatten is id. So, associativity is trivial.
 
-    // Why is this not a full monad? Because the right identity law fails unless Z = 1.
+    // Why is this not a full monad* Because the right identity law fails unless Z = 1.
     // We must have flatten (pure (x: C[Z, A])) = x. But pure: A ⇒ Z must give a fixed value of Z.
     // So pure(x) cannot depend on x, and we cannot restore x if we only know pure(x).
     // Therefore, flatten(pure(x)) cannot compute x.
@@ -129,7 +129,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
 
     // Observe now that ftn[F[A]] ◦ ftn[A] is the same expression as fmap(ftn) ◦ ftn.
 
-    // Why is F not a monad? Because we can't have pure: A => (A, G[A]) for arbitrary functors G.
+    // Why is F not a monad* Because we can't have pure: A => (A, G[A]) for arbitrary functors G.
     // When G is itself a monad, we obtain a particular case of construction 3, see next example.
   }
 
@@ -459,7 +459,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
         case Right((w, gc)) ⇒ gc.map(c ⇒ Right((w, c)))
       }
       // Since the code of `seq` only uses natural transformations and is fully generic,
-      // `seq` is also a natural transformation -- between functors P[G[?]] and G[P[?]].
+      // `seq` is also a natural transformation -- between functors P[G[*]] and G[P[*]].
       // So `seq` automatically satisfies the naturality law:
       // `fmapP (fmapG f) ◦ seq = seq ◦ fmapG (fmapP f)`
 
@@ -707,7 +707,7 @@ class Chapter07_02_semimonadsSpec extends FlatSpec with FlattenableLawChecking w
       // Rewrite `ftn` more concisely:
       def ftnShorter[A](ffa: F[F[A]]): F[A] = { ha ⇒ ffa(insF(ha))._1(ha) }
 
-      // Can we do this in the point-free style? Probably not usefully.
+      // Can we do this in the point-free style* Probably not usefully.
       // ftn(ffa) = insF ◦ ffa ◦ _._1 ◦ ???
 
       // Verify the associativity law:

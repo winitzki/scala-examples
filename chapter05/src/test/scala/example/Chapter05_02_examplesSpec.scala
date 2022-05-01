@@ -213,7 +213,7 @@ class Chapter05_02_examplesSpec extends FlatSpec with CatsLawChecking {
 
     type Const[Z, A] = Z
 
-    def pointedOption[U]: Pointed[Const[Option[U], ?]] = Pointed(None: Const[Option[U], Unit])
+    def pointedOption[U]: Pointed[Const[Option[U], *]] = Pointed(None: Const[Option[U], Unit])
 
     type Id[A] = A
 

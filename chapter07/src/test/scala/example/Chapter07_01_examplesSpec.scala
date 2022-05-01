@@ -516,7 +516,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     final case class SBranch[S[_] : Functor, A](sb: S[STree[S, A]]) extends STree[S, A]
 
     // Implement functor.
-    implicit def functorSTree[S[_] : Functor]: Functor[STree[S, ?]] = new Functor[STree[S, ?]] {
+    implicit def functorSTree[S[_] : Functor]: Functor[STree[S, *]] = new Functor[STree[S, *]] {
       override def map[A, B](fa: STree[S, A])(f: A ⇒ B): STree[S, B] = fa match {
         case Leaf(x) ⇒ Leaf(f(x))
         case SBranch(sb) ⇒ SBranch(sb.map(stree ⇒ map(stree)(f))) // recursive use of `map`
@@ -524,7 +524,7 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     }
 
     // Implement flatMap.
-    implicit def semimonadSTree[S[_] : Functor]: Semimonad[STree[S, ?]] = new Semimonad[STree[S, ?]] {
+    implicit def semimonadSTree[S[_] : Functor]: Semimonad[STree[S, *]] = new Semimonad[STree[S, *]] {
       override def flatMap[A, B](fa: STree[S, A])(f: A ⇒ STree[S, B]): STree[S, B] = fa match {
         case Leaf(x) ⇒ f(x) // Graft the subtree here.
         case SBranch(sbr) ⇒ SBranch(sbr.map(stree ⇒ flatMap(stree)(f))) // recursive use of `flatMap`
@@ -651,14 +651,14 @@ Computing 2000 iterations with parallel futures yields 2910.7779073064853 in 2.7
     // Hold a value of type A together with an accumulated "log" value of type W.
     final case class Writer[A, W: Semigroup](x: A, log: W)
 
-    implicit def functorLogged[W: Semigroup]: Functor[Writer[?, W]] = new Functor[Writer[?, W]] {
+    implicit def functorLogged[W: Semigroup]: Functor[Writer[*, W]] = new Functor[Writer[*, W]] {
       override def map[A, B](fa: Writer[A, W])(f: A ⇒ B): Writer[B, W] =
         Writer(f(fa.x), fa.log)
     }
 
     // Writer semimonad requires that W be a `Semigroup`.
 
-    implicit def semimonadLogged[W: Semigroup]: Semimonad[Writer[?, W]] = new Semimonad[Writer[?, W]] {
+    implicit def semimonadLogged[W: Semigroup]: Semimonad[Writer[*, W]] = new Semimonad[Writer[*, W]] {
       override def flatMap[A, B](fa: Writer[A, W])(f: A ⇒ Writer[B, W]): Writer[B, W] = {
         val fb: Writer[B, W] = f(fa.x)
         Writer(fb.x, fa.log combine fb.log) // "Log" values are combined using the semigroup operation.

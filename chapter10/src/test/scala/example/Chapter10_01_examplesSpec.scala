@@ -539,7 +539,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
       (1 to iterations).foldLeft(Wrap(fa): FF[F, A]) { case (b, _) ⇒
-        Functor[FF[F, ?]].map(b)(f)
+        Functor[FF[F, *]].map(b)(f)
       }
     }
 
@@ -586,7 +586,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     final case class Wrap[F[_], A](fa: F[A]) extends FF[F, A]
     final case class Map[F[_], B, A](fb: F[B], f: B ⇒ A) extends FF[F, A]
 
-    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+    implicit def functorFF[F[_]]: Functor[FF[F, *]] = new Functor[FF[F, *]] {
       def map[A, B](ffa: FF[F, A])(f: A ⇒ B): FF[F, B] = ffa match {
         case Wrap(fa) ⇒ Map(fa, f)
         case Map(fz, g) ⇒ Map(fz, f after g)
@@ -594,7 +594,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
     }
 
     def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
-      (1 to iterations).foldLeft(Wrap(fa): FF[F, A]) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
+      (1 to iterations).foldLeft(Wrap(fa): FF[F, A]) { case (b, _) ⇒ Functor[FF[F, *]].map(b)(f) }
     }
 
     def runFF[F[_], G[_] : Functor, A, B](ex: F ~> G, ffa: FF[F, A]): G[A] = ffa match {
@@ -637,8 +637,8 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       def run[G[_] : Functor]: FFC[F, G] ⇒ G[X]
     }
 
-    // Define functor instance for FF[F, ?].
-    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+    // Define functor instance for FF[F, *].
+    implicit def functorFF[F[_]]: Functor[FF[F, *]] = new Functor[FF[F, *]] {
       def map[A, B](ceffa: FF[F, A])(f: A ⇒ B): FF[F, B] = new FF[F, B] {
         def run[G[_] : Functor]: FFC[F, G] ⇒ G[B] = { ffc ⇒
           // We have ceffa: FF[F, A]; f: A ⇒ B; and ffc: FFC[F, G].
@@ -656,7 +656,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       def run[G[_] : Functor]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc(fa)
     }
 
-    // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
+    // Interpret an FF[F, *] into a given functor G, using a generic transformation F ~> G.
     // This needs to be stack-safe.
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
@@ -665,7 +665,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Performance test:
     def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
-      (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
+      (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, *]].map(b)(f) }
     }
 
     println("Benchmark: Church/tree encoding of free functor")
@@ -702,12 +702,12 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       def run[G[_]]: FFC[F, G] ⇒ G[X]
     }
 
-    // Define functor instance for FF[F, ?].
-    implicit def functorFF[F[_]]: Functor[FF[F, ?]] = new Functor[FF[F, ?]] {
+    // Define functor instance for FF[F, *].
+    implicit def functorFF[F[_]]: Functor[FF[F, *]] = new Functor[FF[F, *]] {
       def map[A, B](ceffa: FF[F, A])(fab: A ⇒ B): FF[F, B] = new FF[F, B] {
 
         // To get ∃Z. F[Z] × (Z ⇒ A) out of `ceffa`, just apply `ceffa` to `identity` of type `FreeF[F, X] ⇒ FreeF[F, X]`.
-        val ffcff: FFC[F, FreeF[F, ?]] = new FFC[F, FreeF[F, ?]] {
+        val ffcff: FFC[F, FreeF[F, *]] = new FFC[F, FreeF[F, *]] {
           def apply[X]: FreeF[F, X] ⇒ FreeF[F, X] = identity
         }
         val freefa: FreeF[F, A] = ceffa.run(ffcff) // For stack safety, we need to put this `run()` call outside of the `run` method below.
@@ -733,7 +733,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       def run[G[_]]: FFC[F, G] ⇒ G[A] = ffc ⇒ ffc.apply(freefa)
     }
 
-    // Interpret an FF[F, ?] into a given functor G, using a generic transformation F ~> G.
+    // Interpret an FF[F, *] into a given functor G, using a generic transformation F ~> G.
     // This needs to be stack-safe.
     def runFF[F[_], G[_] : Functor, A](ex: F ~> G, ffa: FF[F, A]): G[A] = {
       // Apply ffa to an FFC[F, G] and get G[A]. We just need to create an FFC[F, G].
@@ -748,7 +748,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
 
     // Performance test:
     def createFF[F[_], A](fa: F[A], iterations: Int, f: A ⇒ A): FF[F, A] = {
-      (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, ?]].map(b)(f) }
+      (1 to iterations).foldLeft(wrap[F, A](fa)) { case (b, _) ⇒ Functor[FF[F, *]].map(b)(f) }
     }
 
     println("Benchmark: Church/reduced encoding of free functor")
