@@ -93,6 +93,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
         case Op(op) ⇒ PrgFileC.runFile(op)
       }
     }
+
     sealed trait PrgFileC[A]
 
     object PrgFileC {
@@ -107,6 +108,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
     }
 
     import PrgFileC.{Path, Read}
+
     def readFileContents(filename: String): PrgFile[String] = for {
       path <- Op(Path(Val(filename)))
       text <- if (Files.exists(path)) Op(Read(Val(path))) else Val("No file.")
@@ -124,6 +126,57 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
 
   it should "refactor PrgFile DSL to free monad, step 2" in {
 
+    import PrgFile._
+    sealed trait PrgFile[A] {
+      def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
+
+      def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
+    }
+
+    object PrgFile {
+      final case class Val[A](a: A) extends PrgFile[A]
+
+      final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
+
+      final case class Op[A](op: PrgFileC[A]) extends PrgFile[A]
+
+      def pure[A](a: A): PrgFile[A] = Val(a)
+
+      def runFile[A]: PrgFile[A] => A = {
+        case Val(a) => a
+        case bind@Bind(pa) => runFile(bind.f(runFile(pa)))
+        case Op(op) ⇒ PrgFileC.runFile(op)
+      }
+    }
+
+    sealed trait PrgFileC[A]
+
+    object PrgFileC {
+      final case class Path(p: String) extends PrgFileC[JPath]
+
+      final case class Read(p: JPath) extends PrgFileC[String]
+
+      def runFile[A]: PrgFileC[A] ⇒ A = {
+        case Path(p) => Paths.get(p)
+        case Read(p) => new String(Files.readAllBytes(p))
+      }
+    }
+
+    import PrgFileC.{Path, Read}
+
+    def readFileContents(filename: String): PrgFile[String] = for {
+      path <- Op(Path(filename))
+      text <- if (Files.exists(path)) Op(Read(path)) else Val("No file.")
+    } yield text
+
+    assert(runFile(readFileContents("config_location.txt")) == "config.txt")
+
+    val prg2: PrgFile[String] = for {
+      str <- readFileContents("config_location.txt")
+      result <- if (str.nonEmpty) readFileContents(str) else Val("No filename.")
+    } yield result
+
+    assert(runFile(prg2) == "version = 1")
   }
 
   behavior of "PrgComplex language"
