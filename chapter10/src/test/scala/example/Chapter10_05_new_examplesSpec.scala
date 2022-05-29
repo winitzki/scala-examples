@@ -70,48 +70,37 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
     assert(runFile(prg2) == "version = 1")
   }
 
-  it should "refactor PrgFile DSL to free monad, step 1" in {
+  it should "refactor PrgFile monadic DSL to simplify the operation classes" in {
     import PrgFile._
     sealed trait PrgFile[A] {
       def flatMap[B](f: A => PrgFile[B]): PrgFile[B] = Bind(this)(f)
 
       def map[B](f: A => B): PrgFile[B] = Bind(this)(f andThen PrgFile.pure)
     }
-
+    // Same case classes as before.
     object PrgFile {
       final case class Val[A](a: A) extends PrgFile[A]
 
       final case class Bind[A, B](pa: PrgFile[B])(val f: B => PrgFile[A]) extends PrgFile[A]
 
-      final case class Op[A](op: PrgFileC[A]) extends PrgFile[A]
+      final case class Path(p: String) extends PrgFile[JPath]
+
+      final case class Read(p: JPath) extends PrgFile[String]
 
       def pure[A](a: A): PrgFile[A] = Val(a)
 
       def runFile[A]: PrgFile[A] => A = {
         case Val(a) => a
         case bind@Bind(pa) => runFile(bind.f(runFile(pa)))
-        case Op(op) ⇒ PrgFileC.runFile(op)
+        case Path(p) => Paths.get(p)
+        case Read(p) => new String(Files.readAllBytes(p))
       }
+
     }
-
-    sealed trait PrgFileC[A]
-
-    object PrgFileC {
-      final case class Path(p: PrgFile[String]) extends PrgFileC[JPath]
-
-      final case class Read(p: PrgFile[JPath]) extends PrgFileC[String]
-
-      def runFile[A]: PrgFileC[A] ⇒ A = {
-        case Path(p) => Paths.get(PrgFile.runFile(p))
-        case Read(p) => new String(Files.readAllBytes(PrgFile.runFile(p)))
-      }
-    }
-
-    import PrgFileC.{Path, Read}
 
     def readFileContents(filename: String): PrgFile[String] = for {
-      path <- Op(Path(Val(filename)))
-      text <- if (Files.exists(path)) Op(Read(Val(path))) else Val("No file.")
+      path <- Path(filename)
+      text <- if (Files.exists(path)) Read(path) else Val("No file.")
     } yield text
 
     assert(runFile(readFileContents("config_location.txt")) == "config.txt")
@@ -124,7 +113,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
     assert(runFile(prg2) == "version = 1")
   }
 
-  it should "refactor PrgFile DSL to free monad, step 2" in {
+  it should "refactor PrgFile DSL to free monad" in {
 
     import PrgFile._
     sealed trait PrgFile[A] {
@@ -209,7 +198,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
 
       final case class Phase(p: PrgComplex[Complex]) extends PrgComplex[Double]
 
-      final case class Rotate(p: PrgComplex[Complex], alpha: PrgComplex[Double]) extends PrgComplex[Complex]
+      final case class Rotate(p: PrgComplex[Complex], alpha: Phase) extends PrgComplex[Complex]
 
       def pure[A](a: A): PrgComplex[A] = Val(a)
     }
@@ -229,7 +218,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
       case Mul(p1, p2) => runComplex(p1) * runComplex(p2)
       case Conj(p) => runComplex(p).conj
       case Phase(p) => runComplex(p).phase
-      case Rotate(p, alpha) => runComplex(p).rotate(runComplex(alpha))
+      case Rotate(p, Phase(a)) => runComplex(p).rotate(runComplex(a).phase)
     }
 
     val prgComplex1: PrgComplex[Complex] = Conj(Mul(Add(Val(Complex(1, 1)), Val(Complex(0, 1))), Val(Complex(3, -4))))
@@ -252,50 +241,83 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
     assert(runComplex(prgComplex3) == runComplex(prgComplex2))
   }
 
+  sealed trait MonadDSL[F[_], A] {
+    import MonadDSL._
+    def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
+    def map[B](f: A => B): MonadDSL[F, B] = Bind(this)(f andThen MonadDSL.pure)
+  }
+  object MonadDSL {
+    final case class Val[F[_], A](a: A) extends MonadDSL[F, A]
+    final case class Bind[F[_], A, B](pa: MonadDSL[F, B])(val f: B => MonadDSL[F, A]) extends MonadDSL[F, A]
+    final case class Op[F[_], A](op: F[A]) extends MonadDSL[F, A]     // Wrap custom operations.
+
+    def pure[F[_], A](a: A): MonadDSL[F, A] = Val(a)
+    def run[F[_], A](runner: Runner[F]): MonadDSL[F, A] ⇒ A = {
+      case Val(a)          => a
+      case bind@Bind(pa)   => run(runner)(bind.f(run(runner)(pa)))
+      case Op(op)          => runner.run(op)
+    }
+
+    implicit class MonadDSLOps[F[_], A](dsl: MonadDSL[F, A]) {
+
+    }
+  }
+
+  trait Runner[F[_]] { def run[X]: F[X] => X }
+
   it should "refactor the PrgComplex DSL to free monad" in {
 
-    sealed trait PrgComplexOps[A]
-    object PrgComplexOps {
-      final case class Add(x: Complex, y: Complex) extends PrgComplexOps[Complex]
+    // Define the effect constructor.
+    sealed trait PrgComplexC[A]
+    object PrgComplexC {
+      final case class Add(x: Complex, y: Complex) extends PrgComplexC[Complex]
 
-      final case class Mul(x: PrgComplex[Complex], y: PrgComplex[Complex]) extends PrgComplexOps[Complex]
+      final case class Mul(x: Complex, y: Complex) extends PrgComplexC[Complex]
 
-      final case class Conj(x: PrgComplex[Complex]) extends PrgComplexOps[Complex]
+      final case class Conj(x: Complex) extends PrgComplexC[Complex]
 
-      final case class Phase(p: PrgComplex[Complex]) extends PrgComplexOps[Double]
+      final case class Phase(p: Complex) extends PrgComplexC[Double]
 
-      final case class Rotate(p: PrgComplex[Complex], alpha: PrgComplex[Double]) extends PrgComplexOps[Complex]
+      final case class Rotate(p: Complex, alpha: Phase) extends PrgComplexC[Complex]
+    }
+    import PrgComplexC._
+    def runComplexC[A]: PrgComplexC[A] => A = {
+      case Add(p1, p2)           => p1 + p2
+      case Mul(p1, p2)           => p1 * p2
+      case Conj(p)               => p.conj
+      case Phase(p)              => p.phase
+      case Rotate(p, Phase(a))   => p.rotate(a.phase)
     }
 
-    object PrgComplex {
-      final case class Val[A](a: A) extends PrgComplex[A]
+    // Define the DSL using the free monad.
+    type PrgComplex[A] = MonadDSL[PrgComplexC, A]
+    import MonadDSL.{Val, Op, run ⇒ runComplex}
 
-      final case class Bind[A, B](pa: PrgComplex[B])(val f: B => PrgComplex[A]) extends PrgComplex[A]
+    val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC[X] }
 
-      final case class Ops[A](op: PrgComplexOps[A]) extends PrgComplex[A]
+    // Write a DSL program.
+    val prgComplex1: PrgComplex[Complex] = for {
+      x <- Op(Add(Complex(1, 1), Complex(0, 1)))
+      y <- Op(Mul(x, Complex(3, -4)))
+      z <- Op(Conj(y))
+    } yield z
 
-      def pure[A](a: A): PrgComplex[A] = Val(a)
-    }
+    val prgComplex2: PrgComplex[Complex] = for {
+      x <- prgComplex1
+      y <- Op(Rotate(x, Phase(Complex(0, 1))))
+    } yield y
 
-    import PrgComplex._
-    import PrgComplexOps._
+    assert(runComplex(runnerComplex)(prgComplex2) == Complex(x = 2.000000000000001, y = 11.0))
 
-    sealed trait PrgComplex[A] {
-      def flatMap[B](f: A => PrgComplex[B]): PrgComplex[B] = Bind(this)(f)
+    def safeRotate(z: Complex, phaseC: Complex): PrgComplex[Complex] =
+      if (phaseC.x != 0 || phaseC.y != 0) Op(Rotate(z, Phase(phaseC)))
+      else Val(z)
 
-      def map[B](f: A => B): PrgComplex[B] = Bind(this)(f andThen PrgComplex.pure)
-    }
+    val prgComplex3: PrgComplex[Complex] = for {
+      z <- prgComplex1
+      result2 <- safeRotate(z, Complex(0, 1))
+    } yield result2
 
-    //    def runComplex[A]: PrgComplex[A] => A = {
-    //      case Val(a) => a
-    //      case bind@Bind(pa) => runComplex(bind.f(runComplex(pa)))
-    //      case Ops(Add(p1, p2)) => runComplex(p1) + runComplex(p2)
-    //      case Mul(p1, p2) => runComplex(p1) * runComplex(p2)
-    //      case Conj(p) => runComplex(p).conj
-    //      case Phase(p) => runComplex(p).phase
-    //      case Rotate(p, alpha) => runComplex(p).rotate(runComplex(alpha))
-    //    }
-
-
+    assert(runComplex(runnerComplex)(prgComplex3) == runComplex(runnerComplex)(prgComplex2))
   }
 }
