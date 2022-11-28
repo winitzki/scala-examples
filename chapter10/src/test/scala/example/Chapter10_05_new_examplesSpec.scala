@@ -268,7 +268,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
   it should "refactor the PrgComplex DSL to free monad" in {
 
     // Define the effect constructor.
-    sealed trait PrgComplexC[A]
+    sealed trait PrgComplexC[_]
     object PrgComplexC {
       final case class Add(x: Complex, y: Complex) extends PrgComplexC[Complex]
 
@@ -293,7 +293,7 @@ class Chapter10_05_new_examplesSpec extends FlatSpec with Matchers with BeforeAn
     type PrgComplex[A] = MonadDSL[PrgComplexC, A]
     import MonadDSL.{Val, Op, run ⇒ runComplex}
 
-    val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC[X] }
+    val runnerComplex = new Runner[PrgComplexC] { def run[X]: PrgComplexC[X] => X = runComplexC }
 
     // Write a DSL program.
     val prgComplex1: PrgComplex[Complex] = for {
