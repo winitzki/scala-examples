@@ -50,8 +50,8 @@ trait CheckSemimonadLaws extends Matchers with GeneratorDrivenPropertyChecks {
     }
   }
 
-  def checkMonadLaws[F[_], A, B]()(implicit mf: Monad[F],
-                                   aa: Arbitrary[A], af: Arbitrary[F[A]], ab: Arbitrary[A => F[B]]) = {
+  def checkMonadIdentityLaws[F[_], A, B]()(implicit mf: Monad[F],
+                                           aa: Arbitrary[A], af: Arbitrary[F[A]], ab: Arbitrary[A => F[B]]) = {
     import cats.syntax.flatMap._
     forAll { (x: A, g: A => F[B]) =>
       mf.pure(x).flatMap(g) shouldEqual g(x)   // Left identity law.

@@ -1,6 +1,5 @@
 package example
 
-import cats.derived.pure
 import io.chymyst.ch._
 import org.scalatest.{FlatSpec, Matchers}
 
