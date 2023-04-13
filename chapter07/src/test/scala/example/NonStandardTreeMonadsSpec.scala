@@ -3,13 +3,11 @@ package example
 import cats.{Functor, Monad}
 import org.scalatest.{FlatSpec, Matchers}
 import cats.syntax.functor._
-import io.chymyst.ch._
-import org.scalatest.FlatSpec
 import org.scalacheck.ScalacheckShapeless._
-import cats.derive
+//import cats.derive
 import CatsMonad.toCatsMonad
 
-object Trees {
+object DataTypes {
   sealed trait BTree[A]
 
   final case class Leaf[A](a: A) extends BTree[A]
@@ -27,6 +25,10 @@ object Trees {
   final case class B3[A](top: A, left: Tree3[A], right: Tree3[A]) extends Tree3[A]
 
   implicit val tree3Functor: Functor[Tree3] = cats.derive.functor[Tree3]
+
+  type R3[A] = Option[Either[A, (A, A)]]
+
+  implicit val r3Functor: Functor[R3] = cats.derive.functor[R3]
 }
 
 class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimonadLaws {
@@ -58,8 +60,8 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
     {
       implicit val i = catsMonadD1
-      checkSemimonadLaws[D, Int, Int, Int]
       checkMonadIdentityLaws[D, Int, Int]
+      checkSemimonadLaws[D, Int, Int, Int]
     }
   }
 
@@ -81,8 +83,8 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): List[A] = List(x)
     }
-    checkSemimonadLaws[List, Int, Int, Int]
     checkMonadIdentityLaws[List, Int, Int]
+    checkSemimonadLaws[List, Int, Int, Int]
   }
 
   it should "fail for the truncating List monad" in {
@@ -102,7 +104,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
   }
 
   it should "hold for the monad 1 + BTree(A) in the greedy implementation" in {
-    import Trees._
+    import DataTypes._
     implicit val catsMonadOBTree: CatsMonad[OBTree] = new CatsMonad[OBTree] {
       override def flatMap[A, B](fa: OBTree[A])(f: A ⇒ OBTree[B]): OBTree[B] = fa match {
         case Some(Leaf(x)) ⇒ f(x)
@@ -117,19 +119,19 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
       override def pure[A](x: A): OBTree[A] = Some(Leaf(x))
     }
 
-    checkSemimonadLaws[OBTree, Int, Int, Int]
     checkMonadIdentityLaws[OBTree, Int, Int]
+    checkSemimonadLaws[OBTree, Int, Int, Int]
   }
 
   it should "hold for the monad 1 + BTree(A) in the non-greedy implementation" in {
-    import Trees._
+    import DataTypes._
     implicit val catsMonadOBTree: CatsMonad[OBTree] = new CatsMonad[OBTree] {
       override def flatMap[A, B](fa: OBTree[A])(f: A ⇒ OBTree[B]): OBTree[B] = fa match {
         case Some(Leaf(x)) ⇒ f(x)
         case Some(Branch(left, right)) ⇒ (flatMap(Some(left))(f), flatMap(Some(right))(f)) match {
           case (None, None) ⇒ None
-          case (None, a) ⇒ a
-          case (a, None) ⇒ a
+          case (None, Some(a)) ⇒ Some(a)
+          case (Some(a), None) ⇒ Some(a)
           case (Some(a), Some(b)) ⇒ Some(Branch(a, b))
         }
         case None ⇒ None
@@ -138,12 +140,12 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
       override def pure[A](x: A): OBTree[A] = Some(Leaf(x))
     }
 
-    checkSemimonadLaws[OBTree, Int, Int, Int]
     checkMonadIdentityLaws[OBTree, Int, Int]
+    checkSemimonadLaws[OBTree, Int, Int, Int]
   }
 
   it should "hold for the monad Tree = 1 + A x Tree x Tree in some implementations" in {
-    import Trees._
+    import DataTypes._
     implicit val catsMonadOBTree: CatsMonad[Tree3] = new CatsMonad[Tree3] {
       override def flatMap[A, B](fa: Tree3[A])(f: A ⇒ Tree3[B]): Tree3[B] = fa match {
         case Empty() ⇒ Empty()
@@ -156,7 +158,30 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
       override def pure[A](x: A): Tree3[A] = B3(x, Empty(), Empty())
     }
 
-    checkSemimonadLaws[Tree3, Int, Int, Int]
     checkMonadIdentityLaws[Tree3, Int, Int]
+    checkSemimonadLaws[Tree3, Int, Int, Int]
+  }
+
+  it should "hold for the monad 1 + A + A x A" in {
+    import DataTypes._
+    implicit val catsMonadR3: CatsMonad[R3] = new CatsMonad[R3] {
+      override def flatMap[A, B](fa: R3[A])(f: A ⇒ R3[B]): R3[B] = fa match {
+        case Some(Left(a)) ⇒ f(a)
+        case Some(Right((a, b))) ⇒ (f(a), f(b)) match {
+          case (None, None) ⇒ None
+          case (None, Some(x)) ⇒ Some(x)
+          case (Some(x), None) ⇒ Some(x)
+          case (Some(Left(x)), Some(Left(y))) ⇒ Some(Right((x, y)))
+          case (Some(Left(x)), Some(Right((y, z)))) ⇒ Some(Right((x, z)))
+          case (Some(Right((x, y))), Some(Left(z))) ⇒ Some(Right((x, z)))
+          case (Some(Right((x, _))), Some(Right((_, y)))) ⇒ Some(Right((x, y)))
+        }
+        case None ⇒ None
+      }
+
+      override def pure[A](x: A): R3[A] = Some(Left(x))
+    }
+    checkMonadIdentityLaws[R3, String, Int]
+    checkSemimonadLaws[R3, Int, String, Float]
   }
 }
