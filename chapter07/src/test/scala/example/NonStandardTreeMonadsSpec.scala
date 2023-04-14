@@ -3,6 +3,7 @@ package example
 import cats.{Functor, Monad}
 import org.scalatest.{FlatSpec, Matchers}
 import cats.syntax.functor._
+import org.scalacheck.Arbitrary
 import org.scalacheck.ScalacheckShapeless._
 //import cats.derive
 import CatsMonad.toCatsMonad
@@ -40,6 +41,30 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
     }
   }
 
+  type V0 = Boolean
+  type V1 = Int
+  type V2 = String
+  type V3 = Float
+
+  def testLaws[D[_] : CatsMonad](implicit
+                                 a: Arbitrary[D[V0]], b: Arbitrary[V0], c: Arbitrary[V0 ⇒ D[V0]],
+                                 a1: Arbitrary[D[V1]], b1: Arbitrary[V1], c1: Arbitrary[V1 ⇒ D[V2]],
+                                 a2: Arbitrary[D[V2]], b2: Arbitrary[V2], c2: Arbitrary[V2 ⇒ D[V3]],
+                                ) = {
+    val repetitions = 10
+// First, test the laws with all types set to Boolean. This is fast and will catch some law violations.
+    (1 to repetitions).foreach { i ⇒
+      println(s"Iteration $i with type V0")
+      checkMonadIdentityLaws[D, V0, V0]
+      checkSemimonadLaws[D, V0, V0, V0]
+    }
+    (1 to repetitions).foreach { i ⇒
+      println(s"Iteration $i with typs V1, V2, V3")
+      checkMonadIdentityLaws[D, V1, V2]
+      checkSemimonadLaws[D, V1, V2, V3]
+    }
+  }
+
   behavior of "monad laws"
 
   it should "fail for 1 + A x A" in {
@@ -60,15 +85,18 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
     {
       implicit val i = catsMonadD1
-      checkMonadIdentityLaws[D, Int, Int]
-      checkSemimonadLaws[D, Int, Int, Int]
+      testLaws[D]
     }
   }
 
   it should "hold for the standard List monad" in {
     import cats.instances.list.catsStdInstancesForList
-    checkSemimonadLaws[List, Int, Int, Int]
-    checkMonadIdentityLaws[List, Int, Int]
+    implicit val catsMonadList: CatsMonad[List] = new CatsMonad[List] {
+      override def flatMap[A, B](fa: List[A])(f: A ⇒ List[B]): List[B] = fa.flatMap(f)
+
+      override def pure[A](x: A): List[A] = List(x)
+    }
+    testLaws[List]
   }
 
   it should "hold for the non-standard (greedy) List monad" in {
@@ -83,8 +111,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): List[A] = List(x)
     }
-    checkMonadIdentityLaws[List, Int, Int]
-    checkSemimonadLaws[List, Int, Int, Int]
+    testLaws[List]
   }
 
   it should "fail for the truncating List monad" in {
@@ -99,8 +126,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): List[A] = List(x)
     }
-    checkSemimonadLaws[List, Int, Int, Int]
-    checkMonadIdentityLaws[List, Int, Int]
+    testLaws[List]
   }
 
   it should "hold for the monad 1 + BTree(A) in the greedy implementation" in {
@@ -119,8 +145,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
       override def pure[A](x: A): OBTree[A] = Some(Leaf(x))
     }
 
-    checkMonadIdentityLaws[OBTree, Int, Int]
-    checkSemimonadLaws[OBTree, Int, Int, Int]
+    testLaws[OBTree]
   }
 
   it should "hold for the monad 1 + BTree(A) in the non-greedy implementation" in {
@@ -139,9 +164,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): OBTree[A] = Some(Leaf(x))
     }
-
-    checkMonadIdentityLaws[OBTree, Int, Int]
-    checkSemimonadLaws[OBTree, Int, Int, Int]
+    testLaws[OBTree]
   }
 
   it should "hold for the monad Tree = 1 + A x Tree x Tree in some implementations" in {
@@ -157,9 +180,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): Tree3[A] = B3(x, Empty(), Empty())
     }
-
-    checkMonadIdentityLaws[Tree3, Int, Int]
-    checkSemimonadLaws[Tree3, Int, Int, Int]
+    testLaws[Tree3]
   }
 
   it should "hold for the monad 1 + A + A x A" in {
@@ -181,7 +202,6 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): R3[A] = Some(Left(x))
     }
-    checkMonadIdentityLaws[R3, String, Int]
-    checkSemimonadLaws[R3, Int, String, Float]
+    testLaws[R3]
   }
 }
