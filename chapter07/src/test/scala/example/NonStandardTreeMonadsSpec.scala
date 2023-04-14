@@ -2,10 +2,8 @@ package example
 
 import cats.{Functor, Monad}
 import org.scalatest.{FlatSpec, Matchers, ParallelTestExecution}
-import cats.syntax.functor._
 import org.scalacheck.Arbitrary
 import org.scalacheck.ScalacheckShapeless._
-//import cats.derive
 import CatsMonad.toCatsMonad
 
 object DataTypes {
@@ -51,19 +49,20 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
                                                 a1: Arbitrary[D[V1]], b1: Arbitrary[V1], c1: Arbitrary[V1 ⇒ D[V2]],
                                                 a2: Arbitrary[D[V2]], b2: Arbitrary[V2], c2: Arbitrary[V2 ⇒ D[V3]],
   ) = {
-    val repetitions = 10
+    val repetitions1 = 40
+    val repetitions2 = 20
     // First, test the laws with all types set to Boolean. This is fast and will catch some law violations.
-    (1 to repetitions).foreach { i ⇒
+    (1 to repetitions1).foreach { i ⇒
       println(s"$title: Iteration $i with type V0")
       checkMonadIdentityLaws[D, V0, V0]
       checkSemimonadLaws[D, V0, V0, V0]
     }
-    (1 to repetitions).foreach { i ⇒
+    (1 to repetitions2).foreach { i ⇒
       println(s"$title: Iteration $i with types V1, V2, V3")
       checkMonadIdentityLaws[D, V1, V2]
       checkSemimonadLaws[D, V1, V2, V3]
     }
-    println(s"$title: all monad laws passed after $repetitions iterations")
+    println(s"$title: all monad laws passed after ${repetitions1 + repetitions2} iterations")
   }
 
   //  behavior of "monad laws"
@@ -168,7 +167,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
     testLaws[OBTree]("non-greedy OBTree")
   }
 
-  it should "hold for the monad Tree = 1 + A x Tree x Tree in some implementations" in {
+  it should "fail for the monad Tree = 1 + A x Tree x Tree in some implementation" in {
     import DataTypes._
     implicit val catsMonadOBTree: CatsMonad[Tree3] = new CatsMonad[Tree3] {
       override def flatMap[A, B](fa: Tree3[A])(f: A ⇒ Tree3[B]): Tree3[B] = fa match {
@@ -185,7 +184,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
     testLaws[Tree3]("Tree3")
   }
 
-  it should "hold for the monad 1 + A + A x A" in {
+  it should "fail for the monad 1 + A + A x A with the first implementation" in {
     import DataTypes._
     implicit val catsMonadR3: CatsMonad[R3] = new CatsMonad[R3] {
       override def flatMap[A, B](fa: R3[A])(f: A ⇒ R3[B]): R3[B] = fa match {
@@ -195,14 +194,36 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
           case (None, Some(x)) ⇒ Some(x)
           case (Some(x), None) ⇒ Some(x)
           case (Some(Left(x)), Some(Left(y))) ⇒ Some(Right((x, y)))
-          case (Some(Left(x)), Some(Right((y, z)))) ⇒ Some(Right((x, z)))
-          case (Some(Right((x, y))), Some(Left(z))) ⇒ Some(Right((x, z)))
+          case (Some(Left(x)), Some(Right((_, y)))) ⇒ Some(Right((x, y)))
+          case (Some(Right((x, _))), Some(Left(y))) ⇒ Some(Right((x, y)))
           case (Some(Right((x, _))), Some(Right((_, y)))) ⇒ Some(Right((x, y)))
         }
         case None ⇒ None
       }
 
       override def pure[A](x: A): R3[A] = Some(Left(x))
+    }
+    testLaws[R3]("1 + A + A x A")
+  }
+
+  it should "fail for the monad 1 + A + A x A with the second implementation" in {
+    import DataTypes._
+    implicit val catsMonadR3: CatsMonad[R3] = new CatsMonad[R3] {
+      override def flatMap[A, B](fa: R3[A])(f: A ⇒ R3[B]): R3[B] = fa match {
+        case Some(Left(a)) ⇒ f(a)
+        case Some(Right((a, b))) ⇒ (f(a), f(b)) match {
+          case (None, None) ⇒ None
+          case (None, Some(x)) ⇒ Some(x)
+          case (Some(x), None) ⇒ Some(x)
+          case (Some(Left(x)), Some(Left(y))) ⇒ Some(Right((x, y)))
+          case (Some(Left(x)), Some(Right((_, y)))) ⇒ Some(Right((x, y)))
+          case (Some(Right((x, _))), Some(Left(y))) ⇒ Some(Right((x, y)))
+          case (Some(Right((x, _))), Some(Right((_, y)))) ⇒ Some(Right((x, y)))
+        }
+        case None ⇒ None
+      }
+
+      override def pure[A](x: A): R3[A] = Some(Right(x, x))
     }
     testLaws[R3]("1 + A + A x A")
   }
