@@ -1,7 +1,7 @@
 package example
 
 import cats.{Functor, Monad}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers, ParallelTestExecution}
 import cats.syntax.functor._
 import org.scalacheck.Arbitrary
 import org.scalacheck.ScalacheckShapeless._
@@ -32,7 +32,7 @@ object DataTypes {
   implicit val r3Functor: Functor[R3] = cats.derive.functor[R3]
 }
 
-class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimonadLaws {
+class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimonadLaws with ParallelTestExecution {
 
   implicit def toSemimonad[F[_] : Monad]: Semimonad[F] = {
     implicit val functorF: Functor[F] = Monad[F]
@@ -46,7 +46,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
   type V2 = String
   type V3 = Float
 
-  def testLaws[D[_] : CatsMonad](implicit
+  def testLaws[D[_] : CatsMonad](title: String)(implicit
                                  a: Arbitrary[D[V0]], b: Arbitrary[V0], c: Arbitrary[V0 ⇒ D[V0]],
                                  a1: Arbitrary[D[V1]], b1: Arbitrary[V1], c1: Arbitrary[V1 ⇒ D[V2]],
                                  a2: Arbitrary[D[V2]], b2: Arbitrary[V2], c2: Arbitrary[V2 ⇒ D[V3]],
@@ -54,18 +54,18 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
     val repetitions = 10
 // First, test the laws with all types set to Boolean. This is fast and will catch some law violations.
     (1 to repetitions).foreach { i ⇒
-      println(s"Iteration $i with type V0")
+      println(s"$title: Iteration $i with type V0")
       checkMonadIdentityLaws[D, V0, V0]
       checkSemimonadLaws[D, V0, V0, V0]
     }
     (1 to repetitions).foreach { i ⇒
-      println(s"Iteration $i with typs V1, V2, V3")
+      println(s"$title: Iteration $i with types V1, V2, V3")
       checkMonadIdentityLaws[D, V1, V2]
       checkSemimonadLaws[D, V1, V2, V3]
     }
   }
 
-  behavior of "monad laws"
+//  behavior of "monad laws"
 
   it should "fail for 1 + A x A" in {
     type D[A] = Option[(A, A)]
@@ -85,7 +85,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
     {
       implicit val i = catsMonadD1
-      testLaws[D]
+      testLaws[D]("1 + A x A conservative")
     }
   }
 
@@ -96,7 +96,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): List[A] = List(x)
     }
-    testLaws[List]
+    testLaws[List]("standard List")
   }
 
   it should "hold for the non-standard (greedy) List monad" in {
@@ -111,7 +111,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): List[A] = List(x)
     }
-    testLaws[List]
+    testLaws[List]("greedy List")
   }
 
   it should "fail for the truncating List monad" in {
@@ -126,7 +126,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): List[A] = List(x)
     }
-    testLaws[List]
+    testLaws[List]("truncating List")
   }
 
   it should "hold for the monad 1 + BTree(A) in the greedy implementation" in {
@@ -145,7 +145,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
       override def pure[A](x: A): OBTree[A] = Some(Leaf(x))
     }
 
-    testLaws[OBTree]
+    testLaws[OBTree]("greedy OBTree")
   }
 
   it should "hold for the monad 1 + BTree(A) in the non-greedy implementation" in {
@@ -164,7 +164,7 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): OBTree[A] = Some(Leaf(x))
     }
-    testLaws[OBTree]
+    testLaws[OBTree]("non-greedy OBTree")
   }
 
   it should "hold for the monad Tree = 1 + A x Tree x Tree in some implementations" in {
@@ -174,13 +174,14 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
         case Empty() ⇒ Empty()
         case B3(top, left, right) ⇒ (f(top), flatMap(left)(f), flatMap(right)(f)) match {
           case (result, Empty(), Empty()) ⇒ result
+          case (Empty(), _, _) ⇒ Empty()
           case (B3(t, x, y), l, r) ⇒ B3(t, l, r)
         }
       }
 
       override def pure[A](x: A): Tree3[A] = B3(x, Empty(), Empty())
     }
-    testLaws[Tree3]
+    testLaws[Tree3]("Tree3")
   }
 
   it should "hold for the monad 1 + A + A x A" in {
@@ -202,6 +203,6 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
 
       override def pure[A](x: A): R3[A] = Some(Left(x))
     }
-    testLaws[R3]
+    testLaws[R3]("1 + A + A x A")
   }
 }

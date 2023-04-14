@@ -62,6 +62,10 @@ lazy val chapter06 = (project in file("chapter06"))
 lazy val chapter07 = (project in file("chapter07"))
   .settings(commonSettings)
   .dependsOn(common)
+  .settings(
+    Test / parallelExecution := true,
+//    Test / testOptions += Tests.Argument("-P"), // Make some tests run in parallel.
+  )
 
 lazy val chapter08 = (project in file("chapter08"))
   .settings(commonSettings)
