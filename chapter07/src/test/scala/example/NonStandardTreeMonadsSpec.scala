@@ -47,12 +47,12 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
   type V3 = Float
 
   def testLaws[D[_] : CatsMonad](title: String)(implicit
-                                 a: Arbitrary[D[V0]], b: Arbitrary[V0], c: Arbitrary[V0 ⇒ D[V0]],
-                                 a1: Arbitrary[D[V1]], b1: Arbitrary[V1], c1: Arbitrary[V1 ⇒ D[V2]],
-                                 a2: Arbitrary[D[V2]], b2: Arbitrary[V2], c2: Arbitrary[V2 ⇒ D[V3]],
-                                ) = {
+                                                a: Arbitrary[D[V0]], b: Arbitrary[V0], c: Arbitrary[V0 ⇒ D[V0]],
+                                                a1: Arbitrary[D[V1]], b1: Arbitrary[V1], c1: Arbitrary[V1 ⇒ D[V2]],
+                                                a2: Arbitrary[D[V2]], b2: Arbitrary[V2], c2: Arbitrary[V2 ⇒ D[V3]],
+  ) = {
     val repetitions = 10
-// First, test the laws with all types set to Boolean. This is fast and will catch some law violations.
+    // First, test the laws with all types set to Boolean. This is fast and will catch some law violations.
     (1 to repetitions).foreach { i ⇒
       println(s"$title: Iteration $i with type V0")
       checkMonadIdentityLaws[D, V0, V0]
@@ -63,9 +63,10 @@ class NonStandardTreeMonadsSpec extends FlatSpec with Matchers with CheckSemimon
       checkMonadIdentityLaws[D, V1, V2]
       checkSemimonadLaws[D, V1, V2, V3]
     }
+    println(s"$title: all monad laws passed after $repetitions iterations")
   }
 
-//  behavior of "monad laws"
+  //  behavior of "monad laws"
 
   it should "fail for 1 + A x A" in {
     type D[A] = Option[(A, A)]
