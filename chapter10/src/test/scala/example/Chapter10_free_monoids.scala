@@ -40,11 +40,11 @@ object Data10 {
     case Wrap(value) => runT(value)
   }
 
-  sealed trait Tree2[A]
+  sealed trait Tree2[+A]
 
-  final case class Leaf[A](a: A) extends Tree2[A]
+  final case class Leaf[+A](a: A) extends Tree2[A]
 
-  final case class Branch[A](left: Tree2[A], right: Tree2[A]) extends Tree2[A]
+  final case class Branch[+A](left: Tree2[A], right: Tree2[A]) extends Tree2[A]
 
 
   type F1[T] = Tree2[Option[T]]
@@ -117,8 +117,62 @@ object Data10 {
 
   def runnerF4[M: Monoid, T](runT: T => M)(fmr: F4[T]): M = foldMap(runT).apply(fmr)
 
+  def f4_to_f3[T]: F4[T] ⇒ F3[T] = runnerF4(wrapF3[T](_))
+
+  def f3_to_f2[T]: F3[T] ⇒ F2[T] = runnerF3(wrapF2[T](_))
+
+  def f1_to_f2[T]: F1[T] ⇒ F2[T] = runnerF1(wrapF2[T](_))
 }
 
 class Chapter10_free_monoids extends FlatSpec with Matchers {
 
+  import Data10._
+  import Monoid10._
+
+  it should "convert F4 into F3 and fail to preserve the monoid's |+| operation" in {
+    val example1: F4[Int] = List(1)
+    val example2: F4[Int] = List(2, 3)
+    val example3: F4[Int] = example1 |+| example2
+    example3 shouldEqual List(1, 2, 3)
+
+    val Seq(example1F3, example2F3, example3F3) = Seq(example1, example2, example3).map(f4_to_f3)
+
+    example1F3 shouldEqual Some(Leaf(1))
+    example2F3 shouldEqual Some(Branch(Leaf(2), Leaf(3)))
+    example3F3 shouldEqual Some(Branch(Branch(Leaf(1), Leaf(2)), Leaf(3)))
+    (example1F3 |+| example2F3) shouldEqual Some(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))))
+    example3F3 should not be (example1F3 |+| example2F3)
+  }
+
+  it should "convert F3 into F2 and fail to preserve the monoid's |+| operation" in {
+    val example1: F3[Int] = wrapF3(10)
+    val example2: F3[Int] = Monoid[F3[Int]].empty
+    val example3: F3[Int] = example1 |+| example2
+    example3 shouldEqual Some(Leaf(10))
+
+    val Seq(example1F2, example2F2, example3F2) = Seq(example1, example2, example3).map(f3_to_f2)
+
+    example1F2 shouldEqual wrapF2(10)
+    example2F2 shouldEqual Monoid[F2[Int]].empty
+    example3F2 shouldEqual wrapF2(10)
+    (example1F2 |+| example2F2) shouldEqual(Some(10), List(None))
+
+    example3F2 should not be (example1F2 |+| example2F2)
+  }
+
+  it should "convert F1 into F2 and preserve the monoid's |+| operation" in {
+    val example1: F1[Int] = wrapF1(10)
+    val example2: F1[Int] = Monoid[F1[Int]].empty
+    val example3: F1[Int] = example1 |+| example2
+    example3 shouldEqual Branch(Leaf(Some(10)), Leaf(None))
+
+    val Seq(example1F2, example2F2, example3F2) = Seq(example1, example2, example3).map(f1_to_f2)
+
+    example1F2 shouldEqual wrapF2(10)
+    example2F2 shouldEqual Monoid[F2[Int]].empty
+    example3F2 shouldEqual ((Some(10), List(None)))
+    (example1F2 |+| example2F2) shouldEqual ((Some(10), List(None)))
+
+    example3F2 shouldEqual (example1F2 |+| example2F2)
+  }
 }
