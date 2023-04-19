@@ -315,25 +315,21 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
    */
 
   it should "implement free monoid in the tree encoding" in {
-    sealed trait FM[Z] // tree encoding
-    case class Empty[Z]() extends FM[Z]
-    case class Wrap[Z](z: Z) extends FM[Z]
-    case class Comb[Z](x: FM[Z], y: FM[Z]) extends FM[Z]
+    sealed trait FMR[Z] // tree encoding
+    case class Empty[Z]() extends FMR[Z]
+    case class Wrap[Z](z: Z) extends FMR[Z]
+    case class Combine[Z](x: FMR[Z], y: FMR[Z]) extends FMR[Z]
 
-    object FM {
-      def empty[Z]: FM[Z] = Empty()
-    }
-
-    implicit class FMOps[Z](x: FM[Z]) {
-      def |+|(y: FM[Z]): FM[Z] = Comb(x, y)
+    implicit class FMOps[Z](x: FMR[Z]) {
+      def |+|(y: FMR[Z]): FMR[Z] = Combine(x, y)
 
       // We could also make the encoding less redundant by checking whether x or y are `Empty`, or whether one of them is a `Mul`.
     }
 
-    def run[M: Monoid, Z](extract: Z ⇒ M)(fm: FM[Z]): M = fm match {
+    def run[M: Monoid, Z](extract: Z ⇒ M)(fm: FMR[Z]): M = fm match {
       case Empty() ⇒ Monoid[M].empty
       case Wrap(z) ⇒ extract(z)
-      case Comb(x, y) ⇒ run(extract)(x) |+| run(extract)(y)
+      case Combine(x, y) ⇒ run(extract)(x) |+| run(extract)(y)
     }
 
     // Example: A free monoid over Either[Int, String], reduced to the standard Int monoid.
@@ -351,7 +347,7 @@ class Chapter10_01_examplesSpec extends FlatSpec with Matchers {
       case Right(str) ⇒ str.length
     }
 
-    val freeMonoidValue: FM[Z] = Wrap[Z](Left(12)) |+| Wrap(Right("abc")) |+| Empty() |+| Wrap(Right("q"))
+    val freeMonoidValue: FMR[Z] = Wrap[Z](Left(12)) |+| Wrap(Right("abc")) |+| Empty() |+| Wrap(Right("q"))
     run(extract)(freeMonoidValue) shouldEqual 16
 
     /*

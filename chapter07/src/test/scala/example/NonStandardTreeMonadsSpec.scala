@@ -7,13 +7,13 @@ import org.scalacheck.ScalacheckShapeless._
 import CatsMonad.toCatsMonad
 
 object DataTypes {
-  sealed trait BTree[A]
+  sealed trait Tree2[A]
 
-  final case class Leaf[A](a: A) extends BTree[A]
+  final case class Leaf[A](a: A) extends Tree2[A]
 
-  final case class Branch[A](left: BTree[A], right: BTree[A]) extends BTree[A]
+  final case class Branch[A](left: Tree2[A], right: Tree2[A]) extends Tree2[A]
 
-  type OBTree[A] = Option[BTree[A]]
+  type OBTree[A] = Option[Tree2[A]]
 
   implicit val obtreeFunctor: Functor[OBTree] = cats.derive.functor[OBTree]
 
