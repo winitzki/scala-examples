@@ -135,6 +135,10 @@ class Chapter10_free_monoids extends FlatSpec with Matchers {
     val example3: F4[Int] = example1 |+| example2
     example3 shouldEqual List(1, 2, 3)
 
+    example3 shouldEqual List(1) |+| List(2, 3)
+    f4_to_f3(List(1, 2, 3)) shouldEqual Some(Branch(Branch(Leaf(1), Leaf(2)), Leaf(3)))
+    f4_to_f3(List(1)) |+| f4_to_f3(List(2, 3)) shouldEqual Some(Branch(Leaf(1), Branch(Leaf(2), Leaf(3))))
+
     val Seq(example1F3, example2F3, example3F3) = Seq(example1, example2, example3).map(f4_to_f3)
 
     example1F3 shouldEqual Some(Leaf(1))
