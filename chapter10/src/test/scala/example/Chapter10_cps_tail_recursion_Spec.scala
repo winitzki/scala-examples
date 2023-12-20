@@ -127,6 +127,23 @@ class Chapter10_cps_tail_recursion_Spec extends FlatSpec with Matchers {
 
     } should have message (null)
   }
+
+  it should "run fmap on Tree with scala TailRec" in {
+    import scala.util.control.TailCalls._
+    def fmapNotTailRec[A, B](f: A => B, t2: T2[A]): TailRec[T2[B]] = t2 match {
+      case Leaf(a) => done(Leaf(f(a)))
+      case Branch(l, r) => // tailcall(fmapNotTailRec(f, l).flatMap(left => fmapNotTailRec(f, r).map { right => Branch(left, right) }))
+        tailcall(
+          for {
+            left <- fmapNotTailRec(f, l)
+            right <- fmapNotTailRec(f, r)
+          } yield Branch(left, right)
+        )
+    }
+
+    fmapNotTailRec[Int, Int](i => i + 1, makeLongTree(500000)).result
+
+  }
   // We would like to be able to implement stack safety for:
   // - arbitrary recursive functions where f(x) = g(x, f) and g may call f several times with arbitrary arguments
   // - building up a recursive data structure using a recursive function
