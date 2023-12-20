@@ -29,10 +29,11 @@ let test = assert : divide 40 20 unit === 2
 
 let nonzeroToNatural: forall (x: Natural) -> Nonzero x -> Natural = \(x: Natural) -> \(_ : Nonzero x) -> x
 
+{-  This does not type-check because Dhall cannot see that y == 0 after "then".
 let xdiv: forall (y: Natural) -> Nonzero y -> Natural = \(y: Natural) -> \(x: Nonzero y) ->
    if Natural/isZero y then absurd Natural x else div x y
 
 let test = assert : xdiv 20 40 === 2
 -- let test = assert : xdiv 0 40 === 2
-
+-}
 in {divide}
