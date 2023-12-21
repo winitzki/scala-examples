@@ -145,7 +145,38 @@ class Chapter10_cps_tail_recursion_Spec extends FlatSpec with Matchers {
 
   }
   // We would like to be able to implement stack safety for:
-  // - arbitrary recursive functions where f(x) = g(x, f) and g may call f several times with arbitrary arguments
+  // - arbitrary recursive functions where f(x) = g(x, f) and g may call f several times with arbitrary arguments - works
   // - building up a recursive data structure using a recursive function
   // - building up a recursive data structure from its recursion scheme using `unfold`
+  // - general folding/unfolding from recursion scheme (not just foldLeft)
+
+  /*
+  scala.util.control.TailRec gives a data type:
+
+TailRec A  = Done(A) + Call(1 -> TailRec A) + exists B. Cont(B, B -> TailRec A)
+
+This is a free monad: TailRec A = A + F(TailRec A) where F X = (1 -> X) + (exists Y. Y × (Y -> X))
+
+This is equivalent to F X = (1 -> X) + X
+This is the Eval monad.
+
+So, TailRec is a free monad on an Eval functor.
+
+In addition to map and flatMap, it has a `resume` method:
+
+resume: TailRec A -> A + (1 -> TailRec A)
+
+This is not the same as TailRec A -> Lazy A or TailRec A -> F (TailRec A).
+
+Compare this with the special monad method from cats:
+
+ def tailRecM[A, B](a: A)(f: A => F[Either[A, B]]): F[B]
+
+ which means:
+
+ F[A] => A => (A => F (A + B)) => F[B]
+
+Also that is not the same.
+
+   */
 }
