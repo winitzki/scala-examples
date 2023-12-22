@@ -144,6 +144,73 @@ class Chapter10_cps_tail_recursion_Spec extends FlatSpec with Matchers {
     fmapNotTailRec[Int, Int](i => i + 1, makeLongTree(500000)).result
 
   }
+
+  it should "fail to run fmap on Tree with scala TailRec using .result" in {
+    import scala.util.control.TailCalls._
+    def fmapNotTailRec[A, B](f: A => B, t2: T2[A]): TailRec[T2[B]] = t2 match {
+      case Leaf(a) => done(Leaf(f(a)))
+      case Branch(l, r) => // tailcall(fmapNotTailRec(f, l).flatMap(left => fmapNotTailRec(f, r).map { right => Branch(left, right) }))
+        tailcall {
+          val left = fmapNotTailRec(f, l).result
+          val right = fmapNotTailRec(f, r).result
+          done(Branch(left, right))
+        }
+    }
+
+    the[StackOverflowError] thrownBy {
+      fmapNotTailRec[Int, Int](i => i + 1, makeLongTree(500000)).result
+    } should have message null
+  }
+
+  sealed trait NP[A] // T = Int + (String => T)
+
+  final case class P[A](a: A) extends NP[A]
+
+  final case class Q[A](run: String => NP[A]) extends NP[A]
+
+  object NP {
+    def generate(n: Int): NP[Int] = (1 to n).foldLeft(P(0): NP[Int])((prevNP, x) => Q(_ => prevNP))
+
+    def depthAtLeast[A](n: Int, np: NP[A]): Boolean = np match {
+      case P(a) => n <= 0
+      case Q(run) => depthAtLeast(n - 1, run(""))
+    }
+  }
+
+  it should "run fmap on non-polynomial functor without TailRec" in {
+
+    NP.depthAtLeast(10, NP.generate(10)) shouldEqual true
+    NP.depthAtLeast(11, NP.generate(10)) shouldEqual false
+
+    def fmap[A, B](f: A => B, npA: NP[A]): NP[B] = npA match {
+      case P(a) => P(f(a))
+      case Q(run) =>
+        val newFunc: String => NP[B] = s => fmap(f, run(s))
+        Q[B](newFunc)
+    }
+
+    fmap[Int, Int](i => i + 1, NP.generate(1000000))
+
+  }
+
+  it should "run fmap on non-polynomial functor with scala TailRec" in {
+    import scala.util.control.TailCalls._
+
+    NP.depthAtLeast(10, NP.generate(10)) shouldEqual true
+    NP.depthAtLeast(11, NP.generate(10)) shouldEqual false
+
+    def fmap[A, B](f: A => B, npA: NP[A]): TailRec[NP[B]] = npA match {
+      case P(a) => done(P(f(a)))
+      case Q(run) => tailcall {
+        val newFunc: String => NP[B] = s => fmap(f, run(s)).result
+        done(Q[B](newFunc))
+      }
+    }
+
+    fmap[Int, Int](i => i + 1, NP.generate(1000000)).result
+
+  }
+
   // We would like to be able to implement stack safety for:
   // - arbitrary recursive functions where f(x) = g(x, f) and g may call f several times with arbitrary arguments - works
   // - building up a recursive data structure using a recursive function
