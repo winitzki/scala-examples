@@ -1,6 +1,5 @@
 package example.unit
 
-import cats.Monad
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.annotation.tailrec
@@ -90,5 +89,36 @@ class Chapter02_02_examplesSpec extends FlatSpec with Matchers {
   it should "run ex07" in {
     ex07(Seq(1, 3, 5, 7, 3, 5, 7, 3, 5, 7, 3, 5, 7)) shouldEqual
       Seq(1, 3, 5, 7, 3)
+  }
+
+  def update(acc: (Double, Boolean, Double), c: Char): (Double, Boolean, Double) = acc match {
+    case (num, flag, factor) =>
+      if (c == '.') (num, true, factor) // Set flag to ‘true‘ after a dot character was seen.
+      else {
+        val digit = c - '0'
+        if (flag) (num + digit / factor, flag, factor * 10) // This digit is after the dot.
+        else (num * 10 + digit, flag, factor) // This digit is before the dot.
+      }
+  }
+
+  def digitsToDouble(d: Seq[Char]): Double = {
+    val initAcc = (0.0, false, 10.0)
+    val (num, _, _) = d.foldLeft(initAcc)(update)
+    num
+  }
+
+  it should "run digitsToDouble" in {
+    Seq(
+      (Seq('0', '.', '1') -> 0.1),
+      (Seq('0', '.', '2') -> 0.2),
+      (Seq('0', '.', '3') -> 0.3),
+      (Seq('0', '.', '4') -> 0.4),
+      (Seq('0', '.', '5') -> 0.5),
+      (Seq('0', '.', '6') -> 0.6),
+      (Seq('0', '.', '7') -> 0.7),
+      (Seq('0', '.', '8') -> 0.8),
+      (Seq('0', '.', '9') -> 0.9),
+      (Seq('0', '.', '1', '1', '9', '3') -> 0.11929999999999999),
+    ).foreach { case (digits, result) => digitsToDouble(digits) shouldEqual result }
   }
 }
