@@ -46,14 +46,21 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       cata[R](falg)
     }
 
+    // Twisted paramorphism, basic version, with extra P value.
+    final def twistedPara0p[P, R](palg: F[A, P] => P, pralg: P => F[A, R] => R, baseP: P): R = {
+      val falg: F[A, R] => R = pralg(baseP)
+      cata[R](falg)
+    }
+
     // Twisted paramorphism with 18 different choices of P parameterized by the number 0 <= choice < 18.
-    final def twistedPara1[P, R](palg: F[A, P] => P, pralg: P => F[A, R] => R, choice: Int = 0): R = {
-      val choice1: Boolean = choice % 2 == 0
-      val choice2: Boolean = (choice / 2) % 3 == 0
-      val choice3: Boolean = (choice / 2) % 3 == 1
-      val choice4: Boolean = (choice / 6) % 3 == 0
-      val choice5: Boolean = (choice / 6) % 3 == 1
-      val baseP: P = cata[P](palg)
+    // The only correct value is 11.
+    final def twistedPara1[P, R](palg: F[A, P] => P, pralg: P => F[A, R] => R, baseP: P, choice: Int = 0): R = {
+      val choice1: Boolean = choice % 2 == 0 // false
+      val choice2: Boolean = (choice / 2) % 3 == 0 // false
+      val choice3: Boolean = (choice / 2) % 3 == 1 // false
+      val choice4: Boolean = (choice / 6) % 3 == 0 // false
+      val choice5: Boolean = (choice / 6) % 3 == 1 // true
+      //      val baseP: P = cata[P](palg) // If this is used instead of a given baseP, no choices ever work for zip.
       val falgpr: F[A, P => R] => P => R = { fapr =>
         oldP =>
           val choice1P: P = if (choice1) baseP else oldP
@@ -264,7 +271,8 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
           case None => p
           case Some((a, r)) => Lst1.cons(a, r)
         },
-        choice
+        other,
+        choice,
       )
 
       def zip0[B](other: Lst1[B]): Lst1[(A, B)] = lst1.twistedPara0[Lst1[B], Lst1[(A, B)]](
@@ -281,6 +289,21 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         }
       )
 
+      def zip0p[B](other: Lst1[B]): Lst1[(A, B)] = lst1.twistedPara0p[Lst1[B], Lst1[(A, B)]](
+        {
+          case None => other
+          case Some((_, ys)) => ys.safeTail
+        },
+        p => {
+          case None => Lst1.nil
+          case Some((a, t)) => p.headOption match {
+            case Some(b) => Lst1.cons((a, b), t)
+            case None => Lst1.nil
+          }
+        },
+        other
+      )
+
       def zip1[B](other: Lst1[B], choice: Int): Lst1[(A, B)] = lst1.twistedPara1[Lst1[B], Lst1[(A, B)]](
         {
           case None => other
@@ -293,17 +316,10 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
             case None => Lst1.nil
           }
         },
+        other,
         choice
       )
 
-      //      def zip1[B](other: Lst[B]): Lst[(A, B)] = lst1.twistedPara[Lst[B], Lst[(A, B)]](
-      //        _ => Lst.nil, // part of p -> f a r -> r
-      //        (ys, _) => ys.safeTail,// part of f a p -> p, written as (p, a) -> p
-      //        (ys, a, t) => ys.headOption match {// part of p -> f a r -> r i.e. p, a, r -> r
-      //          case Some(b) => Lst.cons((a, b), t)
-      //          case None => Lst.nil
-      //        },
-      //      )(other) // part of f a p -> p
     }
   }
 
@@ -341,26 +357,34 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         list123.concat1(nilInt, i).toList shouldEqual list123.toList
         nilInt.concat1(nilInt, i).toList shouldEqual Nil
         nilInt.concat1(list123, i).toList shouldEqual list123.toList
-        s"choice=$i"
+        s"parameter=$i"
       }
     }
-    println("concat1:\n" + results)
+    println(s"concat1 has ${results.count(_.isSuccess)} successes:\n" + results) // Success with any choice of parameter.
 
     list123.zip0(list123).toList shouldEqual Nil
     list123.zip0(list123.safeTail).toList shouldEqual Nil
-    list123.safeTail.zip0(list123).toList shouldEqual List((2,3),(3,3))
+    list123.safeTail.zip0(list123).toList shouldEqual List((2, 3), (3, 3))
     nilInt.zip0(list123).toList shouldEqual Nil
     list123.zip0(nilInt).toList shouldEqual Nil
 
+    list123.zip0p(list123).toList shouldEqual List((1,1), (2,1), (3,1))
+    list123.zip0p(list123.safeTail).toList shouldEqual List((1,2), (2,2), (3,2))
+    list123.safeTail.zip0p(list123).toList shouldEqual List((2,1), (3,1))
+    nilInt.zip0p(list123).toList shouldEqual Nil
+    list123.zip0p(nilInt).toList shouldEqual Nil
+
     val results2 = (0 to 17).map { i =>
       Try {
-        list123.zip1(list123, i).toList shouldEqual Nil
-        list123.zip1(list123.safeTail, i).toList shouldEqual Nil
-        list123.safeTail.zip1(list123, i).toList shouldEqual Nil
-        s"choice=$i"
+        list123.zip1(list123, i).toList shouldEqual List((1, 1), (2, 2), (3, 3))
+        list123.zip1(list123.safeTail, i).toList shouldEqual List((1, 2), (2, 3))
+        list123.safeTail.zip1(list123, i).toList shouldEqual List((2, 1), (3, 2))
+        nilInt.zip1(list123, i).toList shouldEqual Nil
+        list123.zip1(nilInt, i).toList shouldEqual Nil
+        s"parameter=$i"
       }
     }
-    println("zip1:\n" + results2)
+    println(s"zip1 has ${results2.count(_.isSuccess)} successes:\n" + results2) // Success only with parameter = 11.
 
   }
 
