@@ -267,19 +267,43 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         choice
       )
 
-      //              identity, // part of p -> f a r -> r
-      //              (p, _) => p, // part of f a p -> p
-      //              (_, a, r) => Lst.cons(a, r), // part of p -> f a r -> r
-      //            )(other) // part of f a p -> p
-      //
+      def zip0[B](other: Lst1[B]): Lst1[(A, B)] = lst1.twistedPara0[Lst1[B], Lst1[(A, B)]](
+        {
+          case None => other
+          case Some((_, ys)) => ys.safeTail
+        },
+        p => {
+          case None => Lst1.nil
+          case Some((a, t)) => p.headOption match {
+            case Some(b) => Lst1.cons((a, b), t)
+            case None => Lst1.nil
+          }
+        }
+      )
+
+      def zip1[B](other: Lst1[B], choice: Int): Lst1[(A, B)] = lst1.twistedPara1[Lst1[B], Lst1[(A, B)]](
+        {
+          case None => other
+          case Some((_, ys)) => ys.safeTail
+        },
+        p => {
+          case None => Lst1.nil
+          case Some((a, t)) => p.headOption match {
+            case Some(b) => Lst1.cons((a, b), t)
+            case None => Lst1.nil
+          }
+        },
+        choice
+      )
+
       //      def zip1[B](other: Lst[B]): Lst[(A, B)] = lst1.twistedPara[Lst[B], Lst[(A, B)]](
-      //        _ => Lst.nil,
-      //        (ys, _) => ys.safeTail,
-      //        (ys, a, t) => ys.headOption match {
+      //        _ => Lst.nil, // part of p -> f a r -> r
+      //        (ys, _) => ys.safeTail,// part of f a p -> p, written as (p, a) -> p
+      //        (ys, a, t) => ys.headOption match {// part of p -> f a r -> r i.e. p, a, r -> r
       //          case Some(b) => Lst.cons((a, b), t)
       //          case None => Lst.nil
       //        },
-      //      )(other)
+      //      )(other) // part of f a p -> p
     }
   }
 
@@ -320,11 +344,23 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         s"choice=$i"
       }
     }
-    println(results)
-    //
-    //    list123.zip1(list123).toList shouldEqual "[(1,1), (2,2), (3,3)]"
-    //    list123.zip1(list123.safeTail).toList shouldEqual "[(1,2), (2,3)]"
-    //    list123.safeTail.zip1(list123).toList shouldEqual "[(2,1), (3,2)]"
+    println("concat1:\n" + results)
+
+    list123.zip0(list123).toList shouldEqual Nil
+    list123.zip0(list123.safeTail).toList shouldEqual Nil
+    list123.safeTail.zip0(list123).toList shouldEqual List((2,3),(3,3))
+    nilInt.zip0(list123).toList shouldEqual Nil
+    list123.zip0(nilInt).toList shouldEqual Nil
+
+    val results2 = (0 to 17).map { i =>
+      Try {
+        list123.zip1(list123, i).toList shouldEqual Nil
+        list123.zip1(list123.safeTail, i).toList shouldEqual Nil
+        list123.safeTail.zip1(list123, i).toList shouldEqual Nil
+        s"choice=$i"
+      }
+    }
+    println("zip1:\n" + results2)
 
   }
 
