@@ -4,6 +4,8 @@ import cats.implicits.catsSyntaxSemigroup
 import cats.{Bifunctor, Monoid}
 import org.scalatest.{FlatSpec, Matchers}
 
+import scala.util.Try
+
 class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
 
   trait Foldable2[F[_, _]] {
@@ -44,7 +46,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       cata[R](falg)
     }
 
-    // Twisted paramorphism, 18 different choices of P parameterized by the number 0 <= choice < 18.
+    // Twisted paramorphism with 18 different choices of P parameterized by the number 0 <= choice < 18.
     final def twistedPara1[P, R](palg: F[A, P] => P, pralg: P => F[A, R] => R, choice: Int = 0): R = {
       val choice1: Boolean = choice % 2 == 0
       val choice2: Boolean = (choice / 2) % 3 == 0
@@ -265,11 +267,10 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         choice
       )
 
-      //              identity,
-      //              (p, _) => p,
-      //              (_, a, r) => Lst.cons(a, r),
-      //              17
-      //            )(other)
+      //              identity, // part of p -> f a r -> r
+      //              (p, _) => p, // part of f a p -> p
+      //              (_, a, r) => Lst.cons(a, r), // part of p -> f a r -> r
+      //            )(other) // part of f a p -> p
       //
       //      def zip1[B](other: Lst[B]): Lst[(A, B)] = lst1.twistedPara[Lst[B], Lst[(A, B)]](
       //        _ => Lst.nil,
@@ -305,11 +306,22 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     list123.concat(nilInt).toList shouldEqual list123.toList
     nilInt.concat(nilInt).toList shouldEqual Nil
     nilInt.concat(list123).toList shouldEqual list123.toList
-    //
-    //    list123.concat1(list123).toList shouldEqual "[1, 2, 3, 1, 2, 3]"
-    //    list123.concat1(nilInt).toList shouldEqual list123.toList
-    //    nilInt.concat1(nilInt).toList shouldEqual "[]"
-    //    nilInt.concat1(list123).toList shouldEqual list123.toList
+
+    list123.concat0(list123).toList shouldEqual List(1, 2, 3, 1, 2, 3)
+    list123.concat0(nilInt).toList shouldEqual list123.toList
+    nilInt.concat0(nilInt).toList shouldEqual Nil
+    nilInt.concat0(list123).toList shouldEqual list123.toList
+    val results = (0 to 17).map { i =>
+      println(s"choice=$i")
+      Try {
+        list123.concat1(list123, i).toList shouldEqual List(1, 2, 3, 1, 2, 3)
+        list123.concat1(nilInt, i).toList shouldEqual list123.toList
+        nilInt.concat1(nilInt, i).toList shouldEqual Nil
+        nilInt.concat1(list123, i).toList shouldEqual list123.toList
+
+      }
+    }
+    println(results)
     //
     //    list123.zip1(list123).toList shouldEqual "[(1,1), (2,2), (3,3)]"
     //    list123.zip1(list123.safeTail).toList shouldEqual "[(1,2), (2,3)]"
