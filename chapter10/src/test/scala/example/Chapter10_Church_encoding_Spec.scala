@@ -312,13 +312,12 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     nilInt.concat0(nilInt).toList shouldEqual Nil
     nilInt.concat0(list123).toList shouldEqual list123.toList
     val results = (0 to 17).map { i =>
-      println(s"choice=$i")
       Try {
         list123.concat1(list123, i).toList shouldEqual List(1, 2, 3, 1, 2, 3)
         list123.concat1(nilInt, i).toList shouldEqual list123.toList
         nilInt.concat1(nilInt, i).toList shouldEqual Nil
         nilInt.concat1(list123, i).toList shouldEqual list123.toList
-
+        s"choice=$i"
       }
     }
     println(results)
