@@ -1,7 +1,8 @@
 package example
 
-import cats.implicits.catsSyntaxSemigroup
-import cats.{Bifunctor, Monoid}
+import cats.Functor.ops.toAllFunctorOps
+import cats.implicits.{catsKernelStdOrderForInt, catsSyntaxSemigroup}
+import cats.{Bifunctor, Eval, Foldable, Functor, Monoid}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Try
@@ -17,6 +18,16 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     override def empty: Int = 0
 
     override def combine(x: Int, y: Int): Int = math.max(x, y)
+  }
+
+  object Ch1 {
+    def fix[F[_, _] : Bifunctor : Foldable2, A](fa: F[A, Ch1[F, A]]): Ch1[F, A] = new Ch1[F, A] {
+      override def cata[R](alg: F[A, R] => R): R = {
+        val c2r: Ch1[F, A] => R = _.cata(alg)
+        val fc2r: F[A, Ch1[F, A]] => F[A, R] = fac => implicitly[Bifunctor[F]].rightFunctor.map(fac)(c2r)
+        alg(fc2r(fa))
+      }
+    }
   }
 
   // A rank-1 Church encoding for type constructors: `Ch1[F, A]` is the fixpoint `µR. F[A, R]`.
@@ -74,16 +85,6 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       val pr: P => R = cata[P => R](falgpr)
       val r: R = pr(baseP)
       r
-    }
-  }
-
-  object Ch1 {
-    def fix[F[_, _] : Bifunctor : Foldable2, A](fa: F[A, Ch1[F, A]]): Ch1[F, A] = new Ch1[F, A] {
-      override def cata[R](alg: F[A, R] => R): R = {
-        val c2r: Ch1[F, A] => R = _.cata(alg)
-        val fc2r: F[A, Ch1[F, A]] => F[A, R] = fac => implicitly[Bifunctor[F]].rightFunctor.map(fac)(c2r)
-        alg(fc2r(fa))
-      }
     }
   }
 
@@ -347,6 +348,9 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     nilInt.concat(nilInt).toList shouldEqual Nil
     nilInt.concat(list123).toList shouldEqual list123.toList
 
+    list123.depth shouldEqual 4
+    nilInt.depth shouldEqual 1
+
     list123.concat0(list123).toList shouldEqual List(1, 2, 3, 1, 2, 3)
     list123.concat0(nilInt).toList shouldEqual list123.toList
     nilInt.concat0(nilInt).toList shouldEqual Nil
@@ -368,9 +372,9 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     nilInt.zip0(list123).toList shouldEqual Nil
     list123.zip0(nilInt).toList shouldEqual Nil
 
-    list123.zip0p(list123).toList shouldEqual List((1,1), (2,1), (3,1))
-    list123.zip0p(list123.safeTail).toList shouldEqual List((1,2), (2,2), (3,2))
-    list123.safeTail.zip0p(list123).toList shouldEqual List((2,1), (3,1))
+    list123.zip0p(list123).toList shouldEqual List((1, 1), (2, 1), (3, 1))
+    list123.zip0p(list123.safeTail).toList shouldEqual List((1, 2), (2, 2), (3, 2))
+    list123.safeTail.zip0p(list123).toList shouldEqual List((2, 1), (3, 1))
     nilInt.zip0p(list123).toList shouldEqual Nil
     list123.zip0p(nilInt).toList shouldEqual Nil
 
@@ -388,4 +392,54 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
 
   }
 
+  object Ch0 {
+    def fix[F[_] : Functor : Foldable](fa: F[Ch0[F]]): Ch0[F] = new Ch0[F] {
+      override def cata[R](alg: F[R] => R): R = {
+        val c2r: Ch0[F] => R = _.cata(alg)
+        val fc2r: F[Ch0[F]] => F[R] = _.map(c2r)
+        alg(fc2r(fa))
+      }
+    }
+  }
+
+  // A rank-1 Church encoding for type constructors: `Ch1[F, A]` is the fixpoint `µR. F[A, R]`.
+  abstract class Ch0[F[_] : Functor : Foldable] {
+
+    // Standard catamorphism.
+    def cata[R](alg: F[R] => R): R
+
+    final def unfix: F[Ch0[F]] = cata[F[Ch0[F]]] {
+      _.map(Ch0.fix[F])
+    }
+
+    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable[F]].maximumOption(far).getOrElse(0) }
+
+    // Standard paramorphism.
+    final def para[R](palg: F[(Ch0[F], R)] => R): R = cata[(Ch0[F], R)] { facr =>
+      val c: Ch0[F] = Ch0.fix(facr.map(_._1))
+      val r: R = palg(facr)
+      (c, r)
+    }._2
+  }
+
+  type BN[A] = Option[(Boolean, A)]
+  type BinNat = Ch0[BN]
+
+  object BinNat {
+    implicit val functorBN: Functor[BN] = new Functor[BN] {
+      override def map[A, B](fa: BN[A])(f: A => B): BN[B] = fa map { case (b, a) => (b, f(a)) }
+    }
+    implicit val foldableBN: Foldable[BN] = new Foldable[BN] {
+      override def foldLeft[A, B](fa: BN[A], b: B)(f: (B, A) => B): B = ???
+
+      override def foldRight[A, B](fa: BN[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = ???
+    }
+    val zero: BinNat = new Ch0[BN] {
+      override def cata[R](alg: BN[R] => R): R = ???
+    }
+  }
+
+  it should "church-encode binary naturals" in {
+
+  }
 }
