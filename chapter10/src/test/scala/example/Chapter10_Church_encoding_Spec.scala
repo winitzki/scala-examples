@@ -286,6 +286,11 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       override def cata[R](alg: F[A, R] => R): R = alg(Some((a, tail.cata(alg))))
     }
 
+    def snoc[A](append: A, head: Lst1[A]): Lst1[A] = head.cata[Lst1[A]] {
+      case None => Lst1.cons(append, Lst1.nil)
+      case Some((a, lsta)) => Lst1.cons(a, lsta)
+    }
+
     implicit class Ops[A](lst1: Lst1[A]) {
       def toList: List[A] = lst1.cata[List[A]] {
         case None => Nil
@@ -300,6 +305,11 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       def safeTail: Lst1[A] = lst1.unfix match {
         case Some((head, tail)) => tail
         case None => lst1
+      }
+
+      def reverse: Lst1[A] = lst1.cata[Lst1[A]] {
+        case None => Lst1.nil
+        case Some((a, lsta)) => Lst1.snoc(a, lsta)
       }
 
       def concat(other: Lst1[A]): Lst1[A] = lst1.cata[Lst1[A]] {
@@ -446,7 +456,15 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     println(s"zip1 has ${results2.count(_.isSuccess)} successes:\n" + results2) // Success only with parameter = 11.
 
     // Traversal.
-    cons("a", cons("b", cons("c", nil))).zipWithIndex.toList shouldEqual List(("a", 0), ("b", 1), ("c", 2 ))
+    cons("a", cons("b", cons("c", nil)))
+      .zipWithIndex.toList shouldEqual List(("a", 0), ("b", 1), ("c", 2))
+
+    // Reverse.
+    val list321: Lst1[Int] = snoc(1, snoc(2, snoc(3, nil)))
+    list321.toList shouldEqual List(3, 2, 1)
+    snoc(1, snoc(2, nil)).toList shouldEqual List(2, 1)
+    list321.reverse.reverse.toList shouldEqual list321.toList
+    list321.reverse.toList shouldEqual list123.toList
   }
 
   object Ch0 {
