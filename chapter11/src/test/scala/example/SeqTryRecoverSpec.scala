@@ -65,7 +65,7 @@ class SeqTryRecoverSpec extends FlatSpec with Matchers {
       // The first will fail, the others will not. But iterations will continue. The result is that y = [<failure>, 6, 3].
       z ← (1 to y).up                       // The result is z = [<failure>, 1, 2, 3, 4, 5, 6, 1, 2, 3]
       t ← Try(24 / math.abs(z - 2)).up      // Some of them will fail but iterations will continue.
-      // The result is that t = [<failure>, 24, <failure>, 24, 12, 8, 6, 24, <failure>, 24] 
+      // The result is: t = [<failure>, 24, <failure>, 24, 12, 8, 6, 24, <failure>, 24]
     } yield t
 
     // To verify the results quickly, replace the errors by the special `failure` value -12345678 that
@@ -77,7 +77,6 @@ class SeqTryRecoverSpec extends FlatSpec with Matchers {
 }
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 object FutureCloseable {
   def using[T, R <: AutoCloseable](r: => R)(program: R => Future[T])(implicit ec: ExecutionContext): Future[T] = {

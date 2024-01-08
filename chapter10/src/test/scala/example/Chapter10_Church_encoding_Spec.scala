@@ -1,16 +1,23 @@
 package example
 
 import cats.Functor.ops.toAllFunctorOps
-import cats.implicits.{catsKernelStdOrderForInt, catsSyntaxSemigroup}
-import cats.{Bifunctor, Eval, Foldable, Functor, Monoid}
+import cats.{Applicative, Bifunctor, Functor, Monoid}
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.Try
 
 class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
 
+  trait Foldable1[F[_]] {
+    def reduce[M: Monoid](fm: F[M]): M
+  }
+
   trait Foldable2[F[_, _]] {
-    def reduce[M: Monoid, A](f: A => M)(fam: F[A, M]): M
+    def reduce[M: Monoid, A](fam: F[A, M]): M
+  }
+
+  trait Bitraversable[F[_, _]] {
+    def biseq[A, B, L[_] : Applicative](fla: F[L[A], L[B]]): L[F[A, B]]
   }
 
   val intMonoidMax: Monoid[Int] = new Monoid[Int] {
@@ -20,18 +27,36 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     override def combine(x: Int, y: Int): Int = math.max(x, y)
   }
 
+  type Counter[A] = Int => (A, Int)
+
+  val applicativeCounter: Applicative[Counter] = new Applicative[Counter] {
+    override def pure[A](x: A): Counter[A] = i => (x, i)
+
+    override def ap[A, B](ff: Counter[A => B])(fa: Counter[A]): Counter[B] = { i =>
+      val (fab, j) = ff(i)
+      val (a, k) = fa(j)
+      (fab(a), k)
+    }
+  }
+
   object Ch1 {
-    def fix[F[_, _] : Bifunctor : Foldable2, A](fa: F[A, Ch1[F, A]]): Ch1[F, A] = new Ch1[F, A] {
+    def fix[F[_, _] : Bifunctor : Foldable2 : Bitraversable, A](fa: F[A, Ch1[F, A]]): Ch1[F, A] = new Ch1[F, A] {
       override def cata[R](alg: F[A, R] => R): R = {
         val c2r: Ch1[F, A] => R = _.cata(alg)
         val fc2r: F[A, Ch1[F, A]] => F[A, R] = fac => implicitly[Bifunctor[F]].rightFunctor.map(fac)(c2r)
         alg(fc2r(fa))
       }
     }
+
+    abstract class Ch1Yoneda[A, F[_, _], L[_]] {
+      def run[R](alg: F[A, R] => R): L[R]
+    }
+
+    def ch1Yoneda[A, F[_, _] : Bifunctor : Foldable2 : Bitraversable, L[_] : Functor](ch1: Ch1Yoneda[A, F, L]): L[Ch1[F, A]] = ch1.run[Ch1[F, A]](Ch1.fix[F, A])
   }
 
   // A rank-1 Church encoding for type constructors: `Ch1[F, A]` is the fixpoint `µR. F[A, R]`.
-  abstract class Ch1[F[_, _] : Bifunctor : Foldable2, A] {
+  abstract class Ch1[F[_, _] : Bifunctor : Foldable2 : Bitraversable, A] {
     final def rmap[B, C](f: B => C): F[A, B] => F[A, C] = implicitly[Bifunctor[F]].rightFunctor.map(_)(f)
 
     // Standard catamorphism.
@@ -41,7 +66,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       rmap(Ch1.fix[F, A])
     }
 
-    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable2[F]].reduce[Int, A](_ => 0)(far)(intMonoidMax) }
+    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable2[F]].reduce[Int, A](far)(intMonoidMax) }
 
     // Standard paramorphism.
     final def para[R](palg: F[A, (Ch1[F, A], R)] => R): R = cata[(Ch1[F, A], R)] { facr =>
@@ -49,6 +74,26 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       val r: R = palg(facr)
       (c, r)
     }._2
+
+    // Traversable functionality for Church-encoded type constructors.
+    final def traverse[B, L[_] : Applicative](f: A => L[B]): L[Ch1[F, B]] = {
+      val c: Ch1.Ch1Yoneda[B, F, L] = new Ch1.Ch1Yoneda[B, F, L] {
+        // We have ∀T. (F[A, T] => T) => T and we have A => L[B].
+        // First, map to ∀T. (F[L[B], T] => T) => T.
+        // Then set T = L[R] and get ∀R. (F[L[B], L[R]] => L[R]) => L[R].
+        // Then map to ∀R. (L[F[B, R]] => L[R]) => L[R].
+        // The function of type L[F[B, R]] => L[R] is the map of alg.
+        override def run[R](alg: F[B, R] => R): L[R] = cata[L[R]] { falr: F[A, L[R]] =>
+          val flblr: F[L[B], L[R]] = Bifunctor[F].leftMap(falr)(f)
+          val lfbr: L[F[B, R]] = implicitly[Bitraversable[F]].biseq(flblr)
+          val lr: L[R] = Applicative[L].map(lfbr)(alg)
+          lr
+        }
+      }
+      Ch1.ch1Yoneda[B, F, L](c)
+    }
+
+    final def zipWithIndex: Ch1[F, (A, Int)] = traverse[(A, Int), Counter](a => i => ((a, i), i + 1))(applicativeCounter)(0)._1
 
     // Twisted paramorphism, basic version.
     final def twistedPara0[P, R](palg: F[A, P] => P, pralg: P => F[A, R] => R): R = {
@@ -90,17 +135,24 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
 
   type F[A, R] = Option[(A, R)]
 
-  val bifunctorF: Bifunctor[F] = new Bifunctor[F] {
+  val bifunctorF = new Bifunctor[F] {
     override def bimap[A, B, C, D](fab: F[A, B])(f: A => C, g: B => D): F[C, D] = fab match {
       case Some((a, b)) => Some((f(a), g(b)))
       case None => None
     }
   }
 
-  val foldable2: Foldable2[F] = new Foldable2[F] {
-    override def reduce[M: Monoid, A](f: A => M)(fam: F[A, M]): M = fam match {
-      case Some((a, m)) => f(a) |+| m
+  val foldable2F = new Foldable2[F] {
+    override def reduce[M: Monoid, A](fam: F[A, M]): M = fam match {
+      case Some((a, m)) => m
       case None => Monoid[M].empty
+    }
+  }
+
+  val bitraversableF = new Bitraversable[F] {
+    override def biseq[A, B, L[_] : Applicative](fla: F[L[A], L[B]]): L[F[A, B]] = fla match {
+      case None => Applicative[L].pure(None: F[A, B])
+      case Some((la, lb)) => Applicative[L].map2(la, lb)((a, b) => Some((a, b)): F[A, B])
     }
   }
 
@@ -117,7 +169,9 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       case Some((a, prev)) => update(a, prev)
     }
 
-    def unfix: F[A, Lst[A]] = fold[F[A, Lst[A]]](None) { (a, falsta: F[A, Lst[A]]) => Some((a, Lst.fix(falsta))) }
+    def unfix: F[A, Lst[A]] = fold[F[A, Lst[A]]](None) { (a, falsta: F[A, Lst[A]]) =>
+      Some((a, Lst.fix(falsta)))
+    }
 
     def headOption: Option[A] = unfix match {
       case Some((a, lsta)) => Some(a)
@@ -221,7 +275,8 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
   object Lst1 {
     type Lst1[A] = Ch1[F, A]
     implicit val i1 = bifunctorF
-    implicit val i2 = foldable2
+    implicit val i2 = foldable2F
+    implicit val i3 = bitraversableF
 
     def nil[A]: Lst1[A] = new Lst1[A] {
       override def cata[R](alg: F[A, R] => R): R = alg(None)
@@ -390,10 +445,12 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     }
     println(s"zip1 has ${results2.count(_.isSuccess)} successes:\n" + results2) // Success only with parameter = 11.
 
+    // Traversal.
+    cons("a", cons("b", cons("c", nil))).zipWithIndex.toList shouldEqual List(("a", 0), ("b", 1), ("c", 2 ))
   }
 
   object Ch0 {
-    def fix[F[_] : Functor : Foldable](fa: F[Ch0[F]]): Ch0[F] = new Ch0[F] {
+    def fix[F[_] : Functor : Foldable1](fa: F[Ch0[F]]): Ch0[F] = new Ch0[F] {
       override def cata[R](alg: F[R] => R): R = {
         val c2r: Ch0[F] => R = _.cata(alg)
         val fc2r: F[Ch0[F]] => F[R] = _.map(c2r)
@@ -402,8 +459,8 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     }
   }
 
-  // A rank-1 Church encoding for type constructors: `Ch1[F, A]` is the fixpoint `µR. F[A, R]`.
-  abstract class Ch0[F[_] : Functor : Foldable] {
+  // A rank-0 Church encoding for simple types.: `Ch0[F]` is the fixpoint `µR. F[R]`.
+  abstract class Ch0[F[_] : Functor : Foldable1] {
 
     // Standard catamorphism.
     def cata[R](alg: F[R] => R): R
@@ -412,7 +469,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       _.map(Ch0.fix[F])
     }
 
-    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable[F]].maximumOption(far).getOrElse(0) }
+    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable1[F]].reduce(far)(intMonoidMax) }
 
     // Standard paramorphism.
     final def para[R](palg: F[(Ch0[F], R)] => R): R = cata[(Ch0[F], R)] { facr =>
@@ -429,10 +486,11 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     implicit val functorBN: Functor[BN] = new Functor[BN] {
       override def map[A, B](fa: BN[A])(f: A => B): BN[B] = fa map { case (b, a) => (b, f(a)) }
     }
-    implicit val foldableBN: Foldable[BN] = new Foldable[BN] {
-      override def foldLeft[A, B](fa: BN[A], b: B)(f: (B, A) => B): B = ???
-
-      override def foldRight[A, B](fa: BN[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = ???
+    implicit val foldableBN: Foldable1[BN] = new Foldable1[BN] {
+      override def reduce[M: Monoid](fm: BN[M]): M = fm match {
+        case Some((a, m)) => m
+        case None => Monoid[M].empty
+      }
     }
     val zero: BinNat = new Ch0[BN] {
       override def cata[R](alg: BN[R] => R): R = ???
