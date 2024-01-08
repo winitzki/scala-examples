@@ -307,7 +307,16 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         case None => lst1
       }
 
+      // Filter (deflate) exists if we have a function of type F[Option[A], C[A]] => C[A].
+      // But it is not obvious that the laws of deflate hold.
+
+      // Pure exists if A => F[A, C[A]] exists? Not clear.
+      // C[Unit] = F[Unit, C[Unit]]. There can be many implementations of this. Not clear how to choose a good one.
+
+      // Implement depth-limited anamorphism and depth-limited hylomorphism? See https://sassa-nf.dreamwidth.org/90732.html
+
       // FlatMap exists if we have a function of type F[C[A], C[A]] => C[A].
+      // But it is not obvious that the monad laws hold.
       def flatMap[B](f: A => Lst1[B]) : Lst1[B] = lst1.cata[Lst1[B]] {
         case None => nil
         case Some((a, tail)) => f(a) concat tail
