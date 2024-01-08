@@ -307,6 +307,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         case None => lst1
       }
 
+      // FlatMap exists if we have a function of type F[C[A], C[A]] => C[A].
       def flatMap[B](f: A => Lst1[B]) : Lst1[B] = lst1.cata[Lst1[B]] {
         case None => nil
         case Some((a, tail)) => f(a) concat tail
