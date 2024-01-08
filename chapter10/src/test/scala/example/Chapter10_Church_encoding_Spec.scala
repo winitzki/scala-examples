@@ -311,9 +311,10 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       // But it is not obvious that the laws of deflate hold.
 
       // Pure exists if A => F[A, C[A]] exists? Not clear.
-      // C[Unit] = F[Unit, C[Unit]]. There can be many implementations of this. Not clear how to choose a good one.
+      // C[Unit] = F[Unit, C[Unit]]. There can be many implementations of this. Not clear how to choose a good one. It exists if F[Unit, Nothing] is inhabited but we can't say much more.
 
       // Implement depth-limited anamorphism and depth-limited hylomorphism? See https://sassa-nf.dreamwidth.org/90732.html
+      // Implement zip via depth-limited hylo or ana?
 
       // FlatMap exists if we have a function of type F[C[A], C[A]] => C[A].
       // But it is not obvious that the monad laws hold.
