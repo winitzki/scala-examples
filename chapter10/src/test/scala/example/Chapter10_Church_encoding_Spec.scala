@@ -307,6 +307,11 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
         case None => lst1
       }
 
+      def flatMap[B](f: A => Lst1[B]) : Lst1[B] = lst1.cata[Lst1[B]] {
+        case None => nil
+        case Some((a, tail)) => f(a) concat tail
+      }
+
       def reverse: Lst1[A] = lst1.cata[Lst1[A]] {
         case None => Lst1.nil
         case Some((a, lsta)) => Lst1.snoc(a, lsta)
@@ -465,6 +470,9 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     snoc(1, snoc(2, nil)).toList shouldEqual List(2, 1)
     list321.reverse.reverse.toList shouldEqual list321.toList
     list321.reverse.toList shouldEqual list123.toList
+
+    // FlatMap.
+    list123.flatMap(i => cons(i.toString, cons((i-1).toString, nil))).toList shouldEqual List("1", "0", "2", "1", "3", "2")
   }
 
   object Ch0 {
