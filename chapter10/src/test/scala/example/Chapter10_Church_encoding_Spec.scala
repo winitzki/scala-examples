@@ -66,7 +66,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       rmap(Ch1.fix[F, A])
     }
 
-    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable2[F]].reduce[Int, A](far)(intMonoidMax) }
+    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable2[F]].reduce[Int, A](far)(intMonoidMax) } - 1
 
     // Standard paramorphism.
     final def para[R](palg: F[A, (Ch1[F, A], R)] => R): R = cata[(Ch1[F, A], R)] { facr =>
@@ -315,10 +315,11 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
 
       // Implement depth-limited anamorphism and depth-limited hylomorphism? See https://sassa-nf.dreamwidth.org/90732.html
       // Implement zip via depth-limited hylo or ana?
+      // A function for converting `depth` into Church encoding?
 
       // FlatMap exists if we have a function of type F[C[A], C[A]] => C[A].
       // But it is not obvious that the monad laws hold.
-      def flatMap[B](f: A => Lst1[B]) : Lst1[B] = lst1.cata[Lst1[B]] {
+      def flatMap[B](f: A => Lst1[B]): Lst1[B] = lst1.cata[Lst1[B]] {
         case None => nil
         case Some((a, tail)) => f(a) concat tail
       }
@@ -429,8 +430,8 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     nilInt.concat(nilInt).toList shouldEqual Nil
     nilInt.concat(list123).toList shouldEqual list123.toList
 
-    list123.depth shouldEqual 4
-    nilInt.depth shouldEqual 1
+    list123.depth shouldEqual 3
+    nilInt.depth shouldEqual 0
 
     list123.concat0(list123).toList shouldEqual List(1, 2, 3, 1, 2, 3)
     list123.concat0(nilInt).toList shouldEqual list123.toList
@@ -483,7 +484,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     list321.reverse.toList shouldEqual list123.toList
 
     // FlatMap.
-    list123.flatMap(i => cons(i.toString, cons((i-1).toString, nil))).toList shouldEqual List("1", "0", "2", "1", "3", "2")
+    list123.flatMap(i => cons(i.toString, cons((i - 1).toString, nil))).toList shouldEqual List("1", "0", "2", "1", "3", "2")
   }
 
   object Ch0 {
@@ -506,7 +507,7 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
       _.map(Ch0.fix[F])
     }
 
-    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable1[F]].reduce(far)(intMonoidMax) }
+    final def depth: Int = cata[Int] { far => 1 + implicitly[Foldable1[F]].reduce(far)(intMonoidMax) } - 1
 
     // Standard paramorphism.
     final def para[R](palg: F[(Ch0[F], R)] => R): R = cata[(Ch0[F], R)] { facr =>
@@ -516,25 +517,151 @@ class Chapter10_Church_encoding_Spec extends FlatSpec with Matchers {
     }._2
   }
 
-  type BN[A] = Option[(Boolean, A)]
+  type BN[A] = (Boolean, Option[A])
   type BinNat = Ch0[BN]
 
   object BinNat {
     implicit val functorBN: Functor[BN] = new Functor[BN] {
-      override def map[A, B](fa: BN[A])(f: A => B): BN[B] = fa map { case (b, a) => (b, f(a)) }
-    }
-    implicit val foldableBN: Foldable1[BN] = new Foldable1[BN] {
-      override def reduce[M: Monoid](fm: BN[M]): M = fm match {
-        case Some((a, m)) => m
-        case None => Monoid[M].empty
+      override def map[A, B](fa: BN[A])(f: A => B): BN[B] = fa match {
+        case (b, x) => (b, x map f)
       }
     }
-    val zero: BinNat = new Ch0[BN] {
-      override def cata[R](alg: BN[R] => R): R = ???
+    implicit val foldableBN: Foldable1[BN] = new Foldable1[BN] {
+      override def reduce[M: Monoid](fm: BN[M]): M = fm._2.getOrElse(Monoid[M].empty)
     }
+
+    def ofBoolean(b: Boolean): BinNat = new BinNat {
+      override def cata[R](alg: ((Boolean, Option[R])) => R): R = alg((b, None))
+    }
+
+    def cons(b: Boolean, tail: BinNat): BinNat = new BinNat {
+      override def cata[R](alg: ((Boolean, Option[R])) => R): R = alg((b, Some(tail.cata(alg))))
+    }
+
+    def snoc(append: Boolean, head: BinNat): BinNat = head.cata[BinNat] {
+      case (b, None) => cons(b, ofBoolean(append))
+      case (b, Some(x)) => cons(b, x)
+    }
+
+    implicit class BinNatOps(n: BinNat) {
+      def toList: List[Boolean] = n.cata[List[Boolean]] {
+        case (b, None) => List(b)
+        case (b, Some(x)) => b +: x
+      }
+
+      private def bool2int(b: Boolean): Int = if (b) 1 else 0
+
+      def toInt: Int = n.cata[(Int, Int)] {
+        case (b, None) => (bool2int(b), 1)
+        case (b, Some((x, base))) =>
+          val newBase = 2 * base
+          (bool2int(b) * newBase + x, newBase)
+      }._1
+
+      def twice: BinNat = snoc(false, n)
+
+      def twicePlus1: BinNat = snoc(true, n)
+
+      // Adding 1 to a binary number requires handling a carryover value.
+      def incr: BinNat = {
+        val (carry, result) = n.cata[(Boolean, BinNat)] {
+          case (bit, None) => (bit, ofBoolean(!bit))
+          case (bit, Some((carryover, tail))) =>
+            val newCarryover: Boolean = bit && carryover
+            val newBit: Boolean = bit ^ carryover
+            (newCarryover, cons(newBit, tail))
+        }
+        if (carry) cons(true, result) else result
+      }
+
+      def length: Int = n.depth + 1
+
+      // Implement a Natural/fold function.
+      def fold[R](init: R)(update: R => R): R =
+        n.cata[(R, R => R)] {
+          case (b, None) => (if (!b) init else update(init), update)
+          case (b, Some((x, baseUpdate))) =>
+            val newUpdate = baseUpdate compose baseUpdate
+            (if (b) newUpdate(x) else x, newUpdate)
+        }._1
+
+      def foldInt[R](init: R)(update: R => R): R = {
+        (0 until n.toInt).foldLeft(init)((prev, _) => update(prev))
+      }
+    }
+
   }
 
   it should "church-encode binary naturals" in {
+    import BinNat._
+
+    val zero: BinNat = ofBoolean(false)
+    val one: BinNat = ofBoolean(true)
+    val two: BinNat = one.incr
+    val three: BinNat = two.incr
+    val four: BinNat = three.incr
+
+    zero.toList shouldEqual List(false)
+    one.toList shouldEqual List(true)
+    two.toList shouldEqual List(true, false)
+    three.toList shouldEqual List(true, true)
+    four.toList shouldEqual List(true, false, false)
+
+    Seq(
+      zero -> 0,
+      one -> 1,
+      two -> 2,
+      three -> 3,
+      four -> 4,
+
+      zero.twice -> 0,
+      zero.twicePlus1 -> 1,
+      one.twice -> 2,
+      one.twicePlus1 -> 3,
+      two.twice -> 4,
+      two.twicePlus1 -> 5,
+      three.twice -> 6,
+      three.twicePlus1 -> 7,
+      four.twice -> 8,
+      four.twicePlus1 -> 9,
+
+      four.twice.incr -> 9,
+      three.twicePlus1.incr -> 8,
+
+    ).foreach {
+      case (n, expected) => n.toInt shouldEqual expected
+    }
+
+    Seq(
+      zero.depth -> 0,
+      one.depth -> 0,
+      two.depth -> 1,
+      three.depth -> 1,
+      four.depth -> 2,
+
+      zero.length -> 1,
+      one.length -> 1,
+      two.length -> 2,
+      three.length -> 2,
+      four.length -> 3,
+    ).foreach {
+      case (n, expected) => n.toInt shouldEqual expected
+    }
+
+    Seq(zero, one, two, three, four).foreach { n =>
+      val result = n.foldInt(100)(x => x + 1)
+      val expected = 100 + n.toInt
+      println(s"DEBUG: ${n.toInt} foldInt gives result $result, expected $expected")
+      result shouldEqual expected
+    }
+
+    Seq(zero, one, two, three, four).foreach { n =>
+      val result = n.fold(100)(x => x + 1)
+      val expected = 100 + n.toInt
+      println(s"DEBUG: ${n.toInt} fold gives result $result, expected $expected")
+      result shouldEqual expected
+    }
 
   }
+
 }
