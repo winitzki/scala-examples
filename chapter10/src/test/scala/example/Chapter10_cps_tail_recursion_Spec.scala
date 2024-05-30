@@ -224,10 +224,10 @@ TailRec A  = Done(A) + Call(1 -> TailRec A) + exists B. Cont(B, B -> TailRec A)
 
 This is a free monad: TailRec A = A + F(TailRec A) where F X = (1 -> X) + (exists Y. Y × (Y -> X))
 
-This is equivalent to F X = (1 -> X) + X
-This is the Eval monad.
+This is equivalent to F X = (1 -> X) + X  (except it is on-call evaluated!!)
+This is similar to the Eval monad.
 
-So, TailRec is a free monad on an Eval functor.
+So, TailRec is a free monad on an Eval functor. (?)
 
 In addition to map and flatMap, it has a `resume` method:
 
@@ -244,6 +244,8 @@ Compare this with the special monad method from cats:
  F[A] => A => (A => F (A + B)) => F[B]
 
 Also that is not the same.
+
+(Why does it need an extra argument of type A?)
 
    */
 }
