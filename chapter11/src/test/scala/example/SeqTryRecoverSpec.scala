@@ -1,6 +1,8 @@
 package example
 
 import cats.Functor
+import cats.syntax.functor._
+import example.CatsMonad.CatsMonadSyntax
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.util.{Failure, Success, Try}
@@ -109,28 +111,6 @@ class CoprodSpec extends FlatSpec with Matchers {
     def up: M[A] = Coprod.inRight[Seq, Try, A].apply(x)
   }
 
-  // TODO: make this code generic in M and move it into the Coprod object.
-
-  import CatsMonad.CatsMonadSyntax
-  import cats.syntax.functor._
-
-  implicit val functorM: Functor[M] = new Functor[M] {
-    override def map[A, B](fa: M[A])(f: A => B): M[B] = new Coprod[Seq, Try, B] {
-      override def run[T[_] : CatsMonad : Functor]: NatTrans[Seq, T] => NatTrans[Try, T] => T[B] =
-        nts => ntt => fa.run[T].apply(nts)(ntt).map(f)
-    }
-  }
-
-  implicit val catsMonadM: CatsMonad[M] = new CatsMonad[M] {
-    override def flatMap[A, B](fa: M[A])(f: A => M[B]): M[B] = new Coprod[Seq, Try, B] {
-      override def run[T[_] : CatsMonad : Functor]: NatTrans[Seq, T] => NatTrans[Try, T] => T[B] = nts => ntt => fa.run[T].apply(nts)(ntt).flatMap(a => f(a).run[T].apply(nts)(ntt))
-    }
-
-    override def pure[A](x: A): M[A] = new Coprod[Seq, Try, A] {
-      override def run[T[_] : CatsMonad : Functor]: NatTrans[Seq, T] => NatTrans[Try, T] => T[A] = nts => ntt => CatsMonad[T].pure(x)
-    }
-  }
-
   def toList[A]: M[A] => Seq[A] = { ma =>
     ma.run[Seq].apply(new NatTrans[Seq, Seq] {
       override def run[A]: Seq[A] => Seq[A] = identity
@@ -147,8 +127,11 @@ class CoprodSpec extends FlatSpec with Matchers {
     y <- Try(100 / (2 - x)).up
   } yield y
 
-  val result: Seq[Int] = toList(test)
-  result shouldEqual Seq(100, -100)
+  it should "convert a sequence but exclude failures" in {
+    val result: Seq[Int] = toList(test)
+    result shouldEqual Seq(100, -100)
+  }
+
 }
 
 trait NatTrans[F[_], G[_]] {
@@ -166,6 +149,185 @@ object Coprod {
 
   def inRight[R[_] : CatsMonad : Functor, S[_] : CatsMonad : Functor, A]: S[A] => Coprod[R, S, A] = sa => new Coprod[R, S, A] {
     override def run[T[_] : CatsMonad : Functor]: NatTrans[R, T] => NatTrans[S, T] => T[A] = rt => st => st.run(sa)
+  }
+
+
+  implicit def functorCoprod[R[_] : CatsMonad : Functor, S[_] : CatsMonad : Functor]: Functor[Lambda[X => Coprod[R, S, X]]] = new Functor[Lambda[X => Coprod[R, S, X]]] {
+    override def map[A, B](fa: Coprod[R, S, A])(f: A => B): Coprod[R, S, B] = new Coprod[R, S, B] {
+      override def run[T[_] : CatsMonad : Functor]: NatTrans[R, T] => NatTrans[S, T] => T[B] = nts => ntt => fa.run[T].apply(nts)(ntt).map(f)
+    }
+  }
+
+  implicit def catsMonadCoprod[R[_] : CatsMonad : Functor, S[_] : CatsMonad : Functor]: CatsMonad[Lambda[X => Coprod[R, S, X]]] = new CatsMonad[Lambda[X => Coprod[R, S, X]]] {
+
+    override def pure[A](x: A): Coprod[R, S, A] = new Coprod[R, S, A] {
+      override def run[T[_] : CatsMonad : Functor]: NatTrans[R, T] => NatTrans[S, T] => T[A] = nts => ntt => CatsMonad[T].pure(x)
+    }
+
+    override def flatMap[A, B](fa: Coprod[R, S, A])(f: A => Coprod[R, S, B]): Coprod[R, S, B] = new Coprod[R, S, B] {
+      override def run[T[_] : CatsMonad : Functor]: NatTrans[R, T] => NatTrans[S, T] => T[B] = nts => ntt => fa.run[T].apply(nts)(ntt).flatMap(a => f(a).run[T].apply(nts)(ntt))
+    }
+  }
+
+}
+
+class CoprodStackSpec extends FlatSpec with Matchers {
+
+  case class State[A](run: Int => (A, Int))
+
+  implicit val functorState: Functor[State] = new Functor[State] {
+    override def map[A, B](fa: State[A])(f: A => B): State[B] = State { i =>
+      fa.run(i) match {
+        case (x, newState) => (f(x), newState)
+      }
+    }
+  }
+
+  implicit val catsMonadState: CatsMonad[State] = new CatsMonad[State] {
+
+    override def flatMap[A, B](fa: State[A])(f: A => State[B]): State[B] = State { i =>
+      fa.run(i) match {
+        case (x, newState) => f(x).run(newState)
+      }
+    }
+
+    override def pure[A](x: A): State[A] = State { i => (x, i) }
+  }
+
+  implicit val functorOption: Functor[Option] = new Functor[Option] {
+    override def map[A, B](fa: Option[A])(f: A => B): Option[B] = fa.map(f)
+  }
+
+  implicit val catsMonadOption: CatsMonad[Option] = new CatsMonad[Option] {
+
+    override def flatMap[A, B](fa: Option[A])(f: A => Option[B]): Option[B] = fa.flatMap(f)
+
+    override def pure[A](x: A): Option[A] = Some(x)
+  }
+
+  type Stack0[A] = Coprod[State, Option, A]
+
+  val stateStateTrans: NatTrans[State, State] = new NatTrans[State, State] {
+    override def run[B]: State[B] => State[B] = identity
+  }
+
+  val optionStateTrans: NatTrans[Option, State] = new NatTrans[Option, State] {
+    override def run[B]: Option[B] => State[B] = {
+      case None => State { i => (null.asInstanceOf[B], i) }
+      case Some(x) => State { i => (x, i) }
+    }
+  }
+
+  def toState0[A](s: Stack0[A]): State[A] = s.run[State].apply(stateStateTrans)(optionStateTrans)
+
+  case class Stack1[A](run: Int => (Option[A], Int)) { // OptionT[State][A] = S[Option[A]]
+    def toState: State[A] = State { i =>
+      run(i) match {
+        case (o, newState) => (o.getOrElse(null.asInstanceOf[A]), newState)
+      }
+    }
+  }
+
+  case class Stack2[A](run: Int => Option[(A, Int)]) { // StateT[Option][A]
+    def toState: State[A] = State { i =>
+      run(i).getOrElse((null.asInstanceOf[A], i))
+    }
+  }
+
+  // Define typeclass instances and lifting operations for the two monad stacks.
+
+  implicit val functorStack1: Functor[Stack1] = new Functor[Stack1] {
+    override def map[A, B](fa: Stack1[A])(f: A => B): Stack1[B] = Stack1 { i =>
+      val (x, newState) = fa.run(i)
+      (x.map(f), newState)
+    }
+  }
+
+  implicit val catsMonadStack1: CatsMonad[Stack1] = new CatsMonad[Stack1] {
+
+    override def flatMap[A, B](fa: Stack1[A])(f: A => Stack1[B]): Stack1[B] = Stack1 { i =>
+      val (x, newState) = fa.run(i)
+      x.map(f) match {
+        case Some(value) => value.run(newState)
+        case None => (None, newState)
+      }
+    }
+
+    override def pure[A](x: A): Stack1[A] = Stack1 { i => (Some(x), i) }
+  }
+
+  implicit val functorStack2: Functor[Stack2] = new Functor[Stack2] {
+    override def map[A, B](fa: Stack2[A])(f: A => B): Stack2[B] = Stack2 { i =>
+      fa.run(i).map { case (x, newState) => (f(x), newState) }
+    }
+  }
+
+  implicit val catsMonadStack2: CatsMonad[Stack2] = new CatsMonad[Stack2] {
+    override def flatMap[A, B](fa: Stack2[A])(f: A => Stack2[B]): Stack2[B] = Stack2 { i =>
+      fa.run(i).flatMap { case (x, newState) => f(x).run(newState) }
+    }
+
+    override def pure[A](x: A): Stack2[A] = Stack2 { i => Some(x, i) }
+  }
+
+  implicit class COps1[A](x: State[A]) {
+    def up0: Stack0[A] = Coprod.inLeft[State, Option, A].apply(x)
+
+    def up1: Stack1[A] = Stack1 { i =>
+      x.run(i) match {
+        case (y, newState) => (Some(y), newState)
+      }
+    }
+
+    def up2: Stack2[A] = Stack2 { i =>
+      x.run(i) match {
+        case (y, newState) => Some((y, newState))
+      }
+    }
+  }
+
+  implicit class COps2[A](x: Option[A]) {
+    def up0: Stack0[A] = Coprod.inRight[State, Option, A].apply(x)
+
+    def up1: Stack1[A] = Stack1 { i => (x, i) }
+
+    def up2: Stack2[A] = Stack2 { i => x.map((_, i)) }
+  }
+
+
+  val test0: Stack0[(Int, Int)] = for {
+    x <- Option(1).up0
+    y <- State { i => (x, i + 1) }.up0
+    _ <- (None: Option[Int]).up0
+    z <- State { i => ((y, i + 10), i + 10) }.up0
+  } yield z
+
+
+  val test1: Stack1[(Int, Int)] = for {
+    x <- Option(1).up1
+    y <- State { i => (x, i + 1) }.up1
+    _ <- (None: Option[Int]).up1
+    z <- State { i => ((y, i + 10), i + 10) }.up1
+  } yield z
+
+
+  val test2: Stack2[(Int, Int)] = for {
+    x <- Option(1).up2
+    y <- State { i => (x, i + 1) }.up2
+    _ <- (None: Option[Int]).up2
+    z <- State { i => ((y, i + 10), i + 10) }.up2
+  } yield z
+
+  it should "execute monadic program in Stack0" in {
+   toState0(test0).run(0) shouldEqual (((1, 11), 11))
+  }
+
+  it should "execute monadic program in Stack1" in {
+    test1.toState.run(0) shouldEqual ((null, 1))
+  }
+
+  it should "execute monadic program in Stack2" in {
+    test2.toState.run(0) shouldEqual ((null, 0))
   }
 
 }
