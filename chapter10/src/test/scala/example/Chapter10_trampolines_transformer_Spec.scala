@@ -62,7 +62,7 @@ object FreeMonadTr {
   @tailrec def run[F[_] : Functor : Copointed, M[_] : CatsMonad, A](t: FreeMonadTr[F, M, A]): M[A] = resume(t).pure match {
     case Left(a) => CatsMonad[M].pure(a)
     case Right(deferred) =>
-      val result: FreeMonadTr[F, M, A] = Copointed[F].run(deferred())
+      val result: FreeMonadTr[F, M, A] = Copointed[F].run(deferred)
       run(result)
   }
 
