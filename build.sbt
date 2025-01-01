@@ -71,7 +71,7 @@ lazy val chapter08 = (project in file("chapter08"))
   .settings(commonSettings)
   .settings(
     libraryDependencies ++= Seq(
-      "org.apache.hadoop" % "hadoop-common" % "3.1.0" excludeAll(
+      "org.apache.hadoop" % "hadoop-common" % "3.4.0" excludeAll(
         ExclusionRule(organization = "org.mortbay.jetty")
         , ExclusionRule(organization = "net.java.dev.jets3t")
         , ExclusionRule(organization = "org.apache.curator")
@@ -89,7 +89,7 @@ lazy val chapter08 = (project in file("chapter08"))
        * was all resolved in 1.9.0 which reverted to a single jar, commons-beanutils, without any copies of collections
        * classes. So here we explicitly use the new jar, and above, exclude the older commons-beanutils-core.
        */
-      , "commons-beanutils" % "commons-beanutils" % "1.9.3"
+      , "commons-beanutils" % "commons-beanutils" % "1.9.4"
       , "org.apache.hadoop" % "hadoop-hdfs-client" % "3.1.0"
       , "org.typelevel" %% "cats-free" % "1.1.0"
       , "com.typesafe.akka" %% "akka-http-testkit" % "10.0.10" % Test
@@ -129,6 +129,7 @@ lazy val prokopecBook = (project in file("prokopec-book"))
       , "com.typesafe.akka" %% "akka-http-testkit" % "10.0.10" % Test
       , "com.typesafe.akka" %% "akka-http" % "10.0.10"
       , "io.chymyst" %% "chymyst-core" % "0.2.0"
+      , "javax.xml.bind" % "jaxb-api" % "2.3.0" % Compile
     )
   )
   .dependsOn(common)

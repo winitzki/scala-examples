@@ -1,6 +1,7 @@
 package example
 
-
+import cats.Functor
+import cats.syntax.functor._
 import com.eed3si9n.expecty.Expecty.expect
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -10,14 +11,15 @@ import scala.util.{Success, Try}
 object Chapter10_inline_code {
   sealed trait MonadDSL[F[_], A] {
     def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = Bind(this)(f)
-/*
-Alternatively:
-  def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = this match {
-      case Val(a)          => f(a)
-      case bind@Bind(pa)   => Bind(pa)(x => Bind(bind.f(x))(f))
-      case _               => Bind(this)(f)
-    }
- */
+
+    /*
+    Alternatively:
+      def flatMap[B](f: A => MonadDSL[F, B]): MonadDSL[F, B] = this match {
+          case Val(a)          => f(a)
+          case bind@Bind(pa)   => Bind(pa)(x => Bind(bind.f(x))(f))
+          case _               => Bind(this)(f)
+        }
+     */
     def map[B](f: A => B): MonadDSL[F, B] = flatMap(f andThen MonadDSL.pure)
   }
 
@@ -143,24 +145,95 @@ class Chapter10_inline_code extends FlatSpec with Matchers {
   }
 
   it should "run into Try monad" in {
-    trait RunnerTry[F[_]] { def run[X]: F[X] => Try[X] }
-    val runnerFileTry = new RunnerTry[PrgFileC] { def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p)) }
+    trait RunnerTry[F[_]] {
+      def run[X]: F[X] => Try[X]
+    }
+    val runnerFileTry = new RunnerTry[PrgFileC] {
+      def run[X]: PrgFileC[X] => Try[X] = p => Try(runFileC(p))
+    }
 
     def runTry[F[_], A](runner: RunnerTry[F]): MonadDSL[F, A] => Try[A] = {
-      case Val(a)          => Success(a)
-      case bind@Bind(pa)   => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
-      case Op(op)          => runner.run(op)
+      case Val(a) => Success(a)
+      case bind@Bind(pa) => runTry(runner)(pa).flatMap(bind.f andThen runTry(runner)) // Use flatMap from Try.
+      case Op(op) => runner.run(op)
     }
   }
 
   it should "run into another monad" in {
-    trait RunnerM[F[_], M[_]] { def run[X]: F[X] => M[X] }
-    import example.{CatsMonad => Monad}
+    trait RunnerM[F[_], M[_]] {
+      def run[X]: F[X] => M[X]
+    }
     import example.CatsMonad.CatsMonadSyntax
-    def runM[F[_], M[_]: Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] = {
-      case Val(a)          => Monad[M].pure(a)
-      case bind@Bind(pa)   => runM(runnerM).apply(pa).flatMap(bind.f andThen runM(runnerM)) // Use flatMap from M.
-      case Op(op)          => runnerM.run(op)
+    import example.{CatsMonad => Monad}
+    def runM[F[_], M[_] : Monad, A](runnerM: RunnerM[F, M]): MonadDSL[F, A] => M[A] = {
+      case Val(a) => Monad[M].pure(a)
+      case bind@Bind(pa) => runM(runnerM).apply(pa).flatMap(bind.f andThen runM(runnerM)) // Use flatMap from M.
+      case Op(op) => runnerM.run(op)
     }
   }
+}
+
+object Chapter10_free_monad_encodings {
+  abstract class Free1[F[_] : Functor, T] {
+    def flatMap[A](f: T => Free1[F, A]): Free1[F, A] = this match {
+      case Pure(t) => f(t)
+      case Flatten(p) => Flatten(p.map(g => g.flatMap(f))) // Use F's Functor instance.
+    }
+  }
+
+  final case class Pure[F[_] : Functor, T](t: T) extends Free1[F, T]
+
+  final case class Flatten[F[_] : Functor, T](p: F[Free1[F, T]]) extends Free1[F, T]
+
+  sealed trait Free2[F[_], T] {
+    def flatMap[A](f: T => Free2[F, A]): Free2[F, A] = this match {
+      case Return(t) => f(t)
+      case Bind(p, g) => Bind(p, (b: Any) => g(b) flatMap f)
+    }
+  }
+
+  final case class Return[F[_], T](t: T) extends Free2[F, T]
+
+  final case class Bind[F[_], T, A](p: F[A], g: A => Free2[F, T]) extends Free2[F, T]
+
+  sealed trait Free3[F[_], T] {
+    def flatMap[A](f: T => Free3[F, A]): Free3[F, A] = FlatMap(this, f)
+  }
+
+  final case class Pure3[F[_], T](t: T) extends Free3[F, T]
+
+  final case class Suspend[F[_], T](f: F[T]) extends Free3[F, T]
+
+  final case class FlatMap[F[_], T, A](p: Free3[F, A], g: A => Free3[F, T]) extends Free3[F, T]
+
+  sealed trait Free4[F[_], A] {
+    def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind4(this)(f)
+
+    def map[B](f: A => B): Free4[F, B] = FMap(this)(f)
+  }
+
+  import Chapter10_inline_code.Runner
+
+  object Free4 {
+    def pure[F[_], A](a: A): Free4[F, A] = Val(a)
+
+    def run[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
+      case Val(a)            => a
+      case bind @ Bind4(pa)   => run(runner)(bind.f(run(runner)(pa)))
+      case fmap @ FMap(pa)   => fmap.f(run(runner)(pa))
+      case Op(op)            => runner.apply(op)
+    }
+  }
+
+  final case class Val[F[_], A](a: A) extends Free4[F, A]
+
+  final case class Bind4[F[_], A, B](pa: Free4[F, B])(val f: B => Free4[F, A]) extends Free4[F, A]
+
+  final case class FMap[F[_], A, B](pa: Free4[F, B])(val f: B => A) extends Free4[F, A]
+
+  final case class Op[F[_], A](op: F[A]) extends Free4[F, A] // Wrap all domain-specific operations.
+}
+
+class Chapter10_free_monad_encodings extends FlatSpec with Matchers {
+
 }
