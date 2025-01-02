@@ -207,31 +207,58 @@ object Chapter10_free_monad_encodings {
   final case class FlatMap[F[_], T, A](p: Free3[F, A], g: A => Free3[F, T]) extends Free3[F, T]
 
   sealed trait Free4[F[_], A] {
-    def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind4(this)(f)
+    def flatMap[B](f: A => Free4[F, B]): Free4[F, B] = Bind4(this, f)
 
-    def map[B](f: A => B): Free4[F, B] = FMap(this)(f)
+    def map[B](f: A => B): Free4[F, B] = FMap(this, f)
   }
 
   import Chapter10_inline_code.Runner
 
   object Free4 {
-    def pure[F[_], A](a: A): Free4[F, A] = Val(a)
 
-    def run[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
-      case Val(a)            => a
-      case bind @ Bind4(pa)   => run(runner)(bind.f(run(runner)(pa)))
-      case fmap @ FMap(pa)   => fmap.f(run(runner)(pa))
-      case Op(op)            => runner.apply(op)
+    def run4[F[_], A](runner: Runner[F]): Free4[F, A] => A = {
+      case Val(a) => a
+      case Bind4(pa, f) => run4(runner)(f(run4(runner)(pa)))
+      case FMap(pa, f) => f(run4(runner)(pa))
+      case Op(op) => runner.apply(op)
     }
   }
 
   final case class Val[F[_], A](a: A) extends Free4[F, A]
 
-  final case class Bind4[F[_], A, B](pa: Free4[F, B])(val f: B => Free4[F, A]) extends Free4[F, A]
+  final case class Bind4[F[_], A, B](pa: Free4[F, B], f: B => Free4[F, A]) extends Free4[F, A]
 
-  final case class FMap[F[_], A, B](pa: Free4[F, B])(val f: B => A) extends Free4[F, A]
+  final case class FMap[F[_], A, B](pa: Free4[F, B], f: B => A) extends Free4[F, A]
 
   final case class Op[F[_], A](op: F[A]) extends Free4[F, A] // Wrap all domain-specific operations.
+
+  def free4toFree3[F[_], A]: Free4[F, A] => Free3[F, A] = {
+    case FMap(p, f) => FlatMap(free4toFree3(p), f andThen Pure3.apply)
+    case Val(a) => Pure3(a)
+    case Bind4(p, f) => FlatMap(free4toFree3(p), f andThen free4toFree3)
+    case Op(op) => Suspend(op)
+  }
+
+  def free3toFree4[F[_], A]: Free3[F, A] => Free4[F, A] = {
+    case Pure3(a) => Val(a)
+    case FlatMap(p, f) => Bind4(free3toFree4(p), f andThen free3toFree4)
+    case Suspend(op) => Op(op)
+  }
+
+  def free2toFree3[F[_], A]: Free2[F, A] => Free3[F, A] = {
+    case Return(a) => Pure3(a)
+    case Bind(p, g) => FlatMap(Suspend(p), g andThen free2toFree3)
+  }
+
+  def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
+    case Pure3(a) => Return(a)
+    case Suspend(f) => Bind[F, A, A](f, Return(_)) // Bind[F, T, A](p: F[A], g: A => Free2[F, T]) extends Free2[F, T]
+    case FlatMap(p, g) => p match {
+      case Pure3(t) => free3toFree2(g(t))
+      case Suspend(f) => Bind(f, g andThen free3toFree2)
+      case FlatMap(p2, g2) => free3toFree2(FlatMap(p2, (x: Any) => FlatMap(g2(x), g)))
+    }
+  }
 }
 
 class Chapter10_free_monad_encodings extends FlatSpec with Matchers {
