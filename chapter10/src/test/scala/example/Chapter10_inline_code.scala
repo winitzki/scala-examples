@@ -1,8 +1,10 @@
 package example
 
-import cats.Functor
-import cats.syntax.functor._
+import cats.Monad.ops.toAllMonadOps
+import cats.implicits.toFunctorOps
+import cats.{Functor, Monad}
 import com.eed3si9n.expecty.Expecty.expect
+import example.Chapter10_inline_code.RunnerM
 import org.scalatest.{FlatSpec, Matchers}
 
 import java.nio.file.{Files, Paths}
@@ -31,6 +33,10 @@ object Chapter10_inline_code {
 
   trait Runner[F[_]] {
     def apply[X]: F[X] => X
+  }
+
+  trait RunnerM[F[_], G[_]] {
+    def apply[X]: F[X] => G[X]
   }
 
   object MonadDSL {
@@ -222,6 +228,17 @@ object Chapter10_free_monad_encodings {
       case FMap(pa, f) => f(run4(runner)(pa))
       case Op(op) => runner.apply(op)
     }
+
+    def run4M[F[_], M[_] : Monad, A](runnerM: RunnerM[F, M]): Free4[F, A] => M[A] = {
+      case Val(a) => Monad[M].pure(a)
+      case Bind4(pa, f) => run4M(runnerM).apply(pa).flatMap(f andThen run4M(runnerM))
+      case FMap(pa, f) => run4M(runnerM).apply(pa).flatMap(f andThen Monad[M].pure)
+      case Op(op) => runnerM.apply(op)
+    }
+
+    def lift[F[_], A]: F[A] => Free4[F, A] = Op.apply
+
+    def pure[F[_], A](a: A): Free4[F, A] = Val(a)
   }
 
   final case class Val[F[_], A](a: A) extends Free4[F, A]
@@ -252,12 +269,34 @@ object Chapter10_free_monad_encodings {
 
   def free3toFree2[F[_], A]: Free3[F, A] => Free2[F, A] = {
     case Pure3(a) => Return(a)
-    case Suspend(f) => Bind[F, A, A](f, Return(_)) // Bind[F, T, A](p: F[A], g: A => Free2[F, T]) extends Free2[F, T]
+    case Suspend(f) => Bind[F, A, A](f, Return(_))
     case FlatMap(p, g) => p match {
       case Pure3(t) => free3toFree2(g(t))
       case Suspend(f) => Bind(f, g andThen free3toFree2)
       case FlatMap(p2, g2) => free3toFree2(FlatMap(p2, (x: Any) => FlatMap(g2(x), g)))
     }
+  }
+
+  def emap4[F[_], G[_], A](runner: RunnerM[F, G]): Free4[F, A] => Free4[G, A] = {
+    val runnerM: RunnerM[F, Free4[G, *]] = new RunnerM[F, Free4[G, *]] {
+      def apply[X]: F[X] => Free4[G, X] = runner.apply[X] andThen Free4.lift
+    }
+    implicit val monadFree4: Monad[Free4[G, *]] = ??? // Implement a monad instance.
+    Free4.run4M[F, Free4[G, *], A](runnerM)
+  }
+
+  def emap4_no_runner[F[_], G[_], A](runner: RunnerM[F, G]): Free4[F, A] => Free4[G, A] = {
+    case Val(a)          => Free4.pure(a)
+    case Bind4(pa, f)    => emap4_no_runner(runner)(pa).flatMap(f andThen emap4_no_runner(runner))
+    case FMap(pa, f)     => emap4_no_runner(runner)(pa).map(f)
+    case Op(op)          => Op(runner.apply(op))
+  }
+
+  def eval4[M[_]: Monad, A]: Free4[M, A] => M[A] = {
+    case Val(a)          => Monad[M].pure(a)
+    case Bind4(pa, f)    => eval4.apply(pa).flatMap(f andThen eval4.apply)
+    case FMap(pa, f)     => eval4.apply(pa).flatMap(f andThen Monad[M].pure)
+    case Op(op)          => op
   }
 }
 
