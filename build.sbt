@@ -1,5 +1,5 @@
-val scalaV = "2.12.13"
-val scala3V = "3.1.0"
+val scalaV = "2.12.16"
+val scala3V = "3.6.2"
 
 lazy val commonSettings = Seq(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.2" cross CrossVersion.full),
