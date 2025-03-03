@@ -3,7 +3,7 @@ package example
 import org.scalatest.{FlatSpec, Matchers}
 
 class Chapter10_PHOAS5_Cata extends FlatSpec with Matchers {
-  // Follow the paper "Boxes go bananas".
+  // Follow the paper "Boxes go bananas" but add a Var constructor.
   sealed trait ExpF[A]
 
   final case class Var[A](name: String) extends ExpF[A]
